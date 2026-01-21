@@ -1,0 +1,47 @@
+[versions]
+# This table defines version numbers for all dependencies, ensuring consistent versioning across the project.
+# Each key represents a dependency, and its value is the specific version string to be used.
+agp = "8.6.1"                     # Android Gradle Plugin version for building Android applications
+kotlin = "1.9.23"                 # Kotlin programming language version
+coreKtx = "1.12.0"                # AndroidX Core KTX extension library version
+junit = "4.13.2"                  # JUnit 4 testing framework version
+junitVersion = "1.1.5"            # AndroidX JUnit extension version for instrumentation tests
+espressoCore = "3.5.1"            # Espresso UI testing framework version
+lifecycleRuntimeKtx = "2.6.2"     # Lifecycle runtime KTX extensions version
+activityCompose = "1.8.2"         # Jetpack Compose Activity integration version
+composeBom = "2023.10.01"         # Compose Bill of Materials (BOM) version to manage Compose library versions
+room = "2.6.1"                    # Room persistence library version for SQLite database abstraction
+coroutines = "1.7.3"              # Kotlin Coroutines version for asynchronous programming
+material3 = "1.1.2"               # Material Design 3 components for Jetpack Compose version
+
+[libraries]
+# This table defines library dependencies referenced by alias, specifying group, name, and version reference.
+# Each entry creates a reusable alias for a specific library dependency.
+androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }                # Core KTX extensions for Android framework APIs
+junit = { group = "junit", name = "junit", version.ref = "junit" }                                         # JUnit 4 testing framework
+androidx-junit = { group = "androidx.test.ext", name = "junit", version.ref = "junitVersion" }             # AndroidX JUnit extensions for instrumentation tests
+androidx-espresso-core = { group = "androidx.test.espresso", name = "espresso-core", version.ref = "espressoCore" } # Espresso UI testing framework
+androidx-lifecycle-runtime-ktx = { group = "androidx.lifecycle", name = "lifecycle-runtime-ktx", version.ref = "lifecycleRuntimeKtx" } # Lifecycle runtime KTX extensions
+androidx-activity-compose = { group = "androidx.activity", name = "activity-compose", version.ref = "activityCompose" } # Compose integration with Activity
+androidx-compose-bom = { group = "androidx.compose", name = "compose-bom", version.ref = "composeBom" }               # Compose BOM to manage Compose library versions
+androidx-ui = { group = "androidx.compose.ui", name = "ui" }                                                     # Compose UI foundational components
+androidx-ui-graphics = { group = "androidx.compose.ui", name = "ui-graphics" }                                   # Compose graphics and drawing APIs
+androidx-ui-tooling = { group = "androidx.compose.ui", name = "ui-tooling" }                                     # Compose tooling support for previews
+androidx-ui-tooling-preview = { group = "androidx.compose.ui", name = "ui-tooling-preview" }                     # Compose preview annotations and tooling
+androidx-ui-test-manifest = { group = "androidx.compose.ui", name = "ui-test-manifest" }                         # Test manifest for Compose UI tests
+androidx-ui-test-junit4 = { group = "androidx.compose.ui", name = "ui-test-junit4" }                             # JUnit 4 integration for Compose UI tests
+androidx-material3 = { group = "androidx.compose.material3", name = "material3", version.ref = "material3" }     # Material Design 3 components for Compose
+
+# Add these Room dependencies
+androidx-room-runtime = { group = "androidx.room", name = "room-runtime", version.ref = "room" }             # Room runtime library for database operations
+androidx-room-ktx = { group = "androidx.room", name = "room-ktx", version.ref = "room" }                     # Room KTX extensions for Coroutines support
+androidx-room-compiler = { group = "androidx.room", name = "room-compiler", version.ref = "room" }           # Room annotation processor for code generation
+
+# Add Coroutines
+kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "coroutines" } # Kotlin Coroutines for Android
+
+[plugins]
+# This table defines Gradle plugins with their IDs and version references.
+android-application = { id = "com.android.application", version.ref = "agp" }             # Android application plugin for building APKs
+kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }         # Kotlin Android plugin for Kotlin support
+kotlin-kapt = { id = "org.jetbrains.kotlin.kapt" }                                       # Kotlin annotation processing tool (kapt) plugin
