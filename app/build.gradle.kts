@@ -5,6 +5,7 @@ plugins {
     alias(libs.plugins.android.application)  // Apply the Android application plugin for building Android apps
     alias(libs.plugins.kotlin.android)       // Apply the Kotlin Android plugin for Kotlin language support
     id("kotlin-kapt")                        // Apply the Kotlin annotation processor plugin for Room
+    alias(libs.plugins.dagger.hilt.android)
 }
 
 android {
@@ -66,7 +67,24 @@ dependencies {
     implementation(libs.androidx.room.ktx)                   // Room KTX extensions for Coroutines
     kapt(libs.androidx.room.compiler)                        // Room annotation processor for code generation
 
-    // Coroutines    implementation(libs.kotlinx.coroutines.android)          // Kotlin Coroutines for Android
+
+    // Coroutines
+    implementation(libs.kotlinx.coroutines.android)          // Kotlin Coroutines for Android
+
+    // ===== HILT DEPENDENCIES =====
+    implementation(libs.hilt.android)
+    kapt(libs.hilt.compiler)
+    implementation(libs.hilt.navigation.compose)  // For navigation with Hilt
+
+    // ===== NETWORKING =====
+    implementation(libs.retrofit)
+    implementation(libs.retrofit.converter.gson)
+    implementation(libs.okhttp.logging.interceptor)
+
+    // ===== LIFECYCLE =====
+    implementation(libs.androidx.lifecycle.viewmodel.ktx)
+    implementation(libs.androidx.lifecycle.livedata.ktx)
+    implementation(libs.androidx.lifecycle.viewmodel.compose)  // For Compose integration
 
     testImplementation(libs.junit)                           // JUnit 4 for unit tests
     androidTestImplementation(libs.androidx.junit)           // AndroidX JUnit extensions for instrumented tests
@@ -75,4 +93,12 @@ dependencies {
     androidTestImplementation(libs.androidx.ui.test.junit4)  // Compose UI testing JUnit 4 integration
     debugImplementation(libs.androidx.ui.tooling)            // Compose tooling for debug builds
     debugImplementation(libs.androidx.ui.test.manifest)      // Test manifest for Compose UI tests in debug
+
+
+}
+
+
+// Allow references to generated code for Hilt
+kapt {
+    correctErrorTypes = true
 }
