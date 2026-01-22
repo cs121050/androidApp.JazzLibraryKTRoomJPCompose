@@ -1,0 +1,4 @@
+package com.example.jazzlibraryktroomjpcompose.domain.repository
+
+class UserRepository {
+}

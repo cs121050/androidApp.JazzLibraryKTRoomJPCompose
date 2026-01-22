@@ -13,6 +13,12 @@ composeBom = "2023.10.01"         # Compose Bill of Materials (BOM) version to m
 room = "2.6.1"                    # Room persistence library version for SQLite database abstraction
 coroutines = "1.7.3"              # Kotlin Coroutines version for asynchronous programming
 material3 = "1.1.2"               # Material Design 3 components for Jetpack Compose version
+hilt = "2.51"
+retrofit = "2.9.0"
+okhttp = "4.12.0"
+gson = "2.10.1"
+hiltNavigationCompose = "1.2.0"
+lifecycle = "2.7.0"
 
 [libraries]
 # This table defines library dependencies referenced by alias, specifying group, name, and version reference.
@@ -31,6 +37,10 @@ androidx-ui-tooling-preview = { group = "androidx.compose.ui", name = "ui-toolin
 androidx-ui-test-manifest = { group = "androidx.compose.ui", name = "ui-test-manifest" }                         # Test manifest for Compose UI tests
 androidx-ui-test-junit4 = { group = "androidx.compose.ui", name = "ui-test-junit4" }                             # JUnit 4 integration for Compose UI tests
 androidx-material3 = { group = "androidx.compose.material3", name = "material3", version.ref = "material3" }     # Material Design 3 components for Compose
+# Lifecycle ViewModel (for ViewModel with Hilt)
+androidx-lifecycle-viewmodel-ktx = { group = "androidx.lifecycle", name = "lifecycle-viewmodel-ktx", version.ref = "lifecycle" }
+androidx-lifecycle-livedata-ktx = { group = "androidx.lifecycle", name = "lifecycle-livedata-ktx", version.ref = "lifecycle" }
+androidx-lifecycle-viewmodel-compose = { group = "androidx.lifecycle", name = "lifecycle-viewmodel-compose", version.ref = "lifecycle" }
 
 # Add these Room dependencies
 androidx-room-runtime = { group = "androidx.room", name = "room-runtime", version.ref = "room" }             # Room runtime library for database operations
@@ -40,8 +50,22 @@ androidx-room-compiler = { group = "androidx.room", name = "room-compiler", vers
 # Add Coroutines
 kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "coroutines" } # Kotlin Coroutines for Android
 
+# Hilt Dependencies
+hilt-android = { group = "com.google.dagger", name = "hilt-android", version.ref = "hilt" }
+hilt-compiler = { group = "com.google.dagger", name = "hilt-compiler", version.ref = "hilt" }
+hilt-navigation-compose = { group = "androidx.hilt", name = "hilt-navigation-compose", version.ref = "hiltNavigationCompose" }
+
+# Retrofit & Networking
+retrofit = { group = "com.squareup.retrofit2", name = "retrofit", version.ref = "retrofit" }
+retrofit-converter-gson = { group = "com.squareup.retrofit2", name = "converter-gson", version.ref = "retrofit" }
+okhttp-logging-interceptor = { group = "com.squareup.okhttp3", name = "logging-interceptor", version.ref = "okhttp" }
+
+# Gson
+gson = { group = "com.google.code.gson", name = "gson", version.ref = "gson" }
+
 [plugins]
 # This table defines Gradle plugins with their IDs and version references.
 android-application = { id = "com.android.application", version.ref = "agp" }             # Android application plugin for building APKs
 kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }         # Kotlin Android plugin for Kotlin support
 kotlin-kapt = { id = "org.jetbrains.kotlin.kapt" }                                       # Kotlin annotation processing tool (kapt) plugin
+dagger-hilt-android = { id = "com.google.dagger.hilt.android", version.ref = "hilt" }

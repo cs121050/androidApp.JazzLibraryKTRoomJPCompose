@@ -1,53 +1,51 @@
 package com.example.jazzlibraryktroomjpcompose.data.repository
 
+
 import com.example.jazzlibraryktroomjpcompose.data.local.JazzDatabase
-import com.example.jazzlibraryktroomjpcompose.data.local.db.daos.ArtistDao
+import com.example.jazzlibraryktroomjpcompose.data.local.db.daos.InstrumentDao
 import com.example.jazzlibraryktroomjpcompose.data.mappers.ArtistMapper
+import com.example.jazzlibraryktroomjpcompose.data.mappers.InstrumentMapper
 import com.example.jazzlibraryktroomjpcompose.data.remote.api.JazzApiService
 import com.example.jazzlibraryktroomjpcompose.domain.models.Artist
-import com.example.jazzlibraryktroomjpcompose.domain.repository.ArtistRepository
+import com.example.jazzlibraryktroomjpcompose.domain.models.Instrument
+import com.example.jazzlibraryktroomjpcompose.domain.repository.InstrumentRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 
-class ArtistRepositoryImpl @Inject constructor(
+class InstrumentRepositoryImpl @Inject constructor(
     private val database: JazzDatabase,
     private val apiService: JazzApiService
-) : ArtistRepository {
+) : InstrumentRepository {
 
-    private val artistDao: ArtistDao = database.artistDao()
+    private val instrumentDao: InstrumentDao = database.instrumentDao()
 
-    override fun getAllArtists(): Flow<List<Artist>> {
-        return artistDao.getAllArtists()
-            .map { entities -> entities.map { ArtistMapper.toDomain(it) } }
+    override fun getAllInstruments(): Flow<List<Instrument>> {
+        return instrumentDao.getAllInstruments()
+            .map { entities -> entities.map { InstrumentMapper.toDomain(it) } }
     }
 
-    override fun getArtistById(id: Int): Flow<Artist?> {
-        return artistDao.getArtistById(id)
-            .map { entity -> entity?.let { ArtistMapper.toDomain(it) } }
+    override fun getInstrumentById(id: Int): Flow<Instrument?> {
+        return instrumentDao.getInstrumentById(id)
+            .map { entity -> entity?.let { InstrumentMapper.toDomain(it) } }
     }
 
-    override fun searchArtists(query: String): Flow<List<Artist>> {
-        return artistDao.searchArtists(query)
-            .map { entities -> entities.map { ArtistMapper.toDomain(it) } }
+    override fun searchInstruments(query: String): Flow<List<Instrument>> {
+        return instrumentDao.searchInstruments(query)
+            .map { entities -> entities.map { InstrumentMapper.toDomain(it) } }
     }
 
-    override fun getArtistsByInstrument(instrumentId: Int): Flow<List<Artist>> {
-        return artistDao.getArtistsByInstrument(instrumentId)
-            .map { entities -> entities.map { ArtistMapper.toDomain(it) } }
+    override suspend fun saveInstrument(instrument: Instrument) {
+        val entity = InstrumentMapper.toEntity(instrument)
+        instrumentDao.insertInstrument(entity)
     }
 
-    override suspend fun saveArtist(artist: Artist) {
-        val entity = ArtistMapper.toEntity(artist)
-        artistDao.insertArtist(entity)
+    override suspend fun deleteInstrument(instrument: Instrument) {
+        val entity = InstrumentMapper.toEntity(instrument)
+        instrumentDao.deleteInstrument(entity)
     }
 
-    override suspend fun deleteArtist(artist: Artist) {
-        val entity = ArtistMapper.toEntity(artist)
-        artistDao.deleteArtist(entity)
-    }
-
-    override suspend fun refreshArtists(): Result<Unit> {
+    override suspend fun refreshInstruments(): Result<Unit> {
 //        return try {
 //            // Fetch from API
 //            val response = apiService.getAllArtists()
@@ -72,7 +70,7 @@ class ArtistRepositoryImpl @Inject constructor(
         return TODO("Provide the return value")
     }
 
-    override suspend fun syncArtist(artistId: Int): Result<Artist> {
+    override suspend fun syncInstrument(instrumentId: Int): Result<Instrument> {
 //        return try {
 //            val response = apiService.getArtistById(artistId)
 //
@@ -96,7 +94,7 @@ class ArtistRepositoryImpl @Inject constructor(
         return TODO("Provide the return value")
     }
 
-    override suspend fun fetchAndCacheArtists(): Result<List<Artist>> {
+    override suspend fun fetchAndCacheInstruments(): Result<List<Instrument>> {
 //        return try {
 //            val response = apiService.getAllArtists()
 //
