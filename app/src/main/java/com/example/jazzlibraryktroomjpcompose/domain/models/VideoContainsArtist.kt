@@ -1,4 +1,6 @@
 package com.example.jazzlibraryktroomjpcompose.domain.models
 
-class VideoContainsArtist {
-}
+data class VideoContainsArtist(
+    val artistId: Int,
+    val videoId: Int
+)

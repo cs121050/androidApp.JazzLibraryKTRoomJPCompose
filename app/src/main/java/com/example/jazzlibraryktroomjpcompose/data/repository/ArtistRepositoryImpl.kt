@@ -28,12 +28,17 @@ class ArtistRepositoryImpl @Inject constructor(
     }
 
     override fun searchArtists(query: String): Flow<List<Artist>> {
-        return artistDao.searchArtists(query)
+        return artistDao.getArtistByName(query)
             .map { entities -> entities.map { ArtistMapper.toDomain(it) } }
     }
 
     override fun getArtistsByInstrument(instrumentId: Int): Flow<List<Artist>> {
         return artistDao.getArtistsByInstrument(instrumentId)
+            .map { entities -> entities.map { ArtistMapper.toDomain(it) } }
+    }
+
+    override fun getArtistsByRank(rankId: Int): Flow<List<Artist>> {
+        return artistDao.getArtistsByRank(rankId)
             .map { entities -> entities.map { ArtistMapper.toDomain(it) } }
     }
 
@@ -46,6 +51,8 @@ class ArtistRepositoryImpl @Inject constructor(
         val entity = ArtistMapper.toEntity(artist)
         artistDao.deleteArtist(entity)
     }
+
+
 
     override suspend fun refreshArtists(): Result<Unit> {
 //        return try {

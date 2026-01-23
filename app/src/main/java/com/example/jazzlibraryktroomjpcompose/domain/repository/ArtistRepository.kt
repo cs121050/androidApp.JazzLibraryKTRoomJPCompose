@@ -20,4 +20,5 @@ interface ArtistRepository {
 
     // Combined operations
     suspend fun fetchAndCacheArtists(): Result<List<Artist>>
+    fun getArtistsByRank(rankId: Int): Flow<List<Artist>>
 }

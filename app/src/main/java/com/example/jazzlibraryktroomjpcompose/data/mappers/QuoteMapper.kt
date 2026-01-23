@@ -11,7 +11,8 @@ object QuoteMapper {
         return QuoteRoomEntity(
             id = domain.id,
             text = domain.text,
-            artistId = domain.artistId
+            artistId = domain.artistId,
+            videoId = domain.videoId
         )
     }
 
@@ -20,7 +21,8 @@ object QuoteMapper {
         return Quote(
             id = entity.id,
             text = entity.text,
-            artistId = entity.artistId
+            artistId = entity.artistId,
+            videoId = entity.videoId
         )
     }
 
@@ -30,6 +32,7 @@ object QuoteMapper {
 //            id = response.quoteId,
 //            text = response.quoteName,
 //            artistId = response.artistId ?: 0,
+
 //        )
         return TODO("Provide the return value")
     }
@@ -40,6 +43,7 @@ object QuoteMapper {
 //            quoteId = domain.id,
 //            quoteName = domain.name,
 ////          artistId = domain.artistId ?: 0,
+
 //        )
         return TODO("Provide the return value")
     }

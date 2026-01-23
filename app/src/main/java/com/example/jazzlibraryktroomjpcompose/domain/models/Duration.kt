@@ -1,4 +1,7 @@
 package com.example.jazzlibraryktroomjpcompose.domain.models
 
-class Duration {
-}
+data class Duration(
+    val id: Int,
+    val name: String,
+    val description: String
+)

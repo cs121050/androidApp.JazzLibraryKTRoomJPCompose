@@ -3,10 +3,8 @@ package com.example.jazzlibraryktroomjpcompose.data.repository
 
 import com.example.jazzlibraryktroomjpcompose.data.local.JazzDatabase
 import com.example.jazzlibraryktroomjpcompose.data.local.db.daos.InstrumentDao
-import com.example.jazzlibraryktroomjpcompose.data.mappers.ArtistMapper
 import com.example.jazzlibraryktroomjpcompose.data.mappers.InstrumentMapper
 import com.example.jazzlibraryktroomjpcompose.data.remote.api.JazzApiService
-import com.example.jazzlibraryktroomjpcompose.domain.models.Artist
 import com.example.jazzlibraryktroomjpcompose.domain.models.Instrument
 import com.example.jazzlibraryktroomjpcompose.domain.repository.InstrumentRepository
 import kotlinx.coroutines.flow.Flow
@@ -31,7 +29,7 @@ class InstrumentRepositoryImpl @Inject constructor(
     }
 
     override fun searchInstruments(query: String): Flow<List<Instrument>> {
-        return instrumentDao.searchInstruments(query)
+        return instrumentDao.getInstrumentByName(query)
             .map { entities -> entities.map { InstrumentMapper.toDomain(it) } }
     }
 

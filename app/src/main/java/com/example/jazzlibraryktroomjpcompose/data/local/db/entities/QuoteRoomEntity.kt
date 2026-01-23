@@ -12,7 +12,13 @@ import androidx.room.PrimaryKey
             entity = ArtistRoomEntity::class,
             parentColumns = ["artist_id"],
             childColumns = ["artist_id"],
-            onDelete = ForeignKey.CASCADE
+            onDelete = ForeignKey.SET_NULL // Changed to SET_NULL since artist_id can be null
+        ),
+        ForeignKey(
+            entity = VideoRoomEntity::class,
+            parentColumns = ["video_id"],
+            childColumns = ["video_id"],
+            onDelete = ForeignKey.SET_NULL
         )
     ]
 )
@@ -25,5 +31,8 @@ class QuoteRoomEntity(
     val text: String,
 
     @ColumnInfo(name = "artist_id")
-    val artistId: Int
+    val artistId: Int?, // Made nullable
+
+    @ColumnInfo(name = "video_id")
+    val videoId: Int? = null
 )

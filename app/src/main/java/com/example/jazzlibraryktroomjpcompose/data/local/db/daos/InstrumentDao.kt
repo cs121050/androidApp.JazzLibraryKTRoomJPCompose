@@ -10,9 +10,6 @@ interface InstrumentDao {
     @Query("SELECT * FROM instruments ORDER BY instrument_name ASC")
     fun getAllInstruments(): Flow<List<InstrumentRoomEntity>>
 
-    @Query("SELECT * FROM instruments WHERE instrument_id = :id")
-    fun getInstrumentById(id: Int): Flow<InstrumentRoomEntity>
-
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertInstrument(instrument: InstrumentRoomEntity)
 
@@ -25,5 +22,9 @@ interface InstrumentDao {
     @Query("DELETE FROM instruments")
     suspend fun deleteAllInstruments()
 
+
+    @Query("SELECT * FROM instruments WHERE instrument_id = :id")
+    fun getInstrumentById(id: Int): Flow<InstrumentRoomEntity>
+
     @Query("SELECT * FROM instruments WHERE instrument_name LIKE '%' || :query || '%'")
-    fun searchInstruments(query: String): Flow<List<InstrumentRoomEntity>>}
+    fun getInstrumentByName(query: String): Flow<List<InstrumentRoomEntity>>}
