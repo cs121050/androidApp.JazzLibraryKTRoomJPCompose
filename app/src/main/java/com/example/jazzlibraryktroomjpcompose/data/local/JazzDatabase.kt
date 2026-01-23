@@ -6,18 +6,18 @@ import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
 import android.content.Context
 import com.example.jazzlibraryktroomjpcompose.data.local.converters.Converters
-import com.example.jazzlibraryktroomjpcompose.data.local.db.daos.ArtistDao
-import com.example.jazzlibraryktroomjpcompose.data.local.db.daos.InstrumentDao
-import com.example.jazzlibraryktroomjpcompose.data.local.db.daos.QuoteDao
-import com.example.jazzlibraryktroomjpcompose.data.local.db.entities.ArtistRoomEntity
-import com.example.jazzlibraryktroomjpcompose.data.local.db.entities.InstrumentRoomEntity
-import com.example.jazzlibraryktroomjpcompose.data.local.db.entities.QuoteRoomEntity
+import com.example.jazzlibraryktroomjpcompose.data.local.db.daos.*
+import com.example.jazzlibraryktroomjpcompose.data.local.db.entities.*
 
 @Database(
     entities = [
         ArtistRoomEntity::class,
+        QuoteRoomEntity::class,
         InstrumentRoomEntity::class,
-        QuoteRoomEntity::class
+        TypeRoomEntity::class,
+        DurationRoomEntity::class,
+        VideoRoomEntity::class,
+        VideoContainsArtistRoomEntity::class
     ],
     version = 1,
     exportSchema = true
@@ -28,6 +28,10 @@ abstract class JazzDatabase : RoomDatabase() {
     abstract fun artistDao(): ArtistDao
     abstract fun instrumentDao(): InstrumentDao
     abstract fun quoteDao(): QuoteDao
+    abstract fun typeDao(): TypeDao
+    abstract fun durationDao(): DurationDao
+    abstract fun videoDao(): VideoDao
+    abstract fun videoContainsArtistDao(): VideoContainsArtistDao
 
     companion object {
         @Volatile

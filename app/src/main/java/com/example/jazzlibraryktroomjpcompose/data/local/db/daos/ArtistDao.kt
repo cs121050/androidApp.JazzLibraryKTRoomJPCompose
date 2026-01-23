@@ -10,9 +10,6 @@ interface ArtistDao {
     @Query("SELECT * FROM artists ORDER BY artist_rank DESC, artist_name ASC")
     fun getAllArtists(): Flow<List<ArtistRoomEntity>>
 
-    @Query("SELECT * FROM artists WHERE artist_id = :id")
-    fun getArtistById(id: Int): Flow<ArtistRoomEntity>
-
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertArtist(artist: ArtistRoomEntity)
 
@@ -28,9 +25,18 @@ interface ArtistDao {
     @Query("DELETE FROM artists")
     suspend fun deleteAllArtists()
 
+
+    @Query("SELECT * FROM artists WHERE artist_id = :id")
+    fun getArtistById(id: Int): Flow<ArtistRoomEntity>
+
+    @Query("SELECT * FROM artists WHERE artist_name LIKE '%' || :query || '%' OR artist_surname LIKE '%' || :query || '%'")
+    fun getArtistByName(query: String): Flow<List<ArtistRoomEntity>>
+
     @Query("SELECT * FROM artists WHERE instrument_id = :instrumentId")
     fun getArtistsByInstrument(instrumentId: Int): Flow<List<ArtistRoomEntity>>
 
-    @Query("SELECT * FROM artists WHERE artist_name LIKE '%' || :query || '%' OR artist_surname LIKE '%' || :query || '%'")
-    fun searchArtists(query: String): Flow<List<ArtistRoomEntity>>
+    @Query("SELECT * FROM artists WHERE artist_rank = :rankId")
+    fun getArtistsByRank(rankId :Int): Flow<List<ArtistRoomEntity>>
+
+
 }
