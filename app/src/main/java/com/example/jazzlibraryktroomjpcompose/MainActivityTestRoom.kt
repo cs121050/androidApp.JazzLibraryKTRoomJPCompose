@@ -4,9 +4,11 @@ import com.example.jazzlibraryktroomjpcompose.ui.theme.JazzLibraryKTRoomJPCompos
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -48,6 +50,9 @@ fun DatabaseTestScreen(
 
     var testMessage by remember { mutableStateOf("Click buttons to test database") }
 
+    // Create a scroll state for horizontal scrolling
+    val scrollState = rememberScrollState()
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -60,57 +65,228 @@ fun DatabaseTestScreen(
             modifier = Modifier.padding(bottom = 16.dp)
         )
 
-        // Test Controls
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier.padding(bottom = 16.dp)
+        // Test Controls - Now in a horizontal scrollable container
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 16.dp)
         ) {
-            Button(
-                onClick = {
-                    viewModel.insertTestData()
-                    testMessage = "Test data inserted!"
-                }
+            Text(
+                text = "Database Operations:",
+                style = MaterialTheme.typography.titleSmall,
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
+
+            // First row of basic operations
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(scrollState)
+                    .padding(bottom = 8.dp)
             ) {
-                Text("Insert Test Data")
+                Button(
+                    onClick = {
+                        viewModel.insertTestData()
+                        testMessage = "Test data inserted!"
+                    }
+                ) {
+                    Text("Insert Test Data")
+                }
+
+                Button(
+                    onClick = {
+                        viewModel.clearAllData()
+                        testMessage = "All data cleared!"
+                    }
+                ) {
+                    Text("Clear All Data")
+                }
+
+                Button(
+                    onClick = {
+                        viewModel.refreshFromDb()
+                        testMessage = "Data refreshed from database!"
+                    }
+                ) {
+                    Text("Refresh")
+                }
+
+                Button(
+                    onClick = {
+                        viewModel.testIndividualOperations()
+                        testMessage = "Individual operations tested!"
+                    }
+                ) {
+                    Text("Test CRUD")
+                }
             }
 
-            Button(
-                onClick = {
-                    viewModel.clearAllData()
-                    testMessage = "All data cleared!"
-                }
+            Text(
+                text = "Filter Testing:",
+                style = MaterialTheme.typography.titleSmall,
+                modifier = Modifier.padding(bottom = 8.dp, top = 8.dp)
+            )
+
+            // Second row of filter operations
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(scrollState)
             ) {
-                Text("Clear All Data")
+                Button(
+                    onClick = {
+                        viewModel.testAllFilteringQueries()
+                        testMessage = "Testing all filtering queries..."
+                    }
+                ) {
+                    Text("Test Filters")
+                }
+
+                Button(
+                    onClick = {
+                        viewModel.testFilterPathOperations()
+                        testMessage = "Testing filter path operations..."
+                    }
+                ) {
+                    Text("Test Filter Path")
+                }
+
+                Button(
+                    onClick = {
+                        viewModel.testCompleteFilteringScenario()
+                        testMessage = "Testing complete filtering scenario..."
+                    }
+                ) {
+                    Text("Test Scenario")
+                }
+
+                Button(
+                    onClick = {
+                        viewModel.testAllCombinedFilterQueries()
+                        testMessage = "Testing all combined filters..."
+                    }
+                ) {
+                    Text("Test Combined")
+                }
+
+                Button(
+                    onClick = {
+                        viewModel.testAmbiguousColumnFix()
+                        testMessage = "Testing ambiguous column fix..."
+                    }
+                ) {
+                    Text("Test Fix")
+                }
+
+                Button(
+                    onClick = {
+                        viewModel.testCompositionClasses()
+                        testMessage = "Testing composition classes..."
+                    }
+                ) {
+                    Text("Test Composition")
+                }
             }
 
-            Button(
-                onClick = {
-                    viewModel.refreshFromDb()
-                    testMessage = "Data refreshed from database!"
-                }
+            Text(
+                text = "Filter System Tests:",
+                style = MaterialTheme.typography.titleSmall,
+                modifier = Modifier.padding(bottom = 8.dp, top = 8.dp)
+            )
+
+    // Third row for filter system tests
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(scrollState)
             ) {
-                Text("Refresh")
+                Button(
+                    onClick = {
+                        viewModel.testFilterPathScenarios()
+                        testMessage = "Testing filter path scenarios..."
+                    }
+                ) {
+                    Text("Test Filter Scenarios")
+                }
+
+                Button(
+                    onClick = {
+                        viewModel.testChipGroupLogic()
+                        testMessage = "Testing chip group logic..."
+                    }
+                ) {
+                    Text("Test Chip Logic")
+                }
+
+                Button(
+                    onClick = {
+                        viewModel.testFilteredDataPopulation()
+                        testMessage = "Testing filtered data..."
+                    }
+                ) {
+                    Text("Test Data Population")
+                }
+
+                Button(
+                    onClick = {
+                        viewModel.testAppStartupWithExistingFilters()
+                        testMessage = "Testing app startup..."
+                    }
+                ) {
+                    Text("Test App Startup")
+                }
+
+                Button(
+                    onClick = {
+                        viewModel.runAllFilterTests()
+                        testMessage = "Running all filter tests..."
+                    }
+                ) {
+                    Text("Run All Filter Tests")
+                }
+
+                Button(
+                    onClick = {
+                        viewModel.testEdgeCases()
+                        testMessage = "Testing edge cases..."
+                    }
+                ) {
+                    Text("Test Edge Cases")
+                }
+
+                Button(
+                    onClick = {
+                        viewModel.clearAllFilters()
+                        testMessage = "All filters cleared!"
+                    }
+                ) {
+                    Text("Clear Filters")
+                }
             }
 
-            Button(
-                onClick = {
-                    viewModel.testIndividualOperations()
-                    testMessage = "Individual operations tested!"
-                }
-            ) {
-                Text("Test CRUD")
-            }
         }
 
         // Status message
-        Text(
-            text = testMessage,
-            style = MaterialTheme.typography.bodyMedium,
-            modifier = Modifier.padding(bottom = 16.dp)
-        )
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 16.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant
+            )
+        ) {
+            Text(
+                text = testMessage,
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.padding(12.dp)
+            )
+        }
 
         // Tabs for different data types
-        val tabCount = 7
+        val tabCount = 8
         var selectedTab by remember { mutableStateOf(0) }
 
         // Create scrollable tab row for many tabs
@@ -154,6 +330,14 @@ fun DatabaseTestScreen(
                 onClick = { selectedTab = 6 },
                 text = { Text("Video Artists (${videoArtists.size})") }
             )
+            Tab(
+                selected = selectedTab == 7,
+                onClick = { selectedTab = 7 },
+                text = {
+                    val filteredData = viewModel.filteredData.collectAsState(initial = null).value
+                    Text("Filtered Data (${filteredData?.videos?.size ?: 0})")
+                }
+            )
         }
 
         // Display data based on selected tab
@@ -170,11 +354,137 @@ fun DatabaseTestScreen(
                 4 -> DurationsList(durations = durations)
                 5 -> VideosList(videos = videos)
                 6 -> VideoArtistsList(videoArtists = videoArtists)
+                7 -> FilteredDataView(viewModel = viewModel)
             }
         }
     }
 }
 
+@Composable
+fun FilteredDataView(viewModel: DatabaseTestViewModel) {
+    val filteredData by viewModel.filteredData.collectAsState(initial = null)
+    val filterPath by viewModel.filterPath.collectAsState(initial = emptyList())
+    val filteringState by viewModel.filteringState.collectAsState(initial = DatabaseTestViewModel.FilteringState.IDLE)
+
+    if (filteredData == null) {
+        Text(
+            text = "No filtered data available. Apply filters first.",
+            modifier = Modifier.padding(16.dp)
+        )
+        return
+    }
+
+    LazyColumn {
+        item {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(8.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant
+                )
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = "Active Filters",
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
+
+                    if (filterPath.isEmpty()) {
+                        Text("No active filters")
+                    } else {
+                        filterPath.forEach { filter ->
+                            Text(
+                                text = "• ${filter.displayInfo}",
+                                modifier = Modifier.padding(vertical = 2.dp)
+                            )
+                        }
+                    }
+
+                    Text(
+                        text = "Filtering State: ${filteringState.name}",
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(top = 8.dp)
+                    )
+                }
+            }
+        }
+
+        item {
+            Text(
+                text = "Filtered Results",
+                style = MaterialTheme.typography.titleLarge,
+                modifier = Modifier.padding(16.dp, 8.dp)
+            )
+        }
+
+        // Filtered Videos
+        item {
+            Text(
+                text = "Videos (${filteredData!!.videos.size})",
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.padding(16.dp, 8.dp, 16.dp, 4.dp)
+            )
+        }
+
+        items(filteredData!!.videos) { video ->
+            VideoCard(video = video)
+        }
+
+        // Filtered Artists
+        item {
+            Text(
+                text = "Artists (${filteredData!!.artists.size})",
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.padding(16.dp, 16.dp, 16.dp, 4.dp)
+            )
+        }
+
+        items(filteredData!!.artists) { artist ->
+            ArtistCard(artist = artist)
+        }
+
+        // Filtered Instruments
+        item {
+            Text(
+                text = "Instruments (${filteredData!!.instruments.size})",
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.padding(16.dp, 16.dp, 16.dp, 4.dp)
+            )
+        }
+
+        items(filteredData!!.instruments) { instrument ->
+            InstrumentCard(instrument = instrument)
+        }
+
+        // Filtered Types
+        item {
+            Text(
+                text = "Types (${filteredData!!.types.size})",
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.padding(16.dp, 16.dp, 16.dp, 4.dp)
+            )
+        }
+
+        items(filteredData!!.types) { type ->
+            TypeCard(type = type)
+        }
+
+        // Filtered Durations
+        item {
+            Text(
+                text = "Durations (${filteredData!!.durations.size})",
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.padding(16.dp, 16.dp, 16.dp, 4.dp)
+            )
+        }
+
+        items(filteredData!!.durations) { duration ->
+            DurationCard(duration = duration)
+        }
+    }
+}
 @Composable
 fun ArtistsList(artists: List<com.example.jazzlibraryktroomjpcompose.domain.models.Artist>) {
     if (artists.isEmpty()) {
@@ -471,4 +781,7 @@ fun VideoArtistCard(videoArtist: com.example.jazzlibraryktroomjpcompose.domain.m
             )
         }
     }
+
+
+
 }
