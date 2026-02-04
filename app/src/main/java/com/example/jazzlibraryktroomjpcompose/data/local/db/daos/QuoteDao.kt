@@ -2,7 +2,6 @@ package com.example.jazzlibraryktroomjpcompose.data.local.db.daos
 
 
 import androidx.room.*
-import com.example.jazzlibraryktroomjpcompose.data.local.db.entities.ArtistRoomEntity
 import com.example.jazzlibraryktroomjpcompose.data.local.db.entities.QuoteRoomEntity
 
 import kotlinx.coroutines.flow.Flow

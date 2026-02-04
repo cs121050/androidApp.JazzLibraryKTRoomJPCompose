@@ -1,9 +1,5 @@
 package com.example.jazzlibraryktroomjpcompose
 
-import com.example.jazzlibraryktroomjpcompose.ui.theme.JazzLibraryKTRoomJPComposeTheme
-import android.os.Bundle
-import androidx.activity.ComponentActivity
-import androidx.activity.compose.setContent
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -16,6 +12,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.jazzlibraryktroomjpcompose.ui.DatabaseTestViewModel
+import com.example.jazzlibraryktroomjpcompose.ui.theme.JazzLibraryKTRoomJPComposeTheme
+import android.os.Bundle
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
 import dagger.hilt.android.AndroidEntryPoint
 
 @AndroidEntryPoint
@@ -48,7 +48,10 @@ fun DatabaseTestScreen(
     val videos by viewModel.videos.collectAsState(initial = emptyList())
     val videoArtists by viewModel.videoArtists.collectAsState(initial = emptyList())
 
-    var testMessage by remember { mutableStateOf("Click buttons to test database") }
+    val statusMessage by viewModel.statusMessage.collectAsState()
+    val loadingState by viewModel.loadingState.collectAsState()
+    val errorMessage by viewModel.errorMessage.collectAsState()
+    val dataSource by viewModel.dataSource.collectAsState()
 
     // Create a scroll state for horizontal scrolling
     val scrollState = rememberScrollState()
@@ -60,10 +63,123 @@ fun DatabaseTestScreen(
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text(
-            text = "Room Database Test",
+            text = "Jazz Library Database",
             style = MaterialTheme.typography.headlineMedium,
-            modifier = Modifier.padding(bottom = 16.dp)
+            modifier = Modifier.padding(bottom = 8.dp)
         )
+
+        // Data Source Indicator
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 8.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = when (dataSource) {
+                    DatabaseTestViewModel.DataSource.NONE -> MaterialTheme.colorScheme.surfaceVariant
+                    DatabaseTestViewModel.DataSource.DUMMY -> MaterialTheme.colorScheme.secondaryContainer
+                    DatabaseTestViewModel.DataSource.BOOTSTRAP -> MaterialTheme.colorScheme.primaryContainer
+                }
+            )
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text(
+                        text = "Data Source: ${dataSource.name}",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = when (dataSource) {
+                            DatabaseTestViewModel.DataSource.NONE -> MaterialTheme.colorScheme.onSurfaceVariant
+                            DatabaseTestViewModel.DataSource.DUMMY -> MaterialTheme.colorScheme.onSecondaryContainer
+                            DatabaseTestViewModel.DataSource.BOOTSTRAP -> MaterialTheme.colorScheme.onPrimaryContainer
+                        }
+                    )
+                    if (dataSource != DatabaseTestViewModel.DataSource.NONE) {
+                        Text(
+                            text = when (dataSource) {
+                                DatabaseTestViewModel.DataSource.DUMMY -> "Using local test data"
+                                DatabaseTestViewModel.DataSource.BOOTSTRAP -> "Using API data"
+                                else -> ""
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                }
+
+                // Data Source Toggle Buttons
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    AssistChip(
+                        onClick = { viewModel.loadDummyData() },
+                        label = { Text("Dummy Data") },
+                        enabled = loadingState != DatabaseTestViewModel.LoadingState.Loading,
+                        colors = AssistChipDefaults.assistChipColors(
+                            containerColor = if (dataSource == DatabaseTestViewModel.DataSource.DUMMY)
+                                MaterialTheme.colorScheme.secondary
+                            else MaterialTheme.colorScheme.surfaceVariant
+                        )
+                    )
+
+                    AssistChip(
+                        onClick = { viewModel.loadBootstrapData() },
+                        label = { Text("Bootstrap API") },
+                        enabled = loadingState != DatabaseTestViewModel.LoadingState.Loading,
+                        colors = AssistChipDefaults.assistChipColors(
+                            containerColor = if (dataSource == DatabaseTestViewModel.DataSource.BOOTSTRAP)
+                                MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.surfaceVariant
+                        )
+                    )
+                }
+            }
+        }
+
+        // Loading bar indicator
+        when (loadingState) {
+            DatabaseTestViewModel.LoadingState.Loading -> {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(8.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator()
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Loading...")
+                }
+            }
+            DatabaseTestViewModel.LoadingState.Error -> {
+                if (errorMessage != null) {
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(8.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.errorContainer
+                        )
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Text(
+                                text = "Error Loading Data",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                            Text(
+                                text = errorMessage!!,
+                                style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.padding(top = 8.dp)
+                            )
+                        }
+                    }
+                }
+            }
+            else -> {}
+        }
 
         // Test Controls - Now in a horizontal scrollable container
         Column(
@@ -87,17 +203,7 @@ fun DatabaseTestScreen(
             ) {
                 Button(
                     onClick = {
-                        viewModel.insertTestData()
-                        testMessage = "Test data inserted!"
-                    }
-                ) {
-                    Text("Insert Test Data")
-                }
-
-                Button(
-                    onClick = {
                         viewModel.clearAllData()
-                        testMessage = "All data cleared!"
                     }
                 ) {
                     Text("Clear All Data")
@@ -106,19 +212,9 @@ fun DatabaseTestScreen(
                 Button(
                     onClick = {
                         viewModel.refreshFromDb()
-                        testMessage = "Data refreshed from database!"
                     }
                 ) {
                     Text("Refresh")
-                }
-
-                Button(
-                    onClick = {
-                        viewModel.testIndividualOperations()
-                        testMessage = "Individual operations tested!"
-                    }
-                ) {
-                    Text("Test CRUD")
                 }
             }
 
@@ -138,7 +234,6 @@ fun DatabaseTestScreen(
                 Button(
                     onClick = {
                         viewModel.testAllFilteringQueries()
-                        testMessage = "Testing all filtering queries..."
                     }
                 ) {
                     Text("Test Filters")
@@ -147,7 +242,6 @@ fun DatabaseTestScreen(
                 Button(
                     onClick = {
                         viewModel.testFilterPathOperations()
-                        testMessage = "Testing filter path operations..."
                     }
                 ) {
                     Text("Test Filter Path")
@@ -156,7 +250,6 @@ fun DatabaseTestScreen(
                 Button(
                     onClick = {
                         viewModel.testCompleteFilteringScenario()
-                        testMessage = "Testing complete filtering scenario..."
                     }
                 ) {
                     Text("Test Scenario")
@@ -165,7 +258,6 @@ fun DatabaseTestScreen(
                 Button(
                     onClick = {
                         viewModel.testAllCombinedFilterQueries()
-                        testMessage = "Testing all combined filters..."
                     }
                 ) {
                     Text("Test Combined")
@@ -174,7 +266,6 @@ fun DatabaseTestScreen(
                 Button(
                     onClick = {
                         viewModel.testAmbiguousColumnFix()
-                        testMessage = "Testing ambiguous column fix..."
                     }
                 ) {
                     Text("Test Fix")
@@ -183,7 +274,6 @@ fun DatabaseTestScreen(
                 Button(
                     onClick = {
                         viewModel.testCompositionClasses()
-                        testMessage = "Testing composition classes..."
                     }
                 ) {
                     Text("Test Composition")
@@ -196,7 +286,7 @@ fun DatabaseTestScreen(
                 modifier = Modifier.padding(bottom = 8.dp, top = 8.dp)
             )
 
-    // Third row for filter system tests
+            // Third row for filter system tests
             Row(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier
@@ -206,7 +296,6 @@ fun DatabaseTestScreen(
                 Button(
                     onClick = {
                         viewModel.testFilterPathScenarios()
-                        testMessage = "Testing filter path scenarios..."
                     }
                 ) {
                     Text("Test Filter Scenarios")
@@ -215,7 +304,6 @@ fun DatabaseTestScreen(
                 Button(
                     onClick = {
                         viewModel.testChipGroupLogic()
-                        testMessage = "Testing chip group logic..."
                     }
                 ) {
                     Text("Test Chip Logic")
@@ -224,7 +312,6 @@ fun DatabaseTestScreen(
                 Button(
                     onClick = {
                         viewModel.testFilteredDataPopulation()
-                        testMessage = "Testing filtered data..."
                     }
                 ) {
                     Text("Test Data Population")
@@ -233,7 +320,6 @@ fun DatabaseTestScreen(
                 Button(
                     onClick = {
                         viewModel.testAppStartupWithExistingFilters()
-                        testMessage = "Testing app startup..."
                     }
                 ) {
                     Text("Test App Startup")
@@ -242,7 +328,6 @@ fun DatabaseTestScreen(
                 Button(
                     onClick = {
                         viewModel.runAllFilterTests()
-                        testMessage = "Running all filter tests..."
                     }
                 ) {
                     Text("Run All Filter Tests")
@@ -251,7 +336,6 @@ fun DatabaseTestScreen(
                 Button(
                     onClick = {
                         viewModel.testEdgeCases()
-                        testMessage = "Testing edge cases..."
                     }
                 ) {
                     Text("Test Edge Cases")
@@ -260,13 +344,11 @@ fun DatabaseTestScreen(
                 Button(
                     onClick = {
                         viewModel.clearAllFilters()
-                        testMessage = "All filters cleared!"
                     }
                 ) {
                     Text("Clear Filters")
                 }
             }
-
         }
 
         // Status message
@@ -279,7 +361,7 @@ fun DatabaseTestScreen(
             )
         ) {
             Text(
-                text = testMessage,
+                text = statusMessage,
                 style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.padding(12.dp)
             )
@@ -485,6 +567,7 @@ fun FilteredDataView(viewModel: DatabaseTestViewModel) {
         }
     }
 }
+
 @Composable
 fun ArtistsList(artists: List<com.example.jazzlibraryktroomjpcompose.domain.models.Artist>) {
     if (artists.isEmpty()) {
@@ -604,7 +687,7 @@ fun VideoArtistsList(videoArtists: List<com.example.jazzlibraryktroomjpcompose.d
     }
 }
 
-// Individual Card Composables
+// Individual Card Composables (keep as before)
 @Composable
 fun ArtistCard(artist: com.example.jazzlibraryktroomjpcompose.domain.models.Artist) {
     Card(
@@ -781,7 +864,4 @@ fun VideoArtistCard(videoArtist: com.example.jazzlibraryktroomjpcompose.domain.m
             )
         }
     }
-
-
-
 }

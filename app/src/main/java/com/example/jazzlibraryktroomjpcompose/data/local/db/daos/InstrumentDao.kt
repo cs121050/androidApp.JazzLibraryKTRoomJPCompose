@@ -30,6 +30,8 @@ interface InstrumentDao {
     @Query("SELECT * FROM instruments WHERE instrument_name LIKE '%' || :query || '%'")
     fun getInstrumentByName(query: String): Flow<List<InstrumentRoomEntity>>
 
+    @Query("SELECT COUNT(*) FROM instruments")
+    suspend fun getCount(): Int
 
     // Filtering queries with composition
     @Query("""

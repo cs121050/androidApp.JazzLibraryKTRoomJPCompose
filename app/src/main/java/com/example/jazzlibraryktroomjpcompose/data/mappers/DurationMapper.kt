@@ -3,8 +3,6 @@ package com.example.jazzlibraryktroomjpcompose.data.mappers
 import com.example.jazzlibraryktroomjpcompose.data.local.db.entities.DurationRoomEntity
 import com.example.jazzlibraryktroomjpcompose.data.remote.models.DurationResponse
 import com.example.jazzlibraryktroomjpcompose.domain.models.Duration
-import com.example.jazzlibraryktroomjpcompose.domain.models.Type
-import com.example.jazzlibraryktroomjpcompose.domain.repository.TypeResponse
 
 object DurationMapper {
     fun toDomain(entity: DurationRoomEntity): Duration {

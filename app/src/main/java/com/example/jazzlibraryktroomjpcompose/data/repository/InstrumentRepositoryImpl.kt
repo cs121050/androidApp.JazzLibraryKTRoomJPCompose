@@ -1,10 +1,10 @@
 package com.example.jazzlibraryktroomjpcompose.data.repository
 
 
-import com.example.jazzlibraryktroomjpcompose.data.local.JazzDatabase
+import com.example.jazzlibraryktroomjpcompose.data.local.db.JazzDatabase
 import com.example.jazzlibraryktroomjpcompose.data.local.db.daos.InstrumentDao
 import com.example.jazzlibraryktroomjpcompose.data.mappers.InstrumentMapper
-import com.example.jazzlibraryktroomjpcompose.data.remote.api.JazzApiService
+import com.example.jazzlibraryktroomjpcompose.data.remote.api.RetrofitClient
 import com.example.jazzlibraryktroomjpcompose.domain.models.Instrument
 import com.example.jazzlibraryktroomjpcompose.domain.repository.InstrumentRepository
 import kotlinx.coroutines.flow.Flow
@@ -13,7 +13,7 @@ import javax.inject.Inject
 
 class InstrumentRepositoryImpl @Inject constructor(
     private val database: JazzDatabase,
-    private val apiService: JazzApiService
+    private val apiService: RetrofitClient
 ) : InstrumentRepository {
 
     private val instrumentDao: InstrumentDao = database.instrumentDao()

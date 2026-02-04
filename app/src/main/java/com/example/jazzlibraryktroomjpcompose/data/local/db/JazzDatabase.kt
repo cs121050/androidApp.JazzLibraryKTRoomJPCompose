@@ -1,4 +1,4 @@
-package com.example.jazzlibraryktroomjpcompose.data.local
+package com.example.jazzlibraryktroomjpcompose.data.local.db
 
 import androidx.room.Database
 import androidx.room.Room

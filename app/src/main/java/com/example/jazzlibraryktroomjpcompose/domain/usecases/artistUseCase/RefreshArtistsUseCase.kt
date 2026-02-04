@@ -1,4 +1,4 @@
-package com.example.jazzlibraryktroomjpcompose.domain.usecases.ArtistUseCase
+package com.example.jazzlibraryktroomjpcompose.domain.usecases.artistUseCase
 
 import com.example.jazzlibraryktroomjpcompose.domain.repository.ArtistRepository
 import javax.inject.Inject

@@ -14,10 +14,10 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @HiltViewModel
-class DatabaseTestViewModel @Inject constructor(
+class BootstrapViewModel @Inject constructor(
     private val database: JazzDatabase,
     private val filterManager: FilterManager,
-    private val jazzRepository: JazzRepositoryImpl
+    private val jazzRepository: JazzRepositoryImpl  // Add this
 ) : ViewModel() {
 
     // Original StateFlows
@@ -52,10 +52,6 @@ class DatabaseTestViewModel @Inject constructor(
     private val _statusMessage = MutableStateFlow("Click buttons to test database")
     val statusMessage: StateFlow<String> = _statusMessage
 
-    // NEW: Data source state
-    private val _dataSource = MutableStateFlow<DataSource>(DataSource.NONE)
-    val dataSource: StateFlow<DataSource> = _dataSource
-
     private val _filteredData = MutableStateFlow<FilterManager.FilteredData?>(
         FilterManager.FilteredData(
             videos = emptyList(),
@@ -85,30 +81,22 @@ class DatabaseTestViewModel @Inject constructor(
         Error
     }
 
-    // NEW: Data source enum
-    enum class DataSource {
-        NONE,
-        DUMMY,
-        BOOTSTRAP
-    }
-
     init {
         refreshFromDb()
         loadFilterPath()
     }
 
-    // NEW: Function to switch between data sources
-    fun loadBootstrapData() {
+    // NEW FUNCTION: Load data from API
+    fun loadDataFromApi() {
         viewModelScope.launch {
             _loadingState.value = LoadingState.Loading
             _statusMessage.value = "Loading data from API..."
-            _dataSource.value = DataSource.BOOTSTRAP
 
             val result = jazzRepository.loadBootstrapData()
 
             if (result.isSuccess) {
                 _loadingState.value = LoadingState.Success
-                _statusMessage.value = "Bootstrap data loaded successfully from API!"
+                _statusMessage.value = "Data loaded successfully from API!"
                 _errorMessage.value = null
 
                 // Refresh the UI with new data
@@ -119,33 +107,8 @@ class DatabaseTestViewModel @Inject constructor(
             } else {
                 _loadingState.value = LoadingState.Error
                 val errorMsg = result.exceptionOrNull()?.message ?: "Unknown error"
-                _statusMessage.value = "Failed to load bootstrap data"
+                _statusMessage.value = "Failed to load data from API"
                 _errorMessage.value = "Error: $errorMsg"
-                _dataSource.value = DataSource.NONE
-            }
-        }
-    }
-
-    // NEW: Function to load dummy data
-    fun loadDummyData() {
-        viewModelScope.launch {
-            _loadingState.value = LoadingState.Loading
-            _statusMessage.value = "Loading dummy data..."
-            _dataSource.value = DataSource.DUMMY
-
-            try {
-                insertTestData()
-                _loadingState.value = LoadingState.Success
-                _statusMessage.value = "Dummy data loaded successfully!"
-                _errorMessage.value = null
-
-                // Clear any existing filters since we have new data
-                clearAllFilters()
-            } catch (e: Exception) {
-                _loadingState.value = LoadingState.Error
-                _statusMessage.value = "Failed to load dummy data"
-                _errorMessage.value = "Error: ${e.message}"
-                _dataSource.value = DataSource.NONE
             }
         }
     }
@@ -259,115 +222,121 @@ class DatabaseTestViewModel @Inject constructor(
         }
     }
 
-    // Keep this for testing without API (now used by loadDummyData)
-    private suspend fun insertTestData() {
-        // Clear existing data first (in reverse order of dependencies)
-        database.quoteDao().deleteAllQuotes()
-        database.videoContainsArtistDao().deleteAllVideoContainsArtists()
-        database.videoDao().deleteAllVideos()
-        database.artistDao().deleteAllArtists()
-        database.instrumentDao().deleteAllInstruments()
-        database.typeDao().deleteAllTypes()
-        database.durationDao().deleteAllDurations()
+    // Keep this for testing without API
+    fun insertTestData() {
+        viewModelScope.launch {
+            _statusMessage.value = "Inserting test data..."
 
-        // Insert test types
-        val testTypes = listOf(
-            TypeRoomEntity(1, "Live Performance"),
-            TypeRoomEntity(2, "Studio Recording"),
-            TypeRoomEntity(3, "Interview"),
-            TypeRoomEntity(4, "Documentary"),
-            TypeRoomEntity(5, "Tutorial")
-        )
-        database.typeDao().insertAllTypes(testTypes)
+            // Clear existing data first (in reverse order of dependencies)
+            database.quoteDao().deleteAllQuotes()
+            database.videoContainsArtistDao().deleteAllVideoContainsArtists()
+            database.videoDao().deleteAllVideos()
+            database.artistDao().deleteAllArtists()
+            database.instrumentDao().deleteAllInstruments()
+            database.typeDao().deleteAllTypes()
+            database.durationDao().deleteAllDurations()
 
-        // Insert test durations
-        val testDurations = listOf(
-            DurationRoomEntity(1, "Short", "Less than 5 minutes"),
-            DurationRoomEntity(2, "Medium", "5-15 minutes"),
-            DurationRoomEntity(3, "Long", "15-30 minutes"),
-            DurationRoomEntity(4, "Extended", "30+ minutes"),
-            DurationRoomEntity(5, "Full Concert", "60+ minutes")
-        )
-        database.durationDao().insertAllDurations(testDurations)
-
-        // Insert test instruments
-        val testInstruments = listOf(
-            InstrumentRoomEntity(1, "Trumpet"),
-            InstrumentRoomEntity(2, "Saxophone"),
-            InstrumentRoomEntity(3, "Piano"),
-            InstrumentRoomEntity(4, "Bass"),
-            InstrumentRoomEntity(5, "Drums"),
-            InstrumentRoomEntity(6, "Guitar")
-        )
-        database.instrumentDao().insertAllInstruments(testInstruments)
-
-        // Insert test artists
-        val testArtists = listOf(
-            ArtistRoomEntity(1, "Miles", "Davis", 1, 100),
-            ArtistRoomEntity(2, "John", "Coltrane", 2, 95),
-            ArtistRoomEntity(3, "Bill", "Evans", 3, 90),
-            ArtistRoomEntity(4, "Charlie", "Parker", 2, 98),
-            ArtistRoomEntity(5, "Duke", "Ellington", 3, 92),
-            ArtistRoomEntity(6, "Wes", "Montgomery", 6, 85),
-            ArtistRoomEntity(7, "Charles", "Mingus", 4, 88),
-            ArtistRoomEntity(8, "Art", "Blakey", 5, 86)
-        )
-        database.artistDao().insertAllArtists(testArtists)
-
-        // Insert test videos
-        val testVideos = listOf(
-            VideoRoomEntity(
-                1, "So What - Live", "9:15", "/videos/so_what.mp4",
-                "NYC_1960", "Available", 3, 1
-            ),
-            VideoRoomEntity(
-                2, "Giant Steps Studio", "4:45", "/videos/giant_steps.mp4",
-                "LA_1959", "Available", 2, 2
-            ),
-            VideoRoomEntity(
-                3, "Parker Interview", "12:30", "/videos/parker_interview.mp4",
-                "Chicago_1953", "Available", 2, 3
-            ),
-            VideoRoomEntity(
-                4, "Wes Montgomery Solo", "7:22", "/videos/wes_solo.mp4",
-                "SF_1965", "Available", 3, 1
-            ),
-            VideoRoomEntity(
-                5, "Take Five Documentary", "45:00", "/videos/take_five_doc.mp4",
-                "Boston_1961", "Available", 5, 4
+            // Insert test types
+            val testTypes = listOf(
+                TypeRoomEntity(1, "Live Performance"),
+                TypeRoomEntity(2, "Studio Recording"),
+                TypeRoomEntity(3, "Interview"),
+                TypeRoomEntity(4, "Documentary"),
+                TypeRoomEntity(5, "Tutorial")
             )
-        )
-        database.videoDao().insertAllVideos(testVideos)
+            database.typeDao().insertAllTypes(testTypes)
 
-        // Insert test video-artist associations
-        val testVideoArtists = listOf(
-            VideoContainsArtistRoomEntity(1, 1),  // Miles Davis in So What
-            VideoContainsArtistRoomEntity(2, 2),  // Coltrane in Giant Steps
-            VideoContainsArtistRoomEntity(3, 2),  // Bill Evans in Giant Steps
-            VideoContainsArtistRoomEntity(4, 3),  // Charlie Parker interview
-            VideoContainsArtistRoomEntity(6, 4),  // Wes Montgomery solo
-            VideoContainsArtistRoomEntity(7, 5),  // Mingus in documentary
-            VideoContainsArtistRoomEntity(8, 5)   // Blakey in documentary
-        )
-        database.videoContainsArtistDao().insertAllVideoContainsArtists(testVideoArtists)
+            // Insert test durations
+            val testDurations = listOf(
+                DurationRoomEntity(1, "Short", "Less than 5 minutes"),
+                DurationRoomEntity(2, "Medium", "5-15 minutes"),
+                DurationRoomEntity(3, "Long", "15-30 minutes"),
+                DurationRoomEntity(4, "Extended", "30+ minutes"),
+                DurationRoomEntity(5, "Full Concert", "60+ minutes")
+            )
+            database.durationDao().insertAllDurations(testDurations)
 
-        // Insert test quotes
-        val testQuotes = listOf(
-            QuoteRoomEntity(id = 1, text = "I'll play it first and tell you what it is later.", videoId = 1, artistId = 1),
-            QuoteRoomEntity(id = 2, text = "You can play a shoestring if you're sincere.", videoId = 1, artistId = 1),
-            QuoteRoomEntity(id = 3, text = "My music is the spiritual expression of what I am.", videoId = 2, artistId = 2),
-            QuoteRoomEntity(id = 4, text = "I know that there are bad times, but that's okay.", videoId = 2, artistId = 2),
-            QuoteRoomEntity(id = 5, text = "Jazz is not a what, it is a how.", videoId = 3, artistId = 3),
-            QuoteRoomEntity(id = 6, text = "Master your instrument, master the music, and then forget all that bullshit and just play.", videoId = 4, artistId = 4),
-            QuoteRoomEntity(id = 7, text = "The piano ain't got no wrong notes.", videoId = 5, artistId = 5)
-        )
-        database.quoteDao().insertAllQuotes(testQuotes)
+            // Insert test instruments
+            val testInstruments = listOf(
+                InstrumentRoomEntity(1, "Trumpet"),
+                InstrumentRoomEntity(2, "Saxophone"),
+                InstrumentRoomEntity(3, "Piano"),
+                InstrumentRoomEntity(4, "Bass"),
+                InstrumentRoomEntity(5, "Drums"),
+                InstrumentRoomEntity(6, "Guitar")
+            )
+            database.instrumentDao().insertAllInstruments(testInstruments)
+
+            // Insert test artists
+            val testArtists = listOf(
+                ArtistRoomEntity(1, "Miles", "Davis", 1, 100),
+                ArtistRoomEntity(2, "John", "Coltrane", 2, 95),
+                ArtistRoomEntity(3, "Bill", "Evans", 3, 90),
+                ArtistRoomEntity(4, "Charlie", "Parker", 2, 98),
+                ArtistRoomEntity(5, "Duke", "Ellington", 3, 92),
+                ArtistRoomEntity(6, "Wes", "Montgomery", 6, 85),
+                ArtistRoomEntity(7, "Charles", "Mingus", 4, 88),
+                ArtistRoomEntity(8, "Art", "Blakey", 5, 86)
+            )
+            database.artistDao().insertAllArtists(testArtists)
+
+            // Insert test videos
+            val testVideos = listOf(
+                VideoRoomEntity(
+                    1, "So What - Live", "9:15", "/videos/so_what.mp4",
+                    "NYC_1960", "Available", 3, 1
+                ),
+                VideoRoomEntity(
+                    2, "Giant Steps Studio", "4:45", "/videos/giant_steps.mp4",
+                    "LA_1959", "Available", 2, 2
+                ),
+                VideoRoomEntity(
+                    3, "Parker Interview", "12:30", "/videos/parker_interview.mp4",
+                    "Chicago_1953", "Available", 2, 3
+                ),
+                VideoRoomEntity(
+                    4, "Wes Montgomery Solo", "7:22", "/videos/wes_solo.mp4",
+                    "SF_1965", "Available", 3, 1
+                ),
+                VideoRoomEntity(
+                    5, "Take Five Documentary", "45:00", "/videos/take_five_doc.mp4",
+                    "Boston_1961", "Available", 5, 4
+                )
+            )
+            database.videoDao().insertAllVideos(testVideos)
+
+            // Insert test video-artist associations
+            val testVideoArtists = listOf(
+                VideoContainsArtistRoomEntity(1, 1),  // Miles Davis in So What
+                VideoContainsArtistRoomEntity(2, 2),  // Coltrane in Giant Steps
+                VideoContainsArtistRoomEntity(3, 2),  // Bill Evans in Giant Steps
+                VideoContainsArtistRoomEntity(4, 3),  // Charlie Parker interview
+                VideoContainsArtistRoomEntity(6, 4),  // Wes Montgomery solo
+                VideoContainsArtistRoomEntity(7, 5),  // Mingus in documentary
+                VideoContainsArtistRoomEntity(8, 5)   // Blakey in documentary
+            )
+            database.videoContainsArtistDao().insertAllVideoContainsArtists(testVideoArtists)
+
+            // Insert test quotes
+            val testQuotes = listOf(
+                QuoteRoomEntity(id = 1, text = "I'll play it first and tell you what it is later.", videoId = 1, artistId = 1),
+                QuoteRoomEntity(id = 2, text = "You can play a shoestring if you're sincere.", videoId = 1, artistId = 1),
+                QuoteRoomEntity(id = 3, text = "My music is the spiritual expression of what I am.", videoId = 2, artistId = 2),
+                QuoteRoomEntity(id = 4, text = "I know that there are bad times, but that's okay.", videoId = 2, artistId = 2),
+                QuoteRoomEntity(id = 5, text = "Jazz is not a what, it is a how.", videoId = 3, artistId = 3),
+                QuoteRoomEntity(id = 6, text = "Master your instrument, master the music, and then forget all that bullshit and just play.", videoId = 4, artistId = 4),
+                QuoteRoomEntity(id = 7, text = "The piano ain't got no wrong notes.", videoId = 5, artistId = 5)
+            )
+            database.quoteDao().insertAllQuotes(testQuotes)
+
+            _statusMessage.value = "Test data inserted successfully!"
+            refreshFromDb()
+        }
     }
 
     fun clearAllData() {
         viewModelScope.launch {
             _statusMessage.value = "Clearing all data..."
-            _dataSource.value = DataSource.NONE
 
             database.quoteDao().deleteAllQuotes()
             database.videoContainsArtistDao().deleteAllVideoContainsArtists()
@@ -434,16 +403,15 @@ class DatabaseTestViewModel @Inject constructor(
         viewModelScope.launch {
             _statusMessage.value = "Testing all filtering queries..."
 
-            // Check if we have data, if not load dummy data
+            println("=== Testing All Filtering Queries ===")
+
+            // Make sure we have test data
             if (_artists.value.isEmpty()) {
-                loadDummyData()
-                kotlinx.coroutines.delay(1000)
+                insertTestData()
             }
 
             // Clear any existing filters
             clearAllFilters()
-
-            println("=== Testing All Filtering Queries ===")
 
             // Test 1: Single Instrument Filter (Saxophone)
             println("\n1. Testing Single Instrument Filter (Saxophone):")
@@ -530,12 +498,6 @@ class DatabaseTestViewModel @Inject constructor(
         viewModelScope.launch {
             _statusMessage.value = "Testing filter path operations..."
 
-            // Check if we have data, if not load dummy data
-            if (_artists.value.isEmpty()) {
-                loadDummyData()
-                kotlinx.coroutines.delay(1000)
-            }
-
             println("=== Testing Filter Path Operations ===")
 
             // Clear existing filter paths
@@ -594,13 +556,12 @@ class DatabaseTestViewModel @Inject constructor(
         viewModelScope.launch {
             _statusMessage.value = "Testing complete filtering scenario..."
 
-            // Check if we have data, if not load dummy data
-            if (_artists.value.isEmpty()) {
-                loadDummyData()
-                kotlinx.coroutines.delay(1000)
-            }
-
             println("=== Testing Complete Filtering Scenario ===")
+
+            // Make sure we have test data
+            if (_artists.value.isEmpty()) {
+                insertTestData()
+            }
 
             // Clear any existing filters
             database.filterPathDao().deleteAllFilterPaths()
@@ -706,13 +667,12 @@ class DatabaseTestViewModel @Inject constructor(
         viewModelScope.launch {
             _statusMessage.value = "Testing all combined filter queries..."
 
-            // Check if we have data, if not load dummy data
-            if (_artists.value.isEmpty()) {
-                loadDummyData()
-                kotlinx.coroutines.delay(1000)
-            }
-
             println("=== Testing All Combined Filter Queries ===")
+
+            // Make sure we have test data
+            if (_artists.value.isEmpty()) {
+                insertTestData()
+            }
 
             println("\n--- Testing Triple Filter Combinations ---")
 
@@ -772,7 +732,7 @@ class DatabaseTestViewModel @Inject constructor(
         }
     }
 
-    // Add these state flows for filtered data
+    // Add these state flows for filtered data (add them with the other state flows at the top)
     private val _filteredArtists = MutableStateFlow<List<ArtistWithVideoCount>>(emptyList())
     val filteredArtists: StateFlow<List<ArtistWithVideoCount>> = _filteredArtists
 
@@ -795,14 +755,13 @@ class DatabaseTestViewModel @Inject constructor(
         viewModelScope.launch {
             _statusMessage.value = "Testing ambiguous column fix..."
 
-            // Check if we have data, if not load dummy data
-            if (_artists.value.isEmpty()) {
-                loadDummyData()
-                kotlinx.coroutines.delay(1000)
-            }
+            println("=== Testing Ambiguous Column Fix ===")
 
             try {
-                println("=== Testing Ambiguous Column Fix ===")
+                // Make sure we have data
+                if (_artists.value.isEmpty()) {
+                    insertTestData()
+                }
 
                 // Test a simple query
                 println("\n1. Testing Artists by Instrument (Saxophone):")
@@ -852,14 +811,9 @@ class DatabaseTestViewModel @Inject constructor(
         viewModelScope.launch {
             _statusMessage.value = "Testing composition classes..."
 
-            // Check if we have data, if not load dummy data
-            if (_artists.value.isEmpty()) {
-                loadDummyData()
-                kotlinx.coroutines.delay(1000)
-            }
+            println("=== Testing Composition Classes ===")
 
             try {
-                println("=== Testing Composition Classes ===")
 
                 // Test the actual query
                 val artists = database.artistDao()
@@ -875,17 +829,18 @@ class DatabaseTestViewModel @Inject constructor(
         }
     }
 
+
+    // Add new test methods for filtering scenarios
     fun testFilterPathScenarios() {
         viewModelScope.launch {
             _statusMessage.value = "Testing filter path scenarios..."
 
-            // Check if we have data, if not load dummy data
-            if (_artists.value.isEmpty()) {
-                loadDummyData()
-                kotlinx.coroutines.delay(1000)
-            }
-
             println("\n=== Testing Filter Path Scenarios ===\n")
+
+            // Make sure we have test data
+            if (_artists.value.isEmpty()) {
+                insertTestData()
+            }
 
             // Clear any existing filters
             clearAllFilters()
@@ -1002,13 +957,12 @@ class DatabaseTestViewModel @Inject constructor(
         viewModelScope.launch {
             _statusMessage.value = "Testing chip group logic..."
 
-            // Check if we have data, if not load dummy data
-            if (_artists.value.isEmpty()) {
-                loadDummyData()
-                kotlinx.coroutines.delay(1000)
-            }
-
             println("\n=== Testing Chip Group Logic ===\n")
+
+            // Make sure we have test data
+            if (_artists.value.isEmpty()) {
+                insertTestData()
+            }
 
             clearAllFilters()
 
@@ -1130,13 +1084,12 @@ class DatabaseTestViewModel @Inject constructor(
         viewModelScope.launch {
             _statusMessage.value = "Testing filtered data population..."
 
-            // Check if we have data, if not load dummy data
-            if (_artists.value.isEmpty()) {
-                loadDummyData()
-                kotlinx.coroutines.delay(1000)
-            }
-
             println("\n=== Testing Filtered Data Population ===\n")
+
+            // Make sure we have test data
+            if (_artists.value.isEmpty()) {
+                insertTestData()
+            }
 
             clearAllFilters()
 
@@ -1212,13 +1165,12 @@ class DatabaseTestViewModel @Inject constructor(
         viewModelScope.launch {
             _statusMessage.value = "Testing app startup with existing filters..."
 
-            // Check if we have data, if not load dummy data
-            if (_artists.value.isEmpty()) {
-                loadDummyData()
-                kotlinx.coroutines.delay(1000)
-            }
-
             println("\n=== Testing App Startup with Existing Filters ===\n")
+
+            // Make sure we have test data
+            if (_artists.value.isEmpty()) {
+                insertTestData()
+            }
 
             // Clear and set up test filters
             clearAllFilters()
@@ -1289,19 +1241,19 @@ class DatabaseTestViewModel @Inject constructor(
         )
     }
 
+
     fun runAllFilterTests() {
         viewModelScope.launch {
             _statusMessage.value = "Running complete filter tests..."
 
-            // Check if we have data, if not load dummy data
-            if (_artists.value.isEmpty()) {
-                loadDummyData()
-                kotlinx.coroutines.delay(1000)
-            }
-
             println("╔══════════════════════════════════════════╗")
             println("║     RUNNING COMPLETE FILTER TESTS       ║")
             println("╚══════════════════════════════════════════╝")
+
+            // Make sure we have test data
+            if (_artists.value.isEmpty()) {
+                insertTestData()
+            }
 
             // Run all filter tests
             testFilterPathScenarios()
@@ -1326,9 +1278,10 @@ class DatabaseTestViewModel @Inject constructor(
         viewModelScope.launch {
             _statusMessage.value = "Testing edge cases..."
 
+            println("\n=== Testing Edge Cases ===\n")
+
             clearAllData()
-            loadDummyData()
-            kotlinx.coroutines.delay(1000)
+            insertTestData()
             clearAllFilters()
 
             // Edge case 1: Selecting non-existent entity
