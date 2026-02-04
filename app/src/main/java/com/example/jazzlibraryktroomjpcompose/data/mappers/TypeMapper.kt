@@ -2,8 +2,6 @@ package com.example.jazzlibraryktroomjpcompose.data.mappers
 
 
 import com.example.jazzlibraryktroomjpcompose.data.local.db.entities.TypeRoomEntity
-import com.example.jazzlibraryktroomjpcompose.data.remote.models.InstrumentResponse
-import com.example.jazzlibraryktroomjpcompose.domain.models.Instrument
 import com.example.jazzlibraryktroomjpcompose.domain.models.Type
 import com.example.jazzlibraryktroomjpcompose.domain.repository.TypeResponse
 

@@ -1,12 +1,9 @@
 package com.example.di
 
-
 import android.content.Context
-import com.example.jazzlibraryktroomjpcompose.data.local.JazzDatabase
-import com.example.jazzlibraryktroomjpcompose.data.remote.RetrofitClient
+import com.example.jazzlibraryktroomjpcompose.data.local.db.JazzDatabase
 import com.example.jazzlibraryktroomjpcompose.data.remote.api.JazzApiService
-import com.example.jazzlibraryktroomjpcompose.data.repository.ArtistRepositoryImpl
-import com.example.jazzlibraryktroomjpcompose.domain.repository.ArtistRepository
+import com.example.jazzlibraryktroomjpcompose.data.remote.api.RetrofitClient
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -24,20 +21,13 @@ object AppModule {
         return JazzDatabase.getDatabase(context)
     }
 
-    //TODO//
+    // Provide the Retrofit API service
     @Provides
     @Singleton
     fun provideJazzApiService(): JazzApiService {
-//        return RetrofitClient.create()
-        return TODO("Provide the return value")
+        return RetrofitClient.jazzApiService
     }
 
-    @Provides
-    @Singleton
-    fun provideArtistRepository(
-        database: JazzDatabase,
-        apiService: JazzApiService
-    ): ArtistRepository {
-        return ArtistRepositoryImpl(database, apiService)
-    }
+    // REMOVE the provideArtistRepository function since we're not using it
+    // and it's causing confusion with JazzRepository
 }

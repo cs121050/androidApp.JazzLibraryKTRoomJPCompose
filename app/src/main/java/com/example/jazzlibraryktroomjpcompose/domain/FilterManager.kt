@@ -1,6 +1,6 @@
 package com.example.jazzlibraryktroomjpcompose.domain
 
-import com.example.jazzlibraryktroomjpcompose.data.local.JazzDatabase
+import com.example.jazzlibraryktroomjpcompose.data.local.db.JazzDatabase
 import com.example.jazzlibraryktroomjpcompose.domain.models.FilterPath
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine

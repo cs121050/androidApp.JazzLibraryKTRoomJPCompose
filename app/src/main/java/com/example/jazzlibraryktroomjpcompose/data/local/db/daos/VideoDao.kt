@@ -22,6 +22,9 @@ interface VideoDao {
     @Delete
     suspend fun deleteVideo(video: VideoRoomEntity)
 
+    @Query("SELECT COUNT(*) FROM videos")
+    suspend fun getCount(): Int
+
     @Query("DELETE FROM videos")
     suspend fun deleteAllVideos()
 

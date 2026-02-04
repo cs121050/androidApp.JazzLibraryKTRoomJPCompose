@@ -4,7 +4,6 @@ package com.example.jazzlibraryktroomjpcompose.data.local.db.entities
 import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.ForeignKey
-import androidx.room.PrimaryKey
 
 @Entity(
     tableName = "video_contains_artist",
