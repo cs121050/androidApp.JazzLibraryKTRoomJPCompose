@@ -4,6 +4,11 @@ import com.example.jazzlibraryktroomjpcompose.data.local.db.entities.ArtistRoomE
 import com.example.jazzlibraryktroomjpcompose.data.remote.models.ArtistResponse
 import com.example.jazzlibraryktroomjpcompose.domain.models.Artist
 
+// Mapper ensures:
+// 1. Each class belongs to ONE architecture layer
+// 2. Each class contains ONLY what that layer needs
+// 3. No layer knows about other layers' implementation details
+//it's the converter
 object ArtistMapper {
 
     // Domain → Local Entity

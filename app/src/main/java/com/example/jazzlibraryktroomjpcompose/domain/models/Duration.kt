@@ -5,3 +5,4 @@ data class Duration(
     val name: String,
     val description: String
 )
+// ✅ BUSINESS LOGIC in domain class methods

@@ -16,6 +16,7 @@ import com.example.jazzlibraryktroomjpcompose.ui.theme.JazzLibraryKTRoomJPCompos
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.lazy.LazyRow
 import dagger.hilt.android.AndroidEntryPoint
 
 @AndroidEntryPoint
@@ -68,7 +69,9 @@ fun DatabaseTestScreen(
             modifier = Modifier.padding(bottom = 8.dp)
         )
 
-        // Data Source Indicator
+        // Data Source Indicator,
+        //  this card includes 2 buttons to choose the sourse of the data
+        //  that will populate the room DB
         Card(
             modifier = Modifier
                 .fillMaxWidth()
@@ -225,58 +228,69 @@ fun DatabaseTestScreen(
             )
 
             // Second row of filter operations
-            Row(
+            LazyRow(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(scrollState)
             ) {
-                Button(
-                    onClick = {
-                        viewModel.testAllFilteringQueries()
+                item{
+                    Button(
+                        onClick = {
+                            viewModel.testAllFilteringQueries()
+                        }
+                    ) {
+                        Text("Test Filters")
                     }
-                ) {
-                    Text("Test Filters")
                 }
 
-                Button(
-                    onClick = {
-                        viewModel.testFilterPathOperations()
+
+                item{
+                    Button(
+                        onClick = {
+                            viewModel.testFilterPathOperations()
+                        }
+                    ) {
+                        Text("Test Filter Path")
                     }
-                ) {
-                    Text("Test Filter Path")
                 }
 
-                Button(
+                item{
+                    Button(
                     onClick = {
                         viewModel.testCompleteFilteringScenario()
+                        }
+                    ) {
+                        Text("Test Scenario")
                     }
-                ) {
-                    Text("Test Scenario")
                 }
 
-                Button(
+                item{
+                    Button(
                     onClick = {
                         viewModel.testAllCombinedFilterQueries()
+                        }
+                    ) {
+                        Text("Test Combined")
                     }
-                ) {
-                    Text("Test Combined")
                 }
 
-                Button(
-                    onClick = {
-                        viewModel.testAmbiguousColumnFix()
+                item{
+                    Button(
+                        onClick = {
+                            viewModel.testAmbiguousColumnFix()
+                        }
+                    ) {
+                        Text("Test Fix")
                     }
-                ) {
-                    Text("Test Fix")
                 }
 
-                Button(
-                    onClick = {
-                        viewModel.testCompositionClasses()
+                item{
+                    Button(
+                        onClick = {
+                            viewModel.testCompositionClasses()
+                        }
+                    ) {
+                        Text("Test Composition")
                     }
-                ) {
-                    Text("Test Composition")
                 }
             }
 
@@ -287,66 +301,79 @@ fun DatabaseTestScreen(
             )
 
             // Third row for filter system tests
-            Row(
+            LazyRow(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(scrollState)
             ) {
-                Button(
-                    onClick = {
-                        viewModel.testFilterPathScenarios()
+                item{
+                    Button(
+                        onClick = {
+                            viewModel.testFilterPathScenarios()
+                        }
+                    ) {
+                        Text("Test Filter Scenarios")
                     }
-                ) {
-                    Text("Test Filter Scenarios")
                 }
 
-                Button(
-                    onClick = {
-                        viewModel.testChipGroupLogic()
+
+                item{
+                    Button(
+                        onClick = {
+                            viewModel.testChipGroupLogic()
+                        }
+                    ) {
+                        Text("Test Chip Logic")
                     }
-                ) {
-                    Text("Test Chip Logic")
                 }
 
-                Button(
-                    onClick = {
-                        viewModel.testFilteredDataPopulation()
+                item{
+                    Button(
+                        onClick = {
+                            viewModel.testFilteredDataPopulation()
+                        }
+                    ) {
+                        Text("Test Data Population")
                     }
-                ) {
-                    Text("Test Data Population")
                 }
 
-                Button(
-                    onClick = {
-                        viewModel.testAppStartupWithExistingFilters()
+                item{
+                    Button(
+                        onClick = {
+                            viewModel.testAppStartupWithExistingFilters()
+                        }
+                    ) {
+                        Text("Test App Startup")
                     }
-                ) {
-                    Text("Test App Startup")
                 }
 
-                Button(
-                    onClick = {
-                        viewModel.runAllFilterTests()
+                item{
+                    Button(
+                        onClick = {
+                            viewModel.runAllFilterTests()
+                        }
+                    ) {
+                        Text("Run All Filter Tests")
                     }
-                ) {
-                    Text("Run All Filter Tests")
                 }
 
-                Button(
-                    onClick = {
-                        viewModel.testEdgeCases()
+                item{
+                    Button(
+                        onClick = {
+                            viewModel.testEdgeCases()
+                        }
+                    ) {
+                        Text("Test Edge Cases")
                     }
-                ) {
-                    Text("Test Edge Cases")
                 }
 
-                Button(
-                    onClick = {
-                        viewModel.clearAllFilters()
+                item{
+                    Button(
+                        onClick = {
+                            viewModel.clearAllFilters()
+                        }
+                    ) {
+                        Text("Clear Filters")
                     }
-                ) {
-                    Text("Clear Filters")
                 }
             }
         }
@@ -448,7 +475,10 @@ fun FilteredDataView(viewModel: DatabaseTestViewModel) {
     val filterPath by viewModel.filterPath.collectAsState(initial = emptyList())
     val filteringState by viewModel.filteringState.collectAsState(initial = DatabaseTestViewModel.FilteringState.IDLE)
 
-    if (filteredData == null) {
+    // Use a local variable to avoid recomposition issues
+    val safeFilteredData = filteredData
+
+    if (safeFilteredData == null) {
         Text(
             text = "No filtered data available. Apply filters first.",
             modifier = Modifier.padding(16.dp)
@@ -510,7 +540,7 @@ fun FilteredDataView(viewModel: DatabaseTestViewModel) {
             )
         }
 
-        items(filteredData!!.videos) { video ->
+        items(safeFilteredData.videos) { video ->
             VideoCard(video = video)
         }
 
@@ -523,7 +553,7 @@ fun FilteredDataView(viewModel: DatabaseTestViewModel) {
             )
         }
 
-        items(filteredData!!.artists) { artist ->
+        items(safeFilteredData.artists) { artist ->
             ArtistCard(artist = artist)
         }
 
@@ -536,7 +566,7 @@ fun FilteredDataView(viewModel: DatabaseTestViewModel) {
             )
         }
 
-        items(filteredData!!.instruments) { instrument ->
+        items(safeFilteredData.instruments) { instrument ->
             InstrumentCard(instrument = instrument)
         }
 
@@ -549,7 +579,7 @@ fun FilteredDataView(viewModel: DatabaseTestViewModel) {
             )
         }
 
-        items(filteredData!!.types) { type ->
+        items(safeFilteredData.types) { type ->
             TypeCard(type = type)
         }
 
@@ -562,7 +592,7 @@ fun FilteredDataView(viewModel: DatabaseTestViewModel) {
             )
         }
 
-        items(filteredData!!.durations) { duration ->
+        items(safeFilteredData.durations) { duration ->
             DurationCard(duration = duration)
         }
     }

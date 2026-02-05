@@ -6,7 +6,5 @@ data class Type(
     // Note: We don't include nested objects here for simplicity
     // They'll be handled separately
 ) {
-//easy bussines logic
-//    val fullName: String
-//        get() = "$name $surname"
+    // ✅ BUSINESS LOGIC in domain class methods
 }

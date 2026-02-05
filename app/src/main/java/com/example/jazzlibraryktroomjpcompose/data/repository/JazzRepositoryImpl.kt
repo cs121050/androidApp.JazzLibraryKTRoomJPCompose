@@ -3,6 +3,13 @@ package com.example.jazzlibraryktroomjpcompose.data.repository
 
 import androidx.room.withTransaction
 import com.example.jazzlibraryktroomjpcompose.data.local.db.JazzDatabase
+import com.example.jazzlibraryktroomjpcompose.data.local.db.entities.ArtistRoomEntity
+import com.example.jazzlibraryktroomjpcompose.data.local.db.entities.DurationRoomEntity
+import com.example.jazzlibraryktroomjpcompose.data.local.db.entities.InstrumentRoomEntity
+import com.example.jazzlibraryktroomjpcompose.data.local.db.entities.QuoteRoomEntity
+import com.example.jazzlibraryktroomjpcompose.data.local.db.entities.TypeRoomEntity
+import com.example.jazzlibraryktroomjpcompose.data.local.db.entities.VideoContainsArtistRoomEntity
+import com.example.jazzlibraryktroomjpcompose.data.local.db.entities.VideoRoomEntity
 import com.example.jazzlibraryktroomjpcompose.data.mappers.RemoteToEntityMappers.toArtistEntities
 import com.example.jazzlibraryktroomjpcompose.data.mappers.RemoteToEntityMappers.toDurationEntities
 import com.example.jazzlibraryktroomjpcompose.data.mappers.RemoteToEntityMappers.toInstrumentEntities
@@ -39,6 +46,8 @@ class JazzRepositoryImpl(
                 val videoContainsArtists = bootstrapData.videoContainsArtistList.toVideoContainsArtistEntities()
 
                 // Use withTransaction which supports suspend functions
+                //    withTransaction: If any insert fails → ALL changes are rolled back
+                //    Prevents partial/corrupted data in database
                 database.withTransaction {
                     // Clear existing data
                     clearAllTablesWithinTransaction()
@@ -70,13 +79,13 @@ class JazzRepositoryImpl(
     }
 
     private suspend fun insertAllDataWithinTransaction(
-        instruments: List<com.example.jazzlibraryktroomjpcompose.data.local.db.entities.InstrumentRoomEntity>,
-        types: List<com.example.jazzlibraryktroomjpcompose.data.local.db.entities.TypeRoomEntity>,
-        durations: List<com.example.jazzlibraryktroomjpcompose.data.local.db.entities.DurationRoomEntity>,
-        videos: List<com.example.jazzlibraryktroomjpcompose.data.local.db.entities.VideoRoomEntity>,
-        artists: List<com.example.jazzlibraryktroomjpcompose.data.local.db.entities.ArtistRoomEntity>,
-        quotes: List<com.example.jazzlibraryktroomjpcompose.data.local.db.entities.QuoteRoomEntity>,
-        videoContainsArtists: List<com.example.jazzlibraryktroomjpcompose.data.local.db.entities.VideoContainsArtistRoomEntity>
+        instruments: List<InstrumentRoomEntity>,
+        types: List<TypeRoomEntity>,
+        durations: List<DurationRoomEntity>,
+        videos: List<VideoRoomEntity>,
+        artists: List<ArtistRoomEntity>,
+        quotes: List<QuoteRoomEntity>,
+        videoContainsArtists: List<VideoContainsArtistRoomEntity>
     ) {
         database.instrumentDao().insertAllInstruments(instruments)
         database.typeDao().insertAllTypes(types)
