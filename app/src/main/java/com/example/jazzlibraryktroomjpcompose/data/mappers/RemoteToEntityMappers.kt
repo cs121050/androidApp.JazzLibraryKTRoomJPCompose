@@ -67,7 +67,8 @@ object RemoteToEntityMappers {
         )
     }
 
-    // Extension functions for lists with clearer names
+    // Extension functions  that converts
+    // a list of RemoteInstrument objects to a list of InstrumentRoomEntity
     fun List<RemoteInstrument>.toInstrumentEntities(): List<InstrumentRoomEntity> {
         return this.map { it.toInstrumentEntity() }
     }

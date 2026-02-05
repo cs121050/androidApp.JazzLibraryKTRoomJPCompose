@@ -9,6 +9,8 @@ data class Artist(
     // Note: We don't include nested objects here for simplicity
     // They'll be handled separately
 ) {
+    // ✅ BUSINESS LOGIC in domain class methods
+
     val fullName: String
     get() = "$name $surname"
 }

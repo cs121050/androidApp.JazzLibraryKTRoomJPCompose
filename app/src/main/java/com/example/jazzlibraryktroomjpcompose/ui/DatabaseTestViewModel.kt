@@ -48,7 +48,7 @@ class DatabaseTestViewModel @Inject constructor(
 
     private val _errorMessage = MutableStateFlow<String?>(null)
     val errorMessage: StateFlow<String?> = _errorMessage
-
+    // message box before the tabs
     private val _statusMessage = MutableStateFlow("Click buttons to test database")
     val statusMessage: StateFlow<String> = _statusMessage
 
@@ -386,12 +386,13 @@ class DatabaseTestViewModel @Inject constructor(
         viewModelScope.launch {
             _statusMessage.value = "Refreshing data from database..."
 
-            // Collect all data in parallel
+            // Launch 7 parallel coroutines for each table, to collect the data
+            //TODO// exception handling using : Helper Function : add each lanch in a fun that includes dedicated try catchs
             val jobs = listOf(
-                launch {
+                launch { // Each launch starts a concurrent coroutine
                     database.artistDao().getAllArtists()
-                        .map { entities -> entities.map { ArtistMapper.toDomain(it) } }
-                        .collect { _artists.value = it }
+                        .map { entities -> entities.map { ArtistMapper.toDomain(it) } } //Convert to domain
+                        .collect { _artists.value = it } //Update LiveData/StateFlow  // 🚨 SIDE EFFECT: Changing external state!
                 },
                 launch {
                     database.instrumentDao().getAllInstruments()
@@ -424,7 +425,7 @@ class DatabaseTestViewModel @Inject constructor(
                         .collect { _videoArtists.value = it }
                 }
             )
-            jobs.forEach { it.join() }
+            jobs.forEach { it.join() } // JOIN: Wait for ALL to complet))_+
 
             _statusMessage.value = "Data refreshed from database!"
         }

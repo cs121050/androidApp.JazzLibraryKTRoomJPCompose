@@ -6,6 +6,7 @@ data class FilterPath(
     val entityId: Int,
     val entityName: String
 ) {
+    // ✅ BUSINESS LOGIC in domain class methods
     val categoryName: String
         get() = when (categoryId) {
             CATEGORY_INSTRUMENT -> "Instrument"

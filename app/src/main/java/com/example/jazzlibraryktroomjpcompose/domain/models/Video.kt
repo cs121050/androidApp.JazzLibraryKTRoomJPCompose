@@ -10,3 +10,5 @@ data class Video(
     val durationId: Int,
     val typeId: Int
 )
+
+// ✅ BUSINESS LOGIC in domain class methods

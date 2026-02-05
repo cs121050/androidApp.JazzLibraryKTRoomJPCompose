@@ -6,3 +6,4 @@ data class Quote(
     val artistId: Int?,
     val videoId: Int? = null // Added videoId
 )
+// ✅ BUSINESS LOGIC in domain class methods
