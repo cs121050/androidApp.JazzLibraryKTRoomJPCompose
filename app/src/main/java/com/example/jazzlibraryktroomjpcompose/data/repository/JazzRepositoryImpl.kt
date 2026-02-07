@@ -29,6 +29,18 @@ class JazzRepositoryImpl(
 
     private val apiService = RetrofitClient.jazzApiService
 
+    suspend fun checkApiConnectivity(): Boolean {
+        return try {
+            // Try to make a lightweight API call
+            val response = apiService.getApiStatus()
+
+            response.isSuccessful
+        } catch (e: Exception) {
+            println("API connectivity check failed: ${e.message}")
+            false
+        }
+    }
+
     suspend fun loadBootstrapData(): Result<Unit> = withContext(Dispatchers.IO) {
         try {
             val response = apiService.getBootstrapData()

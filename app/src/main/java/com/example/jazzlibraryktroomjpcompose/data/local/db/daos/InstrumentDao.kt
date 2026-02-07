@@ -139,7 +139,8 @@ interface InstrumentDao {
     ): Flow<List<InstrumentRoomEntity>>
 
 
-
+    @Query("SELECT COUNT(*) FROM instruments")
+    suspend fun getInstrumentCount(): Int
 
 }
 

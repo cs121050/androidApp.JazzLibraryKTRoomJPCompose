@@ -10,12 +10,12 @@ plugins {
 
 android {
     namespace = "com.example.jazzlibraryktroomjpcompose"  // Unique namespace for the application
-    compileSdk = 34                                         // Compile against Android API level 34
+    compileSdk = 35                                         // Compile against Android API level 34
 
     defaultConfig {
         applicationId = "com.example.jazzlibraryktroomjpcompose"  // Package name for the app
         minSdk = 26                                               // Minimum Android API level supported
-        targetSdk = 34                                            // Target Android API level for optimizations
+        targetSdk = 35                                            // Target Android API level for optimizations
         versionCode = 1                                           // Internal version number for updates
         versionName = "1.0"                                       // User-visible version name
 
@@ -62,11 +62,16 @@ dependencies {
     implementation(libs.androidx.ui.graphics)                 // Compose graphics and drawing APIs
     implementation(libs.androidx.ui.tooling.preview)          // Compose preview tooling support
     implementation(libs.androidx.material3)                   // Material Design 3 components for Compose
+    implementation(libs.androidx.material.icons.extended)     // Add this
 
-    // Room Database    implementation(libs.androidx.room.runtime)               // Room runtime for database operations
+    // Add these compose runtime dependencies
+    implementation(libs.androidx.compose.runtime)
+    implementation(libs.androidx.compose.runtime.livedata)
+
+    // Room Database
+    implementation(libs.androidx.room.runtime)               // Room runtime for database operations
     implementation(libs.androidx.room.ktx)                   // Room KTX extensions for Coroutines
     kapt(libs.androidx.room.compiler)                        // Room annotation processor for code generation
-
 
     // Coroutines
     implementation(libs.kotlinx.coroutines.android)          // Kotlin Coroutines for Android
@@ -85,6 +90,7 @@ dependencies {
     implementation(libs.androidx.lifecycle.viewmodel.ktx)
     implementation(libs.androidx.lifecycle.livedata.ktx)
     implementation(libs.androidx.lifecycle.viewmodel.compose)  // For Compose integration
+    implementation(libs.androidx.lifecycle.runtime.compose)
 
     testImplementation(libs.junit)                           // JUnit 4 for unit tests
     androidTestImplementation(libs.androidx.junit)           // AndroidX JUnit extensions for instrumented tests
@@ -96,7 +102,6 @@ dependencies {
 
 
 }
-
 
 // Allow references to generated code for Hilt
 kapt {
