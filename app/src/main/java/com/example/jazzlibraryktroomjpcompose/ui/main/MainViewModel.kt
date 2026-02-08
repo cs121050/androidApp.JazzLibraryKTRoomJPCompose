@@ -28,9 +28,15 @@ class MainViewModel @Inject constructor(
     private val _filterState = MutableStateFlow(FilterState())
     val filterState: StateFlow<FilterState> = _filterState.asStateFlow()
 
-    // Drawer state
-    private val _rightDrawerState = MutableStateFlow(DrawerState.CLOSED)
-    val rightDrawerState: StateFlow<DrawerState> = _rightDrawerState.asStateFlow()
+    /// Bottom Sheet State Management
+    private val _bottomSheetState = MutableStateFlow(BottomSheetState.HIDDEN)
+    val bottomSheetState: StateFlow<BottomSheetState> = _bottomSheetState.asStateFlow()
+
+    private val _bottomSheetProgress = MutableStateFlow(0f) // 0f = hidden, 0.5f = half, 1f = expanded
+    val bottomSheetProgress: StateFlow<Float> = _bottomSheetProgress.asStateFlow()
+
+    private val _bottomSheetScrollState = MutableStateFlow(0f)
+    val bottomSheetScrollState: StateFlow<Float> = _bottomSheetScrollState.asStateFlow()
 
     private val _leftDrawerState = MutableStateFlow(DrawerState.CLOSED)
     val leftDrawerState: StateFlow<DrawerState> = _leftDrawerState.asStateFlow()
@@ -357,11 +363,36 @@ class MainViewModel @Inject constructor(
         println("DEBUG: Cleared all data from database")
     }
 
-    fun toggleRightDrawer() {
-        _rightDrawerState.value = when (_rightDrawerState.value) {
-            DrawerState.OPEN -> DrawerState.CLOSED
-            DrawerState.CLOSED -> DrawerState.OPEN
+    // Toggle sheet with proper state transitions
+    fun toggleBottomSheet() {
+        val current = _bottomSheetState.value
+        _bottomSheetState.value = when (current) {
+            BottomSheetState.HIDDEN -> BottomSheetState.HALF_EXPANDED
+            BottomSheetState.HALF_EXPANDED -> BottomSheetState.HIDDEN
+            BottomSheetState.EXPANDED -> BottomSheetState.HALF_EXPANDED
         }
+        _bottomSheetProgress.value = when (_bottomSheetState.value) {
+            BottomSheetState.HIDDEN -> 0f
+            BottomSheetState.HALF_EXPANDED -> 0.5f
+            BottomSheetState.EXPANDED -> 1f
+        }
+    }
+
+    fun setBottomSheetState(state: BottomSheetState) {
+        _bottomSheetState.value = state
+        _bottomSheetProgress.value = when (state) {
+            BottomSheetState.HIDDEN -> 0f
+            BottomSheetState.HALF_EXPANDED -> 0.5f
+            BottomSheetState.EXPANDED -> 1f
+        }
+    }
+
+    fun updateBottomSheetProgress(progress: Float) {
+        _bottomSheetProgress.value = progress.coerceIn(0f, 1f)
+    }
+
+    fun updateBottomSheetScroll(offset: Float) {
+        _bottomSheetScrollState.value = offset
     }
 
     fun toggleLeftDrawer() {
@@ -369,11 +400,6 @@ class MainViewModel @Inject constructor(
             DrawerState.OPEN -> DrawerState.CLOSED
             DrawerState.CLOSED -> DrawerState.OPEN
         }
-    }
-
-    fun closeDrawers() {
-        _rightDrawerState.value = DrawerState.CLOSED
-        _leftDrawerState.value = DrawerState.CLOSED
     }
 
     fun clearAllFilters() {
@@ -411,4 +437,11 @@ enum class LoadingState {
     LOADING,        // API data is being fetched
     SUCCESS,        // API data fetched successfully
     ERROR           // API data fetch failed
+}
+
+// Add this enum near DrawerState
+enum class BottomSheetState {
+    HIDDEN,
+    HALF_EXPANDED,
+    EXPANDED
 }

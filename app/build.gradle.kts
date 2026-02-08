@@ -45,7 +45,7 @@ android {
         buildConfig = true // Enable generated BuildConfig class
     }
     composeOptions {
-        kotlinCompilerExtensionVersion = "1.5.11"  // Kotlin compiler extension version for Compose
+        kotlinCompilerExtensionVersion = libs.versions.composeCompiler.get()  // Use from version catalog
     }
     packaging {
         resources {
@@ -61,8 +61,11 @@ dependencies {
     implementation(libs.androidx.ui)                          // Compose UI foundational components
     implementation(libs.androidx.ui.graphics)                 // Compose graphics and drawing APIs
     implementation(libs.androidx.ui.tooling.preview)          // Compose preview tooling support
-    implementation(libs.androidx.material3)                   // Material Design 3 components for Compose
     implementation(libs.androidx.material.icons.extended)     // Add this
+
+    // Material 3
+    implementation(libs.androidx.material3)
+    implementation(libs.androidx.material.icons.extended)
 
     // Add these compose runtime dependencies
     implementation(libs.androidx.compose.runtime)
