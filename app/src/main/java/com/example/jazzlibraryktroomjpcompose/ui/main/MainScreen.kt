@@ -1,11 +1,11 @@
 package com.example.jazzlibraryktroomjpcompose.ui.main
 
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -25,72 +25,53 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.rememberModalBottomSheetState
-import androidx.compose.foundation.layout.Box
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.TextFieldDefaults
-import androidx.compose.material3.Snackbar
-import androidx.compose.material3.TopAppBar
+import androidx.compose.material.icons.filled.Error
+import androidx.compose.ui.text.style.TextAlign
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScreen(
     viewModel: MainViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val filterState by viewModel.filterState.collectAsState()
+    val rightDrawerState by viewModel.rightDrawerState.collectAsState()
     val leftDrawerState by viewModel.leftDrawerState.collectAsState()
     val loadingState by viewModel.loadingState.collectAsState()
     // NEW: Snackbar states
     val showError by viewModel.showError.collectAsState()
     val errorMessage by viewModel.errorMessage.collectAsState()
-    val scope = rememberCoroutineScope()
 
-    // Control when sheet is visible
-    var isSheetOpen by remember { mutableStateOf(false) }
+    // Animate drawer offsets
+    val rightDrawerOffset by animateDpAsState(
+        targetValue = if (rightDrawerState == DrawerState.OPEN) 0.dp else 320.dp
+    )
 
     val leftDrawerOffset by animateDpAsState(
         targetValue = if (leftDrawerState == DrawerState.OPEN) 0.dp else (-320).dp
     )
 
-    // Use custom sheet state
-    val customSheetState = rememberCustomSheetState()
-
-    var isBottomSheetVisible by remember { mutableStateOf(false) }
-
-    // Show loading screen only during initial load
+// Show loading screen only during initial load
     if (loadingState == LoadingState.LOADING && uiState.videos.isEmpty()) {
         LoadingScreen()
     } else {
         Box(
             modifier = Modifier.fillMaxSize()
         ) {
-            // MAIN CONTENT
+            // Main Content
             MainContent(
                 uiState = uiState,
                 filterState = filterState,
                 viewModel = viewModel,
                 onMenuClick = { viewModel.toggleLeftDrawer() },
-                onFilterClick =  { viewModel.toggleBottomSheet() }, // Updated to use toggle
+                onFilterClick = { viewModel.toggleRightDrawer() },
                 onClearFilters = { viewModel.clearAllFilters() },
                 onRefresh = { viewModel.safeRefreshData() },
                 modifier = Modifier
                     .fillMaxSize()
+                    .offset(x = leftDrawerOffset + rightDrawerOffset)
             )
 
-            // LEFT DRAWER
+            // Left Drawer
             LeftDrawer(
                 isOpen = leftDrawerState == DrawerState.OPEN,
                 onClose = { viewModel.toggleLeftDrawer() },
@@ -101,18 +82,22 @@ fun MainScreen(
                     .offset(x = leftDrawerOffset)
             )
 
-            // With this:
-            // FILTER BOTTOM SHEET - YouTube-like behavior
-            YouTubeLikeBottomSheet(
-                viewModel = viewModel,
+            // Right Drawer
+            RightDrawer(
                 uiState = uiState,
                 filterState = filterState,
+                isOpen = rightDrawerState == DrawerState.OPEN,
+                onChipSelected = { categoryId, entityId, entityName, isSelected ->
+                    viewModel.handleChipSelection(categoryId, entityId, entityName, isSelected)
+                },
+                onClose = { viewModel.toggleRightDrawer() },
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .align(Alignment.BottomCenter)
+                    .fillMaxHeight()
+                    .width(320.dp)
+                    .offset(x = rightDrawerOffset)
             )
 
-            // SNACKBAR (will appear above everything)
+            // NEW: Snackbar for errors (non-blocking)
             if (showError && errorMessage != null) {
                 Box(
                     modifier = Modifier
@@ -137,7 +122,6 @@ fun MainScreen(
         }
     }
 }
-
 
 // Updated LoadingScreen (simpler)
 @Composable
