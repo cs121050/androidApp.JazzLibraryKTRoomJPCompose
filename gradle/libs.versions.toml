@@ -7,14 +7,14 @@ coreKtx = "1.12.0"                # AndroidX Core KTX extension library version
 junit = "4.13.2"                  # JUnit 4 testing framework version
 junitVersion = "1.1.5"            # AndroidX JUnit extension version for instrumentation tests
 espressoCore = "3.5.1"            # Espresso UI testing framework version
-lifecycleRuntimeCompose = "2.6.2"
-lifecycleRuntimeKtx = "2.6.2"     # Lifecycle runtime KTX extensions version
+lifecycleRuntimeCompose = "2.7.0"
+lifecycleRuntimeKtx = "2.7.0"     # Lifecycle runtime KTX extensions version
 activityCompose = "1.8.2"         # Jetpack Compose Activity integration version
-composeBom = "2024.02.01"         # Compose Bill of Materials (BOM) version to manage Compose library versions
-lifecycleViewmodelCompose = "2.6.2"
+composeBom = "2024.03.00"         # Compose Bill of Materials (BOM) version to manage Compose library versions
+lifecycleViewmodelCompose = "2.7.0"
 room = "2.6.1"                    # Room persistence library version for SQLite database abstraction
 coroutines = "1.7.3"              # Kotlin Coroutines version for asynchronous programming
-material3 = "1.1.2"               # Material Design 3 components for Jetpack Compose version
+material3 = "1.2.0"               # Material Design 3 components for Jetpack Compose version
 hilt = "2.51"
 retrofit = "2.9.0"
 okhttp = "4.12.0"
@@ -43,7 +43,7 @@ androidx-ui-tooling = { group = "androidx.compose.ui", name = "ui-tooling" }    
 androidx-ui-tooling-preview = { group = "androidx.compose.ui", name = "ui-tooling-preview" }                     # Compose preview annotations and tooling
 androidx-ui-test-manifest = { group = "androidx.compose.ui", name = "ui-test-manifest" }                         # Test manifest for Compose UI tests
 androidx-ui-test-junit4 = { group = "androidx.compose.ui", name = "ui-test-junit4" }                             # JUnit 4 integration for Compose UI tests
-androidx-material3 = { group = "androidx.compose.material3", name = "material3", version.ref = "material3" }     # Material Design 3 components for Compose
+androidx-material3 = { group = "androidx.compose.material3", name = "material3", version.ref = "material3" }    # Material Design 3 components for Compose
 # Lifecycle ViewModel (for ViewModel with Hilt)
 androidx-lifecycle-viewmodel-ktx = { group = "androidx.lifecycle", name = "lifecycle-viewmodel-ktx", version.ref = "lifecycle" }
 androidx-lifecycle-livedata-ktx = { group = "androidx.lifecycle", name = "lifecycle-livedata-ktx", version.ref = "lifecycle" }
