@@ -11,6 +11,16 @@ interface ArtistDao {
     @Query("SELECT * FROM artists ORDER BY artist_rank DESC, artist_name ASC")
     fun getAllArtists(): Flow<List<ArtistRoomEntity>>
 
+    // ArtistDao.kt - Check this method
+    @Query("""
+    SELECT a.*, COUNT(DISTINCT vca.video_id) as video_count 
+    FROM artists a
+    LEFT JOIN video_contains_artist vca ON a.artist_id = vca.artist_id
+    GROUP BY a.artist_id
+    ORDER BY a.artist_name ASC
+""")
+    fun getAllArtistsWithVideoCount(): Flow<List<ArtistWithVideoCount>>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertArtist(artist: ArtistRoomEntity)
 
@@ -139,5 +149,23 @@ interface ArtistDao {
         typeId: Int = 0,
         durationId: Int = 0
     ): Flow<List<ArtistRoomEntity>>
+
+    @Query("""
+    SELECT a.*, COUNT(DISTINCT v.video_id) as video_count 
+FROM artists a
+INNER JOIN video_contains_artist vca ON a.artist_id = vca.artist_id
+INNER JOIN videos v ON vca.video_id = v.video_id
+WHERE (:instrumentId = 0 OR a.instrument_id = :instrumentId)
+  AND (:typeId = 0 OR v.type_id = :typeId)
+  AND (:durationId = 0 OR v.duration_id = :durationId)
+GROUP BY a.artist_id, a.artist_name, a.artist_surname, a.artist_rank --, a.wiki, a.spoti
+""")
+    fun getArtistsWithVideoCountByMultipleFilters(
+        instrumentId: Int = 0,
+        typeId: Int = 0,
+        durationId: Int = 0
+    ): Flow<List<ArtistWithVideoCount>>
+
+
 
 }

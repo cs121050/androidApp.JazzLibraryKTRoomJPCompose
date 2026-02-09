@@ -11,6 +11,16 @@ interface DurationDao {
     @Query("SELECT * FROM durations ORDER BY duration_name ASC")
     fun getAllDurations(): Flow<List<DurationRoomEntity>>
 
+    // DurationDao.kt - Add if missing
+    @Query("""
+    SELECT d.*, COUNT(DISTINCT v.video_id) as video_count 
+    FROM durations d
+    LEFT JOIN videos v ON d.duration_id = v.duration_id
+    GROUP BY d.duration_id, d.duration_name, d.duration_description
+    ORDER BY d.duration_name ASC
+""")
+    fun getAllDurationsWithCount(): Flow<List<DurationWithVideoCount>>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertDuration(duration: DurationRoomEntity)
 
@@ -128,12 +138,33 @@ interface DurationDao {
     WHERE (:instrumentId = 0 OR a.instrument_id = :instrumentId)
       AND (:typeId = 0 OR v.type_id = :typeId)
       AND (:durationId = 0 OR v.duration_id = :durationId)
+      AND (:artistId = 0 OR a.artist_id = :artistId)
     ORDER BY d.duration_name
 """)
     fun getDurationsByMultipleFilters(
         instrumentId: Int = 0,
         typeId: Int = 0,
-        durationId: Int = 0
+        durationId: Int = 0,
+        artistId: Int = 0
     ): Flow<List<DurationRoomEntity>>
+
+    @Query("""
+    SELECT d.*, COUNT(DISTINCT v.video_id) as video_count 
+FROM durations d
+INNER JOIN videos v ON d.duration_id = v.duration_id
+INNER JOIN video_contains_artist vca ON v.video_id = vca.video_id
+INNER JOIN artists a ON vca.artist_id = a.artist_id
+WHERE (:instrumentId = 0 OR a.instrument_id = :instrumentId)
+  AND (:typeId = 0 OR v.type_id = :typeId)
+  AND (:durationId = 0 OR v.duration_id = :durationId)
+  AND (:artistId = 0 OR a.artist_id = :artistId)
+GROUP BY d.duration_id, d.duration_name, d.duration_description
+""")
+    fun getDurationsWithVideoCountByMultipleFilters(
+        instrumentId: Int = 0,
+        typeId: Int = 0,
+        durationId: Int = 0,
+        artistId: Int = 0
+    ): Flow<List<DurationWithVideoCount>>
 
 }

@@ -2,6 +2,7 @@ package com.example.jazzlibraryktroomjpcompose.data.mappers
 
 
 import com.example.jazzlibraryktroomjpcompose.data.local.db.entities.TypeRoomEntity
+import com.example.jazzlibraryktroomjpcompose.data.local.db.entities.TypeWithVideoCount
 import com.example.jazzlibraryktroomjpcompose.domain.models.Type
 import com.example.jazzlibraryktroomjpcompose.domain.repository.TypeResponse
 
@@ -17,6 +18,13 @@ object TypeMapper {
         return Type(
             id = entity.id,
             name = entity.name
+        )
+    }
+    fun toDomainWithCount(entity: TypeWithVideoCount): Type {
+        return Type(
+            id = entity.type.id,
+            name = entity.type.name,
+            videoCount = entity.videoCount
         )
     }
 

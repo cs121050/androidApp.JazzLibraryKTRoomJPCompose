@@ -6,6 +6,6 @@ import androidx.room.Embedded
 data class InstrumentWithVideoCount(
     @Embedded
     val instrument: InstrumentRoomEntity,
-    @ColumnInfo(name = "video_count")
+    @ColumnInfo(name = "video_count") //THAT IS ARTIST COUNT
     val videoCount: Int
 )

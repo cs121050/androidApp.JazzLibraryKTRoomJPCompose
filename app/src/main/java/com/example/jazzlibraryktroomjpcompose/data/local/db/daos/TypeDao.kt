@@ -12,6 +12,15 @@ interface TypeDao {
     @Query("SELECT * FROM types ORDER BY type_name ASC")
     fun getAllTypes(): Flow<List<TypeRoomEntity>>
 
+    @Query("""
+    SELECT t.*, COUNT(DISTINCT v.video_id) as video_count 
+    FROM types t
+    LEFT JOIN videos v ON t.type_id = v.type_id
+    GROUP BY t.type_id, t.type_name
+    ORDER BY t.type_name ASC
+""")
+    fun getAllTypesWithCount(): Flow<List<TypeWithVideoCount>>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertType(type: TypeRoomEntity)
 
@@ -129,12 +138,33 @@ interface TypeDao {
     WHERE (:instrumentId = 0 OR a.instrument_id = :instrumentId)
       AND (:typeId = 0 OR v.type_id = :typeId)
       AND (:durationId = 0 OR v.duration_id = :durationId)
+      AND (:artistId = 0 OR a.artist_id = :artistId)
     ORDER BY t.type_name
 """)
     fun getTypesByMultipleFilters(
         instrumentId: Int = 0,
         typeId: Int = 0,
-        durationId: Int = 0
+        durationId: Int = 0,
+        artistId: Int = 0
     ): Flow<List<TypeRoomEntity>>
+
+    @Query("""
+    SELECT t.*, COUNT(DISTINCT v.video_id) as video_count 
+        FROM types t
+        INNER JOIN videos v ON t.type_id = v.type_id
+        INNER JOIN video_contains_artist vca ON v.video_id = vca.video_id
+        INNER JOIN artists a ON vca.artist_id = a.artist_id
+        WHERE (:instrumentId = 0 OR a.instrument_id = :instrumentId)
+          AND (:typeId = 0 OR v.type_id = :typeId)
+          AND (:durationId = 0 OR v.duration_id = :durationId)
+          AND (:artistId = 0 OR a.artist_id = :artistId)
+        GROUP BY t.type_id, t.type_name
+""")
+    fun getTypesWithVideoCountByMultipleFilters(
+        instrumentId: Int = 0,
+        typeId: Int = 0,
+        durationId: Int = 0,
+        artistId: Int = 0
+    ): Flow<List<TypeWithVideoCount>>
 
 }

@@ -33,10 +33,8 @@ class MainViewModel @Inject constructor(
     val bottomSheetState: StateFlow<BottomSheetState> = _bottomSheetState.asStateFlow()
 
     private val _bottomSheetProgress = MutableStateFlow(0f) // 0f = hidden, 0.5f = half, 1f = expanded
-    val bottomSheetProgress: StateFlow<Float> = _bottomSheetProgress.asStateFlow()
 
     private val _bottomSheetScrollState = MutableStateFlow(0f)
-    val bottomSheetScrollState: StateFlow<Float> = _bottomSheetScrollState.asStateFlow()
 
     private val _leftDrawerState = MutableStateFlow(DrawerState.CLOSED)
     val leftDrawerState: StateFlow<DrawerState> = _leftDrawerState.asStateFlow()
@@ -190,8 +188,8 @@ class MainViewModel @Inject constructor(
                         }
                 },
                 launch {
-                    database.instrumentDao().getAllInstruments()
-                        .map { entities -> entities.map { InstrumentMapper.toDomain(it) } }
+                    database.instrumentDao().getAllInstrumentsWithArtistCount()
+                        .map { entities -> entities.map { InstrumentMapper.toDomainWithCount(it) } }
                         .collect { instruments ->
                             _uiState.update { it.copy(
                                 allInstruments = instruments,
@@ -201,24 +199,24 @@ class MainViewModel @Inject constructor(
                         }
                 },
                 launch {
-                    database.artistDao().getAllArtists()
-                        .map { entities -> entities.map { ArtistMapper.toDomain(it) } }
+                    database.artistDao().getAllArtistsWithVideoCount()
+                        .map { entities -> entities.map { ArtistMapper.toDomainWithCount(it) } }
                         .collect { artists ->
                             _uiState.update { it.copy(availableArtists = artists) }
                             println("DEBUG: Loaded ${artists.size} artists")
                         }
                 },
                 launch {
-                    database.typeDao().getAllTypes()
-                        .map { entities -> entities.map { TypeMapper.toDomain(it) } }
+                    database.typeDao().getAllTypesWithCount()
+                        .map { entities -> entities.map { TypeMapper.toDomainWithCount(it) } }
                         .collect { types ->
                             _uiState.update { it.copy(availableTypes = types) }
                             println("DEBUG: Loaded ${types.size} types")
                         }
                 },
                 launch {
-                    database.durationDao().getAllDurations()
-                        .map { entities -> entities.map { DurationMapper.toDomain(it) } }
+                    database.durationDao().getAllDurationsWithCount()
+                        .map { entities -> entities.map { DurationMapper.toDomainWithCount(it) } }
                         .collect { durations ->
                             _uiState.update { it.copy(availableDurations = durations) }
                             println("DEBUG: Loaded ${durations.size} durations")
@@ -349,20 +347,6 @@ class MainViewModel @Inject constructor(
         }
     }
 
-    // NEW: Clear all data from database
-    private suspend fun clearAllData() {
-        database.quoteDao().deleteAllQuotes()
-        database.videoContainsArtistDao().deleteAllVideoContainsArtists()
-        database.videoDao().deleteAllVideos()
-        database.artistDao().deleteAllArtists()
-        database.instrumentDao().deleteAllInstruments()
-        database.typeDao().deleteAllTypes()
-        database.durationDao().deleteAllDurations()
-        database.filterPathDao().deleteAllFilterPaths()
-
-        println("DEBUG: Cleared all data from database")
-    }
-
     // Toggle sheet with proper state transitions
     fun toggleBottomSheet() {
         val current = _bottomSheetState.value
@@ -389,10 +373,6 @@ class MainViewModel @Inject constructor(
 
     fun updateBottomSheetProgress(progress: Float) {
         _bottomSheetProgress.value = progress.coerceIn(0f, 1f)
-    }
-
-    fun updateBottomSheetScroll(offset: Float) {
-        _bottomSheetScrollState.value = offset
     }
 
     fun toggleLeftDrawer() {

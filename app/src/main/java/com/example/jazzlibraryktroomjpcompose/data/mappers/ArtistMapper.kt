@@ -1,6 +1,7 @@
 package com.example.jazzlibraryktroomjpcompose.data.mappers
 
 import com.example.jazzlibraryktroomjpcompose.data.local.db.entities.ArtistRoomEntity
+import com.example.jazzlibraryktroomjpcompose.data.local.db.entities.ArtistWithVideoCount
 import com.example.jazzlibraryktroomjpcompose.data.remote.models.ArtistResponse
 import com.example.jazzlibraryktroomjpcompose.domain.models.Artist
 
@@ -30,6 +31,17 @@ object ArtistMapper {
             surname = entity.surname,
             instrumentId = entity.instrumentId,
             rank = entity.rank
+        )
+    }
+    // Local Entity → Domain
+    fun toDomainWithCount(entity: ArtistWithVideoCount): Artist {
+        return Artist(
+            id = entity.artist.id,
+            name = entity.artist.name,
+            surname = entity.artist.surname,
+            instrumentId = entity.artist.instrumentId,
+            rank = entity.artist.rank,
+            videoCount = entity.videoCount
         )
     }
 

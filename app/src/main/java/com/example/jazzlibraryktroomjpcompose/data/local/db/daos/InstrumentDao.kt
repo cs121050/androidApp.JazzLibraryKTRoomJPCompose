@@ -1,6 +1,7 @@
 package com.example.jazzlibraryktroomjpcompose.data.local.db.daos
 
 import androidx.room.*
+import com.example.jazzlibraryktroomjpcompose.data.local.db.entities.ArtistWithVideoCount
 import com.example.jazzlibraryktroomjpcompose.data.local.db.entities.InstrumentRoomEntity
 import com.example.jazzlibraryktroomjpcompose.data.local.db.entities.InstrumentWithVideoCount
 import kotlinx.coroutines.flow.Flow
@@ -10,6 +11,18 @@ interface InstrumentDao {
 
     @Query("SELECT * FROM instruments ORDER BY instrument_name ASC")
     fun getAllInstruments(): Flow<List<InstrumentRoomEntity>>
+
+    @Query("""
+    SELECT i.*, COUNT(DISTINCT vca.video_id) as video_count 
+    FROM Instruments i 
+    LEFT JOIN artists a ON a.instrument_id = i.instrument_id
+    LEFT JOIN video_contains_artist vca ON vca.artist_id = a.artist_id 
+    GROUP BY i.instrument_id, i.instrument_name
+    ORDER BY i.instrument_name ASC
+""")
+    fun getAllInstrumentsWithArtistCount(): Flow<List<InstrumentWithVideoCount>>
+
+
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertInstrument(instrument: InstrumentRoomEntity)
@@ -137,6 +150,23 @@ interface InstrumentDao {
         durationId: Int = 0,
         artistId: Int = 0
     ): Flow<List<InstrumentRoomEntity>>
+
+    @Query("""
+    SELECT i.*, COUNT(DISTINCT v.video_id) as video_count 
+    FROM instruments i
+    INNER JOIN artists a ON i.instrument_id = a.instrument_id
+    INNER JOIN video_contains_artist vca ON a.artist_id = vca.artist_id
+    INNER JOIN videos v ON vca.video_id = v.video_id
+    WHERE (:typeId = 0 OR v.type_id = :typeId)
+      AND (:durationId = 0 OR v.duration_id = :durationId)
+      AND (:artistId = 0 OR vca.artist_id = :artistId)
+    GROUP BY i.instrument_id, i.instrument_name
+""")
+    fun getInstrumentsWithVideoCountByMultipleFilters(
+        typeId: Int = 0,
+        durationId: Int = 0,
+        artistId: Int = 0
+    ): Flow<List<InstrumentWithVideoCount>>
 
 
     @Query("SELECT COUNT(*) FROM instruments")

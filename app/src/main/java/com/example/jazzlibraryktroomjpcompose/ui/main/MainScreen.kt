@@ -53,19 +53,10 @@ fun MainScreen(
     // NEW: Snackbar states
     val showError by viewModel.showError.collectAsState()
     val errorMessage by viewModel.errorMessage.collectAsState()
-    val scope = rememberCoroutineScope()
-
-    // Control when sheet is visible
-    var isSheetOpen by remember { mutableStateOf(false) }
 
     val leftDrawerOffset by animateDpAsState(
         targetValue = if (leftDrawerState == DrawerState.OPEN) 0.dp else (-320).dp
     )
-
-    // Use custom sheet state
-    val customSheetState = rememberCustomSheetState()
-
-    var isBottomSheetVisible by remember { mutableStateOf(false) }
 
     // Show loading screen only during initial load
     if (loadingState == LoadingState.LOADING && uiState.videos.isEmpty()) {
