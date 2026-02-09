@@ -1,6 +1,7 @@
 package com.example.jazzlibraryktroomjpcompose.data.mappers
 
 import com.example.jazzlibraryktroomjpcompose.data.local.db.entities.InstrumentRoomEntity
+import com.example.jazzlibraryktroomjpcompose.data.local.db.entities.InstrumentWithVideoCount
 import com.example.jazzlibraryktroomjpcompose.data.remote.models.InstrumentResponse
 import com.example.jazzlibraryktroomjpcompose.domain.models.Instrument
 
@@ -19,6 +20,14 @@ object InstrumentMapper {
         return Instrument(
             id = entity.id,
             name = entity.name
+        )
+    }
+    // Local Entity → Domain
+    fun toDomainWithCount(entity: InstrumentWithVideoCount): Instrument {
+        return Instrument(
+            id = entity.instrument.id,
+            name = entity.instrument.name,
+            videoCount = entity.videoCount
         )
     }
 

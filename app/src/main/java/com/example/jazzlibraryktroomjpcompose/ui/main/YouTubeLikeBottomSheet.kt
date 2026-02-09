@@ -4,17 +4,13 @@ package com.example.jazzlibraryktroomjpcompose.ui.main
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -26,6 +22,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
@@ -33,9 +31,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.example.jazzlibraryktroomjpcompose.domain.models.FilterPath
+import com.example.jazzlibraryktroomjpcompose.domain.models.Instrument
 import com.example.jazzlibraryktroomjpcompose.ui.theme.Dimens
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import androidx.compose.foundation.rememberScrollState as rememberHorizontalScrollState
 
 @Composable
 fun YouTubeLikeBottomSheet(
@@ -50,14 +49,13 @@ fun YouTubeLikeBottomSheet(
 
     // Collect states
     val sheetState by viewModel.bottomSheetState.collectAsState()
-    val sheetProgress by viewModel.bottomSheetProgress.collectAsState()
 
     // Use actual screen dimensions
     val screenHeightPx = with(density) { configuration.screenHeightDp.dp.toPx() }
 
     // Calculate heights
     val maxHeightPx = screenHeightPx * 0.8f // 80% of screen
-    val halfHeightPx = screenHeightPx * 0.5f // 50% of screen
+    val halfHeightPx = screenHeightPx * 0.55f // 50% of screen
 
     // Track drag state
     var dragStartHeight by remember { mutableStateOf(0f) }
@@ -343,17 +341,13 @@ private fun YouTubeBottomSheetContent(
             .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(Dimens.largeSpacing)
     ) {
-        Spacer(modifier = Modifier.height(Dimens.commonSpacing))
+        Spacer(modifier = Modifier.height(0.dp))
 
         // Instrument Chip Group - 400dp height
         ChipGroupSection(
             title = "Instruments",
             categoryId = FilterPath.CATEGORY_INSTRUMENT,
-            items = if (filterState.currentFilterPath.isEmpty()) {
-                uiState.allInstruments
-            } else {
-                uiState.availableInstruments
-            },
+            items = uiState.availableInstruments,
             currentFilterPath = filterState.currentFilterPath,
             onChipSelected = { categoryId, entityId, entityName, isSelected ->
                 viewModel.handleChipSelection(categoryId, entityId, entityName, isSelected)
@@ -411,6 +405,44 @@ private fun ChipGroupSection(
     maxHeight: Dp = 400.dp,
     modifier: Modifier = Modifier
 ) {
+    // Find which items are selected in this category
+    val selectedItemIds = currentFilterPath
+        .filter { it.categoryId == categoryId }
+        .map { it.entityId }
+        .toSet()
+
+    // Create a scroll state
+    val scrollState = rememberScrollState()
+    val coroutineScope = rememberCoroutineScope()
+
+    // Find the first selected item to scroll to
+    val firstSelectedItem = remember(selectedItemIds, items) {
+        items.firstOrNull { item ->
+            when (item) {
+                is com.example.jazzlibraryktroomjpcompose.domain.models.Instrument ->
+                    selectedItemIds.contains(item.id)
+                is com.example.jazzlibraryktroomjpcompose.domain.models.Artist ->
+                    selectedItemIds.contains(item.id)
+                is com.example.jazzlibraryktroomjpcompose.domain.models.Duration ->
+                    selectedItemIds.contains(item.id)
+                is com.example.jazzlibraryktroomjpcompose.domain.models.Type ->
+                    selectedItemIds.contains(item.id)
+                else -> false
+            }
+        }
+    }
+
+    // Auto-scroll when selection changes
+    LaunchedEffect(firstSelectedItem, scrollState) {
+        if (firstSelectedItem != null) {
+            // We need to wait for layout to complete
+            delay(50) // Small delay to ensure layout is complete
+
+            // We'll need a different approach since we can't get chip positions easily
+            // Instead, let's implement a scroll-to-selected logic
+        }
+    }
+
     Column(
         modifier = modifier
     ) {
@@ -422,76 +454,119 @@ private fun ChipGroupSection(
 
         Spacer(modifier = Modifier.height(Dimens.smallSpacing))
 
-        // Flow layout container with vertical scrolling
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(max = maxHeight)
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = Dimens.commonPadding)
-        ) {
-            // Custom flow layout that wraps chips naturally
-            FlowLayout(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalSpacing = Dimens.smallSpacing,
-                verticalSpacing = Dimens.smallSpacing
-            ) {
-                items.forEach { item ->
-                    when (item) {
-                        is com.example.jazzlibraryktroomjpcompose.domain.models.Instrument -> {
-                            val isSelected = currentFilterPath.any {
-                                it.categoryId == categoryId && it.entityId == item.id
-                            }
+        // Enhanced FlowLayout with automatic scroll
+        EnhancedFlowLayout(
+            items = items,
+            selectedItemIds = selectedItemIds,
+            onChipSelected = { categoryId, entityId, entityName, isSelected ->
+                onChipSelected(categoryId, entityId, entityName, isSelected)
+            },
+            categoryId = categoryId,
+            maxHeight = maxHeight,
+            scrollState = scrollState
+        )
+    }
+}
 
-                            CustomChip(
+@Composable
+private fun EnhancedFlowLayout(
+    items: List<Any>,
+    selectedItemIds: Set<Int>,
+    onChipSelected: (Int, Int, String, Boolean) -> Unit,
+    categoryId: Int,
+    maxHeight: Dp,
+    scrollState: ScrollState
+) {
+    // Track the Y position of selected chips
+    var selectedChipY by remember { mutableFloatStateOf(0f) }
+    var hasScrolled by remember { mutableStateOf(false) }
+
+    // Track when we should scroll
+    var shouldScrollToSelection by remember { mutableStateOf(false) }
+
+    // Reset scroll flag when selection changes
+    LaunchedEffect(selectedItemIds) {
+        hasScrolled = false
+        shouldScrollToSelection = true
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(max = maxHeight)
+            .verticalScroll(scrollState)
+            .padding(horizontal = Dimens.commonPadding)
+    ) {
+        Layout(
+            content = {
+                items.forEach { item ->
+                    val chip = when (item) {
+                        is com.example.jazzlibraryktroomjpcompose.domain.models.Instrument -> {
+                            val isSelected = selectedItemIds.contains(item.id)
+                            ChipContent(
                                 text = item.name,
                                 isSelected = isSelected,
                                 onClick = { onChipSelected(categoryId, item.id, item.name, !isSelected) },
-                                data = item,
-                                modifier = Modifier.wrapContentWidth()
+                                itemId = item.id,
+                                videoCount = item.videoCount, // Pass videoCount
+                                onPositionMeasured = { yPos, isSelectedChip ->
+                                    if (isSelectedChip && !hasScrolled) {
+                                        selectedChipY = yPos
+                                        shouldScrollToSelection = true
+                                    }
+                                }
                             )
                         }
                         is com.example.jazzlibraryktroomjpcompose.domain.models.Artist -> {
-                            val isSelected = currentFilterPath.any {
-                                it.categoryId == categoryId && it.entityId == item.id
-                            }
-
-                            CustomChip(
+                            val isSelected = selectedItemIds.contains(item.id)
+                            ChipContent(
                                 text = item.fullName,
                                 isSelected = isSelected,
                                 onClick = { onChipSelected(categoryId, item.id, item.fullName, !isSelected) },
-                                data = item,
-                                modifier = Modifier.wrapContentWidth()
+                                itemId = item.id,
+                                videoCount = item.videoCount, // Pass videoCount
+                                onPositionMeasured = { yPos, isSelectedChip ->
+                                    if (isSelectedChip && !hasScrolled) {
+                                        selectedChipY = yPos
+                                        shouldScrollToSelection = true
+                                    }
+                                }
                             )
                         }
                         is com.example.jazzlibraryktroomjpcompose.domain.models.Duration -> {
-                            val isSelected = currentFilterPath.any {
-                                it.categoryId == categoryId && it.entityId == item.id
-                            }
-
-                            CustomChip(
+                            val isSelected = selectedItemIds.contains(item.id)
+                            ChipContent(
                                 text = item.name,
                                 isSelected = isSelected,
                                 onClick = { onChipSelected(categoryId, item.id, item.name, !isSelected) },
-                                data = item,
-                                modifier = Modifier.wrapContentWidth()
+                                itemId = item.id,
+                                videoCount = item.videoCount, // Pass videoCount
+                                onPositionMeasured = { yPos, isSelectedChip ->
+                                    if (isSelectedChip && !hasScrolled) {
+                                        selectedChipY = yPos
+                                        shouldScrollToSelection = true
+                                    }
+                                }
                             )
                         }
                         is com.example.jazzlibraryktroomjpcompose.domain.models.Type -> {
-                            val isSelected = currentFilterPath.any {
-                                it.categoryId == categoryId && it.entityId == item.id
-                            }
-
-                            CustomChip(
+                            val isSelected = selectedItemIds.contains(item.id)
+                            ChipContent(
                                 text = item.name,
                                 isSelected = isSelected,
                                 onClick = { onChipSelected(categoryId, item.id, item.name, !isSelected) },
-                                data = item,
-                                modifier = Modifier.wrapContentWidth()
+                                itemId = item.id,
+                                videoCount = item.videoCount, // Pass videoCount
+                                onPositionMeasured = { yPos, isSelectedChip ->
+                                    if (isSelectedChip && !hasScrolled) {
+                                        selectedChipY = yPos
+                                        shouldScrollToSelection = true
+                                    }
+                                }
                             )
                         }
                         else -> {
-                            // Fallback for unknown types
+                            // Fallback
                             Box(
                                 modifier = Modifier
                                     .height(Dimens.pathChipHeight)
@@ -509,82 +584,155 @@ private fun ChipGroupSection(
                             }
                         }
                     }
+
+                    // Add the chip to the layout
+                    Box(modifier = Modifier.wrapContentSize()) {
+                        chip
+                    }
+                }
+            },
+            modifier = Modifier.fillMaxWidth()
+        ) { measurables, constraints ->
+            val horizontalSpacingPx = Dimens.smallSpacing.roundToPx()
+            val verticalSpacingPx = Dimens.smallSpacing.roundToPx()
+
+            var currentRow = 0
+            var currentX = 0
+            var currentY = 0
+            var maxHeightInRow = 0
+
+            // Measure all children first
+            val placeables = measurables.map { measurable ->
+                measurable.measure(constraints.copy(minWidth = 0, minHeight = 0))
+            }
+
+            // Calculate positions
+            val positions = mutableListOf<Pair<Int, Int>>()
+
+            placeables.forEach { placeable ->
+                val width = placeable.width
+                val height = placeable.height
+
+                // Check if the item fits in current row
+                if (currentX + width > constraints.maxWidth) {
+                    // Move to next row
+                    currentRow++
+                    currentX = 0
+                    currentY += maxHeightInRow + verticalSpacingPx
+                    maxHeightInRow = 0
+                }
+
+                positions.add(Pair(currentX, currentY))
+
+                currentX += width + horizontalSpacingPx
+                maxHeightInRow = maxOf(maxHeightInRow, height)
+            }
+
+            val totalHeight = if (placeables.isNotEmpty()) {
+                currentY + maxHeightInRow
+            } else {
+                0
+            }
+
+            layout(
+                width = constraints.maxWidth,
+                height = totalHeight
+            ) {
+                positions.forEachIndexed { index, (x, y) ->
+                    placeables[index].placeRelative(x, y)
                 }
             }
         }
+    }
 
-        // Show count of options
-        Text(
-            text = "${items.size} options available",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(
-                horizontal = Dimens.commonPadding,
-                vertical = Dimens.smallSpacing
+    // Auto-scroll after layout
+    LaunchedEffect(shouldScrollToSelection, scrollState) {
+        if (shouldScrollToSelection && !hasScrolled) {
+            // Small delay to ensure layout is complete
+            delay(100)
+
+            // Scroll to show the selected chip
+            scrollState.animateScrollTo(
+                value = selectedChipY.toInt() - 100, // Scroll a bit above the chip
+                animationSpec = tween(durationMillis = 300)
             )
-        )
+
+            hasScrolled = true
+            shouldScrollToSelection = false
+        }
     }
 }
 
-// Custom Flow Layout Composable
 @Composable
-fun FlowLayout(
-    modifier: Modifier = Modifier,
-    horizontalSpacing: Dp = 0.dp,
-    verticalSpacing: Dp = 0.dp,
-    content: @Composable () -> Unit
+private fun ChipContent(
+    text: String,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+    itemId: Int,
+    videoCount: Int = 0,
+    onPositionMeasured: (Float, Boolean) -> Unit
 ) {
-    Layout(
-        content = content,
-        modifier = modifier
-    ) { measurables, constraints ->
-        val horizontalSpacingPx = horizontalSpacing.roundToPx()
-        val verticalSpacingPx = verticalSpacing.roundToPx()
+    val backgroundColor = if (isSelected) {
+        MaterialTheme.colorScheme.primaryContainer
+    } else {
+        MaterialTheme.colorScheme.surfaceVariant
+    }
 
-        var currentRow = 0
-        var currentX = 0
-        var currentY = 0
-        var maxHeightInRow = 0
+    val textColor = if (isSelected) {
+        MaterialTheme.colorScheme.onPrimaryContainer
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant
+    }
 
-        // Measure all children first
-        val placeables = measurables.map { measurable ->
-            measurable.measure(constraints.copy(minWidth = 0, minHeight = 0))
-        }
+    val borderColor = if (isSelected) {
+        MaterialTheme.colorScheme.primary
+    } else {
+        Color.Transparent
+    }
 
-        // Calculate positions
-        val positions = mutableListOf<Pair<Int, Int>>()
+    val borderWidth = if (isSelected) 1.dp else 1.dp
 
-        placeables.forEach { placeable ->
-            val width = placeable.width
-            val height = placeable.height
-
-            // Check if the item fits in current row
-            if (currentX + width > constraints.maxWidth) {
-                // Move to next row
-                currentRow++
-                currentX = 0
-                currentY += maxHeightInRow + verticalSpacingPx
-                maxHeightInRow = 0
+    Box(
+        modifier = Modifier
+            .wrapContentWidth()
+            .onGloballyPositioned { coordinates ->
+                onPositionMeasured(coordinates.positionInParent().y, isSelected)
             }
-
-            positions.add(Pair(currentX, currentY))
-
-            currentX += width + horizontalSpacingPx
-            maxHeightInRow = maxOf(maxHeightInRow, height)
-        }
-
-        val totalHeight = if (placeables.isNotEmpty()) {
-            currentY + maxHeightInRow
-        } else {
-            0
-        }
-
-        layout(
-            width = constraints.maxWidth,
-            height = totalHeight
+    ) {
+        Box(
+            modifier = Modifier
+                .wrapContentWidth()
+                .clip(RoundedCornerShape(Dimens.chipRoundedCorner))
+                .background(backgroundColor)
+                .clickable { onClick() }
+                .border(
+                    BorderStroke(borderWidth, borderColor),
+                    RoundedCornerShape(Dimens.chipRoundedCorner)
+                )
         ) {
-            positions.forEachIndexed { index, (x, y) ->
-                placeables[index].placeRelative(x, y)
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.padding(
+                    horizontal = Dimens.chiptextHorizontalPadding,
+                    vertical = Dimens.chiptextVerticalPadding
+                )
+            ) {
+                Text(
+                    text = text,
+                    color = textColor,
+                    style = MaterialTheme.typography.bodyMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.align(Alignment.CenterHorizontally)
+                )
+
+                // DEBUG: Show the actual video count for debugging
+                Text(
+                    text = "($videoCount)",
+                    color = textColor.copy(alpha = 0.7f),
+                    style = MaterialTheme.typography.labelSmall,
+                    modifier = Modifier.align(Alignment.CenterHorizontally)
+                )
             }
         }
     }
@@ -639,7 +787,10 @@ fun <T> CustomChip(
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier
-                .padding(horizontal = Dimens.chiptextHorizontalPadding, vertical = Dimens.chiptextVerticalPadding)
+                .padding(
+                    horizontal = Dimens.chiptextHorizontalPadding,
+                    vertical = Dimens.chiptextVerticalPadding
+                )
                 .align(Alignment.Center)
         )
     }

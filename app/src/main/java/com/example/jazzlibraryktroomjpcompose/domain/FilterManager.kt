@@ -49,33 +49,47 @@ class FilterManager @Inject constructor(
             // Get filtered instruments
             val instrumentsFlow = database.instrumentDao().getInstrumentsByMultipleFilters(
                 typeId = typeFilter?.entityId ?: 0,
-                durationId = durationFilter?.entityId ?: 0,
-                artistId = artistFilter?.entityId ?: 0
+                durationId = durationFilter?.entityId ?: 0
             )
 
             // Get filtered durations
             val durationsFlow = database.durationDao().getDurationsByMultipleFilters(
                 instrumentId = instrumentFilter?.entityId ?: 0,
-                typeId = typeFilter?.entityId ?: 0
+                typeId = typeFilter?.entityId ?: 0,
+                artistId = artistFilter?.entityId ?: 0
             )
 
             // Get filtered types
             val typesFlow = database.typeDao().getTypesByMultipleFilters(
-                instrumentId = instrumentFilter?.entityId ?: 0
+                instrumentId = instrumentFilter?.entityId ?: 0,
+                typeId = typeFilter?.entityId ?: 0,
+                artistId = artistFilter?.entityId ?: 0
             )
+            // Get      artists WITH COUNT - using existing query
+            val artistsFlowWithCount = database.artistDao().getArtistsWithVideoCountByMultipleFilters(
+                instrumentId = instrumentFilter?.entityId ?: 0,
+                typeId = typeFilter?.entityId ?: 0,
+                durationId = durationFilter?.entityId ?: 0
+            )
+            // Get instruments WITH COUNT - add this new method to your DAO
+            val instrumentsFlowWithCount = database.instrumentDao().getInstrumentsWithVideoCountByMultipleFilters(
+                typeId = typeFilter?.entityId ?: 0,
+                durationId = durationFilter?.entityId ?: 0
+            )
+
 
             // Combine all flows
             combine(
                 videosFlow,
-                artistsFlow,
-                instrumentsFlow,
+                artistsFlowWithCount,//artistsFlow,
+                instrumentsFlowWithCount,//instrumentsFlow,
                 durationsFlow,
                 typesFlow
             ) { videos, artists, instruments, durations, types ->
                 FilteredData(
                     videos = videos.map { com.example.jazzlibraryktroomjpcompose.data.mappers.VideoMapper.toDomain(it) },
-                    artists = artists.map { com.example.jazzlibraryktroomjpcompose.data.mappers.ArtistMapper.toDomain(it) },
-                    instruments = instruments.map { com.example.jazzlibraryktroomjpcompose.data.mappers.InstrumentMapper.toDomain(it) },
+                    artists = artists.map { com.example.jazzlibraryktroomjpcompose.data.mappers.ArtistMapper.toDomainWithCount(it) },
+                    instruments = instruments.map { com.example.jazzlibraryktroomjpcompose.data.mappers.InstrumentMapper.toDomainWithCount(it) },
                     durations = durations.map { com.example.jazzlibraryktroomjpcompose.data.mappers.DurationMapper.toDomain(it) },
                     types = types.map { com.example.jazzlibraryktroomjpcompose.data.mappers.TypeMapper.toDomain(it) },
                     filterPath = filterPath
