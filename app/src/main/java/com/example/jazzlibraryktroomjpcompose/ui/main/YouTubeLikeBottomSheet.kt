@@ -3,32 +3,37 @@ package com.example.jazzlibraryktroomjpcompose.ui.main
 
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.example.jazzlibraryktroomjpcompose.domain.models.FilterPath
+import com.example.jazzlibraryktroomjpcompose.ui.theme.Dimens
 import kotlinx.coroutines.launch
 import androidx.compose.foundation.rememberScrollState as rememberHorizontalScrollState
 
@@ -208,7 +213,7 @@ fun YouTubeLikeBottomSheet(
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(40.dp)
+                            .height(Dimens.pathChipHeight)
                             .pointerInput(Unit) {
                                 detectDragGestures(
                                     onDragStart = { offset ->
@@ -300,7 +305,7 @@ fun YouTubeLikeBottomSheet(
                                     .clip(RoundedCornerShape(2.dp))
                                     .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f))
                             )
-                            Spacer(modifier = Modifier.height(8.dp))
+                            Spacer(modifier = Modifier.height(Dimens.commonSpacing))
                             Text(
                                 text = "Filters",
                                 style = MaterialTheme.typography.titleMedium,
@@ -318,7 +323,6 @@ fun YouTubeLikeBottomSheet(
                         filterState = filterState,
                         modifier = Modifier
                             .fillMaxSize()
-                            .padding(horizontal = 16.dp)
                     )
                 }
             }
@@ -337,11 +341,11 @@ private fun YouTubeBottomSheetContent(
         modifier = modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        verticalArrangement = Arrangement.spacedBy(Dimens.largeSpacing)
     ) {
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(Dimens.commonSpacing))
 
-        // Instrument Chip Group
+        // Instrument Chip Group - 400dp height
         ChipGroupSection(
             title = "Instruments",
             categoryId = FilterPath.CATEGORY_INSTRUMENT,
@@ -353,10 +357,11 @@ private fun YouTubeBottomSheetContent(
             currentFilterPath = filterState.currentFilterPath,
             onChipSelected = { categoryId, entityId, entityName, isSelected ->
                 viewModel.handleChipSelection(categoryId, entityId, entityName, isSelected)
-            }
+            },
+            maxHeight = 400.dp
         )
 
-        // Artist Chip Group
+        // Artist Chip Group - 200dp height
         ChipGroupSection(
             title = "Artists",
             categoryId = FilterPath.CATEGORY_ARTIST,
@@ -364,10 +369,11 @@ private fun YouTubeBottomSheetContent(
             currentFilterPath = filterState.currentFilterPath,
             onChipSelected = { categoryId, entityId, entityName, isSelected ->
                 viewModel.handleChipSelection(categoryId, entityId, entityName, isSelected)
-            }
+            },
+            maxHeight = 200.dp
         )
 
-        // Duration Chip Group
+        // Duration Chip Group - 100dp height
         ChipGroupSection(
             title = "Durations",
             categoryId = FilterPath.CATEGORY_DURATION,
@@ -375,10 +381,11 @@ private fun YouTubeBottomSheetContent(
             currentFilterPath = filterState.currentFilterPath,
             onChipSelected = { categoryId, entityId, entityName, isSelected ->
                 viewModel.handleChipSelection(categoryId, entityId, entityName, isSelected)
-            }
+            },
+            maxHeight = 100.dp
         )
 
-        // Type Chip Group
+        // Type Chip Group - 100dp height
         ChipGroupSection(
             title = "Types",
             categoryId = FilterPath.CATEGORY_TYPE,
@@ -386,10 +393,11 @@ private fun YouTubeBottomSheetContent(
             currentFilterPath = filterState.currentFilterPath,
             onChipSelected = { categoryId, entityId, entityName, isSelected ->
                 viewModel.handleChipSelection(categoryId, entityId, entityName, isSelected)
-            }
+            },
+            maxHeight = 100.dp
         )
 
-        Spacer(modifier = Modifier.height(32.dp))
+        Spacer(modifier = Modifier.height(Dimens.largeSpacing))
     }
 }
 
@@ -400,6 +408,7 @@ private fun ChipGroupSection(
     items: List<Any>,
     currentFilterPath: List<FilterPath>,
     onChipSelected: (Int, Int, String, Boolean) -> Unit,
+    maxHeight: Dp = 400.dp,
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -408,154 +417,230 @@ private fun ChipGroupSection(
         Text(
             text = title,
             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Medium),
-            modifier = Modifier.padding(bottom = 8.dp)
+            modifier = Modifier.padding(horizontal = Dimens.commonPadding)
         )
 
-        // Horizontal scrollable chip group
-        Row(
+        Spacer(modifier = Modifier.height(Dimens.smallSpacing))
+
+        // Flow layout container with vertical scrolling
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(100.dp)
-                .horizontalScroll(rememberHorizontalScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                .heightIn(max = maxHeight)
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = Dimens.commonPadding)
         ) {
-            items.forEach { item ->
-                when (item) {
-                    is com.example.jazzlibraryktroomjpcompose.domain.models.Instrument -> {
-                        val isSelected = currentFilterPath.any {
-                            it.categoryId == categoryId && it.entityId == item.id
-                        }
+            // Custom flow layout that wraps chips naturally
+            FlowLayout(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalSpacing = Dimens.smallSpacing,
+                verticalSpacing = Dimens.smallSpacing
+            ) {
+                items.forEach { item ->
+                    when (item) {
+                        is com.example.jazzlibraryktroomjpcompose.domain.models.Instrument -> {
+                            val isSelected = currentFilterPath.any {
+                                it.categoryId == categoryId && it.entityId == item.id
+                            }
 
-                        FilterChipItem(
-                            id = item.id,
-                            name = item.name,
-                            categoryId = categoryId,
-                            isSelected = isSelected,
-                            onSelectedChange = { selected ->
-                                onChipSelected(categoryId, item.id, item.name, selected)
-                            },
-                            additionalInfo = "ID: ${item.id}",
-                            modifier = Modifier.height(48.dp)
-                        )
-                    }
-                    is com.example.jazzlibraryktroomjpcompose.domain.models.Artist -> {
-                        val isSelected = currentFilterPath.any {
-                            it.categoryId == categoryId && it.entityId == item.id
+                            CustomChip(
+                                text = item.name,
+                                isSelected = isSelected,
+                                onClick = { onChipSelected(categoryId, item.id, item.name, !isSelected) },
+                                data = item,
+                                modifier = Modifier.wrapContentWidth()
+                            )
                         }
+                        is com.example.jazzlibraryktroomjpcompose.domain.models.Artist -> {
+                            val isSelected = currentFilterPath.any {
+                                it.categoryId == categoryId && it.entityId == item.id
+                            }
 
-                        FilterChipItem(
-                            id = item.id,
-                            name = item.fullName,
-                            categoryId = categoryId,
-                            isSelected = isSelected,
-                            onSelectedChange = { selected ->
-                                onChipSelected(categoryId, item.id, item.fullName, selected)
-                            },
-                            additionalInfo = "ID: ${item.id}\nInstrument: ${item.instrumentId}\nRank: ${item.rank}",
-                            modifier = Modifier.height(48.dp)
-                        )
-                    }
-                    is com.example.jazzlibraryktroomjpcompose.domain.models.Duration -> {
-                        val isSelected = currentFilterPath.any {
-                            it.categoryId == categoryId && it.entityId == item.id
+                            CustomChip(
+                                text = item.fullName,
+                                isSelected = isSelected,
+                                onClick = { onChipSelected(categoryId, item.id, item.fullName, !isSelected) },
+                                data = item,
+                                modifier = Modifier.wrapContentWidth()
+                            )
                         }
+                        is com.example.jazzlibraryktroomjpcompose.domain.models.Duration -> {
+                            val isSelected = currentFilterPath.any {
+                                it.categoryId == categoryId && it.entityId == item.id
+                            }
 
-                        FilterChipItem(
-                            id = item.id,
-                            name = item.name,
-                            categoryId = categoryId,
-                            isSelected = isSelected,
-                            onSelectedChange = { selected ->
-                                onChipSelected(categoryId, item.id, item.name, selected)
-                            },
-                            additionalInfo = "ID: ${item.id}",
-                            modifier = Modifier.height(48.dp)
-                        )
-                    }
-                    is com.example.jazzlibraryktroomjpcompose.domain.models.Type -> {
-                        val isSelected = currentFilterPath.any {
-                            it.categoryId == categoryId && it.entityId == item.id
+                            CustomChip(
+                                text = item.name,
+                                isSelected = isSelected,
+                                onClick = { onChipSelected(categoryId, item.id, item.name, !isSelected) },
+                                data = item,
+                                modifier = Modifier.wrapContentWidth()
+                            )
                         }
+                        is com.example.jazzlibraryktroomjpcompose.domain.models.Type -> {
+                            val isSelected = currentFilterPath.any {
+                                it.categoryId == categoryId && it.entityId == item.id
+                            }
 
-                        FilterChipItem(
-                            id = item.id,
-                            name = item.name,
-                            categoryId = categoryId,
-                            isSelected = isSelected,
-                            onSelectedChange = { selected ->
-                                onChipSelected(categoryId, item.id, item.name, selected)
-                            },
-                            additionalInfo = "ID: ${item.id}",
-                            modifier = Modifier.height(48.dp)
-                        )
-                    }
-                    else -> {
-                        // Fallback for unknown types
-                        Text(
-                            text = "Unknown item type",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.error
-                        )
+                            CustomChip(
+                                text = item.name,
+                                isSelected = isSelected,
+                                onClick = { onChipSelected(categoryId, item.id, item.name, !isSelected) },
+                                data = item,
+                                modifier = Modifier.wrapContentWidth()
+                            )
+                        }
+                        else -> {
+                            // Fallback for unknown types
+                            Box(
+                                modifier = Modifier
+                                    .height(Dimens.pathChipHeight)
+                                    .wrapContentWidth()
+                                    .clip(RoundedCornerShape(Dimens.chipRoundedCorner))
+                                    .background(MaterialTheme.colorScheme.errorContainer),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = "Unknown",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onErrorContainer,
+                                    modifier = Modifier.padding(Dimens.smallSpacing)
+                                )
+                            }
+                        }
                     }
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(4.dp))
+        // Show count of options
         Text(
             text = "${items.size} options available",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(start = 4.dp)
+            modifier = Modifier.padding(
+                horizontal = Dimens.commonPadding,
+                vertical = Dimens.smallSpacing
+            )
         )
     }
 }
 
+// Custom Flow Layout Composable
 @Composable
-private fun FilterChipItem(
-    id: Int,
-    name: String,
-    categoryId: Int,
+fun FlowLayout(
+    modifier: Modifier = Modifier,
+    horizontalSpacing: Dp = 0.dp,
+    verticalSpacing: Dp = 0.dp,
+    content: @Composable () -> Unit
+) {
+    Layout(
+        content = content,
+        modifier = modifier
+    ) { measurables, constraints ->
+        val horizontalSpacingPx = horizontalSpacing.roundToPx()
+        val verticalSpacingPx = verticalSpacing.roundToPx()
+
+        var currentRow = 0
+        var currentX = 0
+        var currentY = 0
+        var maxHeightInRow = 0
+
+        // Measure all children first
+        val placeables = measurables.map { measurable ->
+            measurable.measure(constraints.copy(minWidth = 0, minHeight = 0))
+        }
+
+        // Calculate positions
+        val positions = mutableListOf<Pair<Int, Int>>()
+
+        placeables.forEach { placeable ->
+            val width = placeable.width
+            val height = placeable.height
+
+            // Check if the item fits in current row
+            if (currentX + width > constraints.maxWidth) {
+                // Move to next row
+                currentRow++
+                currentX = 0
+                currentY += maxHeightInRow + verticalSpacingPx
+                maxHeightInRow = 0
+            }
+
+            positions.add(Pair(currentX, currentY))
+
+            currentX += width + horizontalSpacingPx
+            maxHeightInRow = maxOf(maxHeightInRow, height)
+        }
+
+        val totalHeight = if (placeables.isNotEmpty()) {
+            currentY + maxHeightInRow
+        } else {
+            0
+        }
+
+        layout(
+            width = constraints.maxWidth,
+            height = totalHeight
+        ) {
+            positions.forEachIndexed { index, (x, y) ->
+                placeables[index].placeRelative(x, y)
+            }
+        }
+    }
+}
+
+@Composable
+fun <T> CustomChip(
+    text: String,
     isSelected: Boolean,
-    onSelectedChange: (Boolean) -> Unit,
-    additionalInfo: String? = null,
+    onClick: () -> Unit,
+    data: T,
     modifier: Modifier = Modifier
 ) {
-    FilterChip(
-        selected = isSelected,
-        onClick = { onSelectedChange(!isSelected) },
-        label = {
-            Column(
-                modifier = Modifier.widthIn(min = 80.dp, max = 120.dp)
-            ) {
-                Text(
-                    text = name,
-                    style = MaterialTheme.typography.bodyMedium,
-                    maxLines = 2,
-                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
-                )
-                additionalInfo?.let {
-                    Text(
-                        text = it,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 2,
-                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
-                    )
-                }
-            }
-        },
-        modifier = modifier,
-        shape = RoundedCornerShape(12.dp),
-        colors = FilterChipDefaults.filterChipColors(
-            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-            selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
-            containerColor = MaterialTheme.colorScheme.surfaceVariant
-        ),
-        border = FilterChipDefaults.filterChipBorder(
-            borderColor = if (isSelected) MaterialTheme.colorScheme.primary
-            else MaterialTheme.colorScheme.outline,
-            borderWidth = if (isSelected) 2.dp else 1.dp
+    val backgroundColor = if (isSelected) {
+        MaterialTheme.colorScheme.primaryContainer
+    } else {
+        MaterialTheme.colorScheme.surfaceVariant
+    }
+
+    val textColor = if (isSelected) {
+        MaterialTheme.colorScheme.onPrimaryContainer
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant
+    }
+
+    val borderColor = if (isSelected) {
+        MaterialTheme.colorScheme.primary
+    } else {
+        Color.Transparent
+    }
+
+    // the weigth of the hilighted selected area/border
+    val borderWidth = if (isSelected) 1.dp else 1.dp
+    //val elevation = if (isSelected) 4.dp else 1.dp
+
+    Box(
+        modifier = modifier
+            .wrapContentWidth()
+            //.shadow(elevation = elevation, shape = RoundedCornerShape(Dimens.chipRoundedCorner))
+            .clip(RoundedCornerShape(Dimens.chipRoundedCorner))
+            .background(backgroundColor)
+            .clickable { onClick() }
+            .border(
+                BorderStroke(borderWidth, borderColor),
+                RoundedCornerShape(Dimens.chipRoundedCorner)
+            )
+    ) {
+        Text(
+            text = text,
+            color = textColor,
+            style = MaterialTheme.typography.bodyMedium,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier
+                .padding(horizontal = Dimens.chiptextHorizontalPadding, vertical = Dimens.chiptextVerticalPadding)
+                .align(Alignment.Center)
         )
-    )
+    }
 }
