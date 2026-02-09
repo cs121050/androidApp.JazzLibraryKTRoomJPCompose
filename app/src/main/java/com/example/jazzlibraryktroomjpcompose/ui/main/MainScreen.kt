@@ -1,9 +1,7 @@
 package com.example.jazzlibraryktroomjpcompose.ui.main
 
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.runtime.*
@@ -25,8 +23,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -43,6 +39,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.Snackbar
 import androidx.compose.material3.TopAppBar
+import com.example.jazzlibraryktroomjpcompose.ui.theme.Dimens
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -117,7 +114,7 @@ fun MainScreen(
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(16.dp),
+                        .padding(Dimens.largePadding),
                     contentAlignment = Alignment.BottomCenter
                 ) {
                     Snackbar(
@@ -128,7 +125,7 @@ fun MainScreen(
                                 Text("Dismiss")
                             }
                         },
-                        modifier = Modifier.padding(8.dp)
+                        modifier = Modifier.padding(Dimens.commonPadding)
                     ) {
                         Text(errorMessage!!)
                     }
@@ -153,7 +150,7 @@ fun LoadingScreen() {
             verticalArrangement = Arrangement.Center
         ) {
             CircularProgressIndicator()
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(Dimens.largeSpacing))
             Text(
                 text = "Loading Jazz Library...",
                 style = MaterialTheme.typography.titleMedium
@@ -178,7 +175,7 @@ fun MainContent(
         modifier = modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
-            .padding(16.dp)
+            .padding(Dimens.largePadding)
     ) {
         // Top Bar
         TopAppBar(
@@ -206,7 +203,7 @@ fun MainContent(
             }
         )
 
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(Dimens.commonSpacing))
 
         // Filter Path Chips (Active Filters)
         if (filterState.currentFilterPath.isNotEmpty()) {
@@ -214,7 +211,7 @@ fun MainContent(
                 modifier = Modifier
                     .fillMaxWidth()
                     .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(Dimens.parthChipSpacing)
             ) {
                 filterState.currentFilterPath.forEach { filter ->
                     FilterChip(
@@ -233,16 +230,17 @@ fun MainContent(
                         },
                         trailingIcon = {
                             Icon(Icons.Default.Close, contentDescription = "Remove", modifier = Modifier.size(16.dp))
-                        }
+                        },
+                        modifier = Modifier.height(Dimens.pathChipHeight)
                     )
                 }
 
-                // Clear All Button
-                TextButton(onClick = onClearFilters) {
-                    Text("Clear All")
-                }
+//                // Clear All Button
+//                TextButton(onClick = onClearFilters) {
+//                    Text("Clear All")
+//                }
             }
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(Dimens.commonSpacing)) //spacing between searchbar and filterpath bar
         }
 
         // Search Bar
@@ -260,7 +258,15 @@ fun MainContent(
             )
         )
 
-        Spacer(modifier = Modifier.height(24.dp))
+        Spacer(modifier = Modifier.height(Dimens.largeSpacing))
+
+        // Data Stats
+        // FIX: Use the same logic as videosToShow to determine which count to display
+        val videosToShow = if (filterState.currentFilterPath.isEmpty()) {
+            uiState.videos
+        } else {
+            uiState.filteredVideos
+        }
 
         // Data Stats
         Row(
@@ -268,18 +274,13 @@ fun MainContent(
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Text(
-                text = "${uiState.videos.size} Videos",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Text(
-                text = "${uiState.allInstruments.size} Instruments",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                text = "Videos (${videosToShow.size})", // Use videosToShow.size here too!
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold
             )
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(Dimens.largeSpacing))
 
         // Videos List
         if (filterState.isFiltering) {
@@ -292,16 +293,11 @@ fun MainContent(
                     verticalArrangement = Arrangement.Center
                 ) {
                     CircularProgressIndicator()
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(Dimens.commonSpacing))
                     Text("Applying filters...")
                 }
             }
         } else {
-            val videosToShow = if (filterState.currentFilterPath.isEmpty()) {
-                uiState.videos
-            } else {
-                uiState.filteredVideos
-            }
 
             if (videosToShow.isEmpty()) {
                 Box(
@@ -317,17 +313,17 @@ fun MainContent(
                             style = MaterialTheme.typography.bodyLarge,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                        Spacer(modifier = Modifier.height(8.dp))
+                        Spacer(modifier = Modifier.height(Dimens.commonSpacing))
                         Text(
                             text = if (uiState.videos.isEmpty()) "Try refreshing data" else "Try changing your filters",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.outline
                         )
                         if (uiState.videos.isEmpty()) {
-                            Spacer(modifier = Modifier.height(16.dp))
+                            Spacer(modifier = Modifier.height(Dimens.largeSpacing))
                             Button(onClick = onRefresh) {
                                 Icon(Icons.Default.Refresh, contentDescription = "Refresh")
-                                Spacer(modifier = Modifier.width(8.dp))
+                                Spacer(modifier = Modifier.width(Dimens.commonSpacing))
                                 Text("Load Data")
                             }
                         }
@@ -336,16 +332,8 @@ fun MainContent(
             } else {
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                    verticalArrangement = Arrangement.spacedBy(Dimens.largeSpacing)
                 ) {
-                    item {
-                        Text(
-                            text = "Videos (${videosToShow.size})",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                    }
                     items(videosToShow) { video ->
                         VideoCard(video = video)
                     }
@@ -369,7 +357,7 @@ fun VideoCard(
         )
     ) {
         Column(
-            modifier = Modifier.padding(16.dp)
+            modifier = Modifier.padding(Dimens.largePadding)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -384,7 +372,7 @@ fun VideoCard(
                         style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
                         maxLines = 2
                     )
-                    Spacer(modifier = Modifier.height(4.dp))
+                    Spacer(modifier = Modifier.height(Dimens.smallSpacing))
                     Text(
                         text = video.path ?: "No location",
                         style = MaterialTheme.typography.bodySmall,
@@ -405,14 +393,14 @@ fun VideoCard(
                 }
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(Dimens.midSpacing))
 
             // Placeholder for YouTubePlayerView
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(180.dp)
-                    .clip(RoundedCornerShape(8.dp))
+                    .clip(RoundedCornerShape(Dimens.chipRoundedCorner))
                     .background(Color.DarkGray.copy(alpha = 0.8f)),
                 contentAlignment = Alignment.Center
             ) {
@@ -425,7 +413,7 @@ fun VideoCard(
                         color = Color.White,
                         style = MaterialTheme.typography.bodyMedium
                     )
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(Dimens.commonSpacing))
                     Text(
                         text = video.duration,
                         color = Color.White.copy(alpha = 0.8f),
@@ -434,7 +422,7 @@ fun VideoCard(
                 }
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(Dimens.midSpacing))
 
             // Video metadata
             Row(
