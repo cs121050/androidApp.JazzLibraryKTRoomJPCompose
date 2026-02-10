@@ -170,19 +170,34 @@ fun YouTubeLikeBottomSheet(
                             onDragEnd = {
                                 val progress = animatedHeight / maxHeightPx
 
-                                // Logic for dragging from expanded
+                                // Handle swipe directions
                                 val targetState = when {
-                                    // Fast swipe down - close
-                                    dragVelocity > 1000f -> BottomSheetState.HIDDEN
-                                    // Fast swipe up - expand
-                                    dragVelocity < -1000f -> BottomSheetState.EXPANDED
-                                    // Position-based with consideration of starting state
-                                    progress > 0.65f -> BottomSheetState.EXPANDED
-                                    progress > 0.35f -> BottomSheetState.HALF_EXPANDED
-                                    else -> BottomSheetState.HIDDEN
+                                    // SWIPE UP from half-expanded -> EXPANDED
+                                    dragVelocity < 0 && sheetState == BottomSheetState.HALF_EXPANDED -> {
+                                        BottomSheetState.EXPANDED
+                                    }
+                                    // SWIPE DOWN from half-expanded -> close
+                                    dragVelocity > 0 && sheetState == BottomSheetState.HALF_EXPANDED -> {
+                                        BottomSheetState.HIDDEN
+                                    }
+                                    // SWIPE UP from expanded -> go to half-expanded
+                                    dragVelocity < 0 && sheetState == BottomSheetState.EXPANDED -> {
+                                        BottomSheetState.HALF_EXPANDED
+                                    }
+                                    // SWIPE DOWN from expanded -> go to half-expanded
+                                    dragVelocity > 0 && sheetState == BottomSheetState.EXPANDED -> {
+                                        BottomSheetState.HALF_EXPANDED
+                                    }
+                                    // No velocity or very slow drag - use position-based logic
+                                    else -> {
+                                        when {
+                                            progress > 0.65f -> BottomSheetState.EXPANDED
+                                            progress > 0.35f -> BottomSheetState.HALF_EXPANDED
+                                            else -> BottomSheetState.HIDDEN
+                                        }
+                                    }
                                 }
 
-                                // Animate to the target state
                                 coroutineScope.launch {
                                     viewModel.setBottomSheetState(targetState)
                                 }
@@ -190,18 +205,36 @@ fun YouTubeLikeBottomSheet(
                             onDrag = { change, dragAmount ->
                                 change.consume()
 
-                                // Calculate velocity
+                                // Calculate velocity (negative = up, positive = down)
                                 val currentTime = System.currentTimeMillis()
-                                val timeDelta = (currentTime - lastDragTime).coerceAtLeast(1L)
+                                val timeDelta =
+                                    (currentTime - lastDragTime).coerceAtLeast(1L)
                                 dragVelocity = dragAmount.y / timeDelta * 1000
                                 lastDragTime = currentTime
 
-                                // Calculate new height with bounds
+                                // Calculate new height
                                 val newHeight = (dragStartHeight - dragAmount.y)
                                     .coerceIn(0f, maxHeightPx)
 
-                                // Update progress for smooth dragging
                                 viewModel.updateBottomSheetProgress(newHeight / maxHeightPx)
+                            }
+                        )
+                    }
+                    .pointerInput(Unit) {
+                        detectTapGestures(
+                            onTap = {
+                                // TAP GESTURE: Toggle between half-expanded and expanded
+                                coroutineScope.launch {
+                                    when (sheetState) {
+                                        BottomSheetState.HALF_EXPANDED ->
+                                            viewModel.setBottomSheetState(BottomSheetState.EXPANDED)
+
+                                        BottomSheetState.EXPANDED ->
+                                            viewModel.setBottomSheetState(BottomSheetState.HALF_EXPANDED)
+
+                                        else -> {}
+                                    }
+                                }
                             }
                         )
                     }
@@ -339,8 +372,7 @@ private fun YouTubeBottomSheetContent(
 ) {
     Column(
         modifier = modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState()),
+            .fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(Dimens.largeSpacing)
     ) {
         Spacer(modifier = Modifier.height(0.dp))
@@ -531,7 +563,7 @@ private fun PaginatedArtistChipGroupSection(
     }
 
     // for pagination of the artist chipgroup - Load more items when user scrolls near the bottom
-// **FIXED: for pagination of the artist chipgroup - Simplified and more reliable**
+    // **FIXED: for pagination of the artist chipgroup - Simplified and more reliable**
     LaunchedEffect(scrollState, visibleItemCount, items.size, density) {
         // Convert Dp to Px once outside the collection
         val approxChipHeight = with(density) { 40.dp.toPx() }

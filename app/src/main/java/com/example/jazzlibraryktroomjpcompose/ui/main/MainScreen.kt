@@ -1,5 +1,6 @@
 package com.example.jazzlibraryktroomjpcompose.ui.main
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.filled.Menu
@@ -39,9 +40,9 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.Snackbar
 import androidx.compose.material3.TopAppBar
+import androidx.compose.ui.platform.LocalContext
 import com.example.jazzlibraryktroomjpcompose.ui.theme.Dimens
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScreen(
     viewModel: MainViewModel = hiltViewModel()
@@ -56,6 +57,39 @@ fun MainScreen(
 
     val leftDrawerOffset by animateDpAsState(
         targetValue = if (leftDrawerState == DrawerState.OPEN) 0.dp else (-320).dp
+    )
+
+    val bottomSheetState by viewModel.bottomSheetState.collectAsState()
+    val context = LocalContext.current
+    // Double back press state
+    var backPressTime by remember { mutableLongStateOf(0L) }
+
+    // Single BackHandler that handles both cases
+    BackHandler(
+        enabled = true,
+        onBack = {
+            // If bottom sheet is open, close it
+            if (bottomSheetState != BottomSheetState.HIDDEN) {
+                viewModel.setBottomSheetState(BottomSheetState.HIDDEN)
+                return@BackHandler
+            }
+
+            // Otherwise handle double back exit
+            val currentTime = System.currentTimeMillis()
+
+            if (currentTime - backPressTime > 500) {
+                // First press - show toast
+//                android.widget.Toast.makeText(
+//                    context,
+//                    "Press back again to exit",
+//                    android.widget.Toast.LENGTH_SHORT
+//                ).show()
+                backPressTime = currentTime
+            } else {
+                // Second press within 500ms seconds - exit
+                (context as? android.app.Activity)?.finish()
+            }
+        }
     )
 
     // Show loading screen only during initial load
