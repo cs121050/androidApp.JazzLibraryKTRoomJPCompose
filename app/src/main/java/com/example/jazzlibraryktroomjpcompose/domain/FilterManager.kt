@@ -62,7 +62,6 @@ class FilterManager @Inject constructor(
             // Get filtered types
             val typesFlow = database.typeDao().getTypesByMultipleFilters(
                 instrumentId = instrumentFilter?.entityId ?: 0,
-                typeId = typeFilter?.entityId ?: 0,
                 artistId = artistFilter?.entityId ?: 0
             )
             // Get      artists WITH COUNT - using existing query
@@ -76,6 +75,18 @@ class FilterManager @Inject constructor(
                 typeId = typeFilter?.entityId ?: 0,
                 durationId = durationFilter?.entityId ?: 0
             )
+            // Get duration WITH COUNT - add this new method to your DAO
+            val durationsFlowWithCount = database.durationDao().getDurationsWithVideoCountByMultipleFilters(
+                typeId = typeFilter?.entityId ?: 0,
+                instrumentId = instrumentFilter?.entityId ?: 0,
+                artistId = artistFilter?.entityId ?: 0
+            )
+            // Get type WITH COUNT - add this new method to your DAO
+            val typesFlowWithCount = database.typeDao().getTypesWithVideoCountByMultipleFilters(
+                instrumentId = instrumentFilter?.entityId ?: 0,
+                artistId = artistFilter?.entityId ?: 0,
+                durationId = durationFilter?.entityId ?: 0
+            )
 
 
             // Combine all flows
@@ -83,45 +94,41 @@ class FilterManager @Inject constructor(
                 videosFlow,
                 artistsFlowWithCount,//artistsFlow,
                 instrumentsFlowWithCount,//instrumentsFlow,
-                durationsFlow,
-                typesFlow
+                durationsFlowWithCount,//durationsFlow,
+                typesFlowWithCount//typesFlow
             ) { videos, artists, instruments, durations, types ->
                 FilteredData(
                     videos = videos.map { com.example.jazzlibraryktroomjpcompose.data.mappers.VideoMapper.toDomain(it) },
                     artists = artists.map { com.example.jazzlibraryktroomjpcompose.data.mappers.ArtistMapper.toDomainWithCount(it) },
                     instruments = instruments.map { com.example.jazzlibraryktroomjpcompose.data.mappers.InstrumentMapper.toDomainWithCount(it) },
-                    durations = durations.map { com.example.jazzlibraryktroomjpcompose.data.mappers.DurationMapper.toDomain(it) },
-                    types = types.map { com.example.jazzlibraryktroomjpcompose.data.mappers.TypeMapper.toDomain(it) },
+                    durations = durations.map { com.example.jazzlibraryktroomjpcompose.data.mappers.DurationMapper.toDomainWithCount(it) },
+                    types = types.map { com.example.jazzlibraryktroomjpcompose.data.mappers.TypeMapper.toDomainWithCount(it) },
                     filterPath = filterPath
                 )
             }.collect { emit(it) }
         }
     }
-
+//TODO// separate bussiness logic from basic functionality
     suspend fun handleChipSelection(
         currentFilterPath: List<FilterPath>,
         selectedCategoryId: Int,
         selectedEntityId: Int,
         selectedEntityName: String
     ): List<FilterPath> {
-        println("DEBUG: handleChipSelection called")
-        println("DEBUG: currentFilterPath = $currentFilterPath")
-        println("DEBUG: selectedCategoryId = $selectedCategoryId, selectedEntityId = $selectedEntityId")
-
-        println("DEBUG: Checking for existing in same category...")
-        val hasExistingInCategory = currentFilterPath.any { it.categoryId == selectedCategoryId }
-        println("DEBUG: hasExistingInCategory = $hasExistingInCategory")
-
-        if (hasExistingInCategory) {
-            println("DEBUG: Should trigger REPLACE case")
-        }
 
         val result = when {
             // Check if chip is already selected (deselect case)
             currentFilterPath.any { it.categoryId == selectedCategoryId && it.entityId == selectedEntityId } -> {
                 // Remove this chip
-                currentFilterPath.filterNot {
+                val newPath = currentFilterPath.filterNot {
                     it.categoryId == selectedCategoryId && it.entityId == selectedEntityId
+                }
+
+                // If we're deselecting an instrument, also remove any artist
+                if (selectedCategoryId == FilterPath.CATEGORY_INSTRUMENT) {
+                    newPath.filterNot { it.categoryId == FilterPath.CATEGORY_ARTIST }
+                } else {
+                    newPath
                 }
             }
 
@@ -129,7 +136,14 @@ class FilterManager @Inject constructor(
             currentFilterPath.any { it.categoryId == selectedCategoryId } -> {
                 // Remove ALL existing chips in this category and add the new one
                 val filteredPath = currentFilterPath.filterNot { it.categoryId == selectedCategoryId }
-                filteredPath + FilterPath(
+
+                // If selecting an instrument, also remove any artist
+                val pathWithoutArtist = if (selectedCategoryId == FilterPath.CATEGORY_INSTRUMENT) {
+                    filteredPath.filterNot { it.categoryId == FilterPath.CATEGORY_ARTIST }
+                } else {
+                    filteredPath
+                }
+                pathWithoutArtist + FilterPath(
                     categoryId = selectedCategoryId,
                     entityId = selectedEntityId,
                     entityName = selectedEntityName
