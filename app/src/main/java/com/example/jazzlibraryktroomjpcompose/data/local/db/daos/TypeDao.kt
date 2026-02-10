@@ -136,14 +136,12 @@ interface TypeDao {
     INNER JOIN video_contains_artist vca ON v.video_id = vca.video_id
     INNER JOIN artists a ON vca.artist_id = a.artist_id
     WHERE (:instrumentId = 0 OR a.instrument_id = :instrumentId)
-      AND (:typeId = 0 OR v.type_id = :typeId)
       AND (:durationId = 0 OR v.duration_id = :durationId)
       AND (:artistId = 0 OR a.artist_id = :artistId)
     ORDER BY t.type_name
 """)
     fun getTypesByMultipleFilters(
         instrumentId: Int = 0,
-        typeId: Int = 0,
         durationId: Int = 0,
         artistId: Int = 0
     ): Flow<List<TypeRoomEntity>>
@@ -155,14 +153,12 @@ interface TypeDao {
         INNER JOIN video_contains_artist vca ON v.video_id = vca.video_id
         INNER JOIN artists a ON vca.artist_id = a.artist_id
         WHERE (:instrumentId = 0 OR a.instrument_id = :instrumentId)
-          AND (:typeId = 0 OR v.type_id = :typeId)
           AND (:durationId = 0 OR v.duration_id = :durationId)
           AND (:artistId = 0 OR a.artist_id = :artistId)
         GROUP BY t.type_id, t.type_name
 """)
     fun getTypesWithVideoCountByMultipleFilters(
         instrumentId: Int = 0,
-        typeId: Int = 0,
         durationId: Int = 0,
         artistId: Int = 0
     ): Flow<List<TypeWithVideoCount>>

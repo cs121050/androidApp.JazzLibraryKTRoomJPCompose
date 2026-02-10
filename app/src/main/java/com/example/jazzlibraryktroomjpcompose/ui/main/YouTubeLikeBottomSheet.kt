@@ -1,4 +1,3 @@
-// YouTubeLikeBottomSheet.kt
 package com.example.jazzlibraryktroomjpcompose.ui.main
 
 import androidx.compose.animation.*
@@ -11,6 +10,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -30,6 +31,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.example.jazzlibraryktroomjpcompose.domain.models.Artist
 import com.example.jazzlibraryktroomjpcompose.domain.models.FilterPath
 import com.example.jazzlibraryktroomjpcompose.domain.models.Instrument
 import com.example.jazzlibraryktroomjpcompose.ui.theme.Dimens
@@ -343,7 +345,7 @@ private fun YouTubeBottomSheetContent(
     ) {
         Spacer(modifier = Modifier.height(0.dp))
 
-        // Instrument Chip Group - 400dp height
+        // Instrument Chip Group
         ChipGroupSection(
             title = "Instruments",
             categoryId = FilterPath.CATEGORY_INSTRUMENT,
@@ -352,22 +354,24 @@ private fun YouTubeBottomSheetContent(
             onChipSelected = { categoryId, entityId, entityName, isSelected ->
                 viewModel.handleChipSelection(categoryId, entityId, entityName, isSelected)
             },
-            maxHeight = 400.dp
+            maxHeight = 200.dp
         )
 
-        // Artist Chip Group - 200dp height
-        ChipGroupSection(
+        // Artist Chip Group
+        PaginatedArtistChipGroupSection(
             title = "Artists",
-            categoryId = FilterPath.CATEGORY_ARTIST,
             items = uiState.availableArtists,
-            currentFilterPath = filterState.currentFilterPath,
+            selectedItemIds = filterState.currentFilterPath
+                .filter { it.categoryId == FilterPath.CATEGORY_ARTIST }
+                .map { it.entityId }
+                .toSet(),
             onChipSelected = { categoryId, entityId, entityName, isSelected ->
                 viewModel.handleChipSelection(categoryId, entityId, entityName, isSelected)
             },
             maxHeight = 200.dp
         )
 
-        // Duration Chip Group - 100dp height
+        // Duration Chip Group
         ChipGroupSection(
             title = "Durations",
             categoryId = FilterPath.CATEGORY_DURATION,
@@ -379,7 +383,7 @@ private fun YouTubeBottomSheetContent(
             maxHeight = 100.dp
         )
 
-        // Type Chip Group - 100dp height
+        // Type Chip Group
         ChipGroupSection(
             title = "Types",
             categoryId = FilterPath.CATEGORY_TYPE,
@@ -392,6 +396,181 @@ private fun YouTubeBottomSheetContent(
         )
 
         Spacer(modifier = Modifier.height(Dimens.largeSpacing))
+    }
+}
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun PaginatedArtistChipGroupSection(
+    title: String,
+    items: List<com.example.jazzlibraryktroomjpcompose.domain.models.Artist>,
+    selectedItemIds: Set<Int>,
+    onChipSelected: (Int, Int, String, Boolean) -> Unit,
+    maxHeight: Dp = 200.dp,
+    modifier: Modifier = Modifier
+) {
+    // Get density in composable context
+    val density = LocalDensity.current
+
+    // Pagination state - start with 60 items - pagination starting number of chips
+    var visibleItemCount by remember { mutableIntStateOf(80) }
+
+    // Remember the scroll state for detecting when to load more
+    val scrollState = rememberLazyListState()
+
+    // AUTO-SCROLL: Track if we need to scroll to selection
+    var hasScrolled by remember { mutableStateOf(false) }
+    var selectedArtistPosition by remember { mutableFloatStateOf(0f) }
+    var shouldScrollToSelection by remember { mutableStateOf(false) }
+
+    // Create a derived state for visible items
+    val visibleItems = remember(visibleItemCount, items) {
+        items.take(visibleItemCount)
+    }
+
+    // AUTO-SCROLL: Reset scroll flag when selection changes
+    LaunchedEffect(selectedItemIds) {
+        hasScrolled = false
+        shouldScrollToSelection = selectedItemIds.isNotEmpty()
+    }
+
+    Column(
+        modifier = modifier
+    ) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Medium),
+            modifier = Modifier.padding(horizontal = Dimens.commonPadding)
+        )
+
+        Spacer(modifier = Modifier.height(Dimens.smallSpacing))
+
+        // Use LazyColumn with FlowRow for natural chip layout
+        LazyColumn(
+            state = scrollState,
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(max = maxHeight),
+            userScrollEnabled = true
+        ) {
+            item {
+                FlowRow(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = Dimens.commonPadding),
+                    horizontalArrangement = Arrangement.spacedBy(Dimens.smallSpacing),
+                    verticalArrangement = Arrangement.spacedBy(Dimens.smallSpacing)
+                ) {
+                    visibleItems.forEach { artist ->
+                        val isSelected = selectedItemIds.contains(artist.id)
+                        PaginatedArtistChip(
+                            artist = artist,
+                            isSelected = isSelected,
+                            onPositionMeasured = { yPos, selected ->
+                                if (selected && !hasScrolled) {
+                                    selectedArtistPosition = yPos
+                                    shouldScrollToSelection = true
+                                }
+                            },
+                            onClick = {
+                                onChipSelected(FilterPath.CATEGORY_ARTIST, artist.id, artist.fullName, !isSelected)
+                            }
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+//    // AUTO-SCROLL: Scroll to selected artist (Simple version)
+//    LaunchedEffect(shouldScrollToSelection, scrollState) {
+//        if (shouldScrollToSelection && !hasScrolled) {
+//            //delay(100)
+//
+//            // Calculate target scroll position
+//            val currentScrollOffset = scrollState.firstVisibleItemScrollOffset
+//            val targetScroll = (selectedArtistPosition - 100).toInt().coerceAtLeast(0)
+//
+//            // Scroll to the calculated position
+//            scrollState.scrollToItem(
+//                index = 0,  // We only have 1 item (the FlowRow)
+//                scrollOffset = targetScroll
+//            )
+//
+//            hasScrolled = true
+//            shouldScrollToSelection = false
+//        }
+//    }
+
+    //AUTO-SCROLL: Scroll to selected artist with smooth animation
+    LaunchedEffect(shouldScrollToSelection, scrollState) {
+        if (shouldScrollToSelection && !hasScrolled) {
+            delay(30)
+
+            val currentScrollOffset = scrollState.firstVisibleItemScrollOffset
+            val targetScroll = (selectedArtistPosition - 100).toInt().coerceAtLeast(0)
+            val scrollAmount = targetScroll - currentScrollOffset
+
+            if (scrollAmount != 0) {
+                // Smooth scroll animation
+                val steps = 20
+                val stepSize = scrollAmount / steps
+
+                for (step in 1..steps) {
+                    val newOffset = currentScrollOffset + (stepSize * step)
+                    scrollState.scrollToItem(
+                        index = 0,
+                        scrollOffset = newOffset
+                    )
+                    delay(16) // ~60 FPS
+                }
+            }
+
+            hasScrolled = true
+            shouldScrollToSelection = false
+        }
+    }
+
+    // for pagination of the artist chipgroup - Load more items when user scrolls near the bottom
+// **FIXED: for pagination of the artist chipgroup - Simplified and more reliable**
+    LaunchedEffect(scrollState, visibleItemCount, items.size, density) {
+        // Convert Dp to Px once outside the collection
+        val approxChipHeight = with(density) { 40.dp.toPx() }
+        val approxSpacing = with(density) { Dimens.smallSpacing.toPx() }
+        val approxRowHeight = approxChipHeight + approxSpacing
+
+        // Use a simpler approach to detect when to load more
+        while (visibleItemCount < items.size) {
+            // Wait for scroll events
+            snapshotFlow { scrollState.layoutInfo }
+                .collect { layoutInfo ->
+                    if (layoutInfo.visibleItemsInfo.isNotEmpty()) {
+                        // Get current scroll position
+                        val scrollOffset = scrollState.firstVisibleItemScrollOffset
+
+                        // Estimate total content height (approximate)
+                        // Each chip is about 40dp height, plus spacing
+                        // Approximate total content height
+                        val approxTotalHeight = approxRowHeight * (visibleItems.size / 4) // Approx 4 chips per row
+
+                        // Load more when scrolled 70% down
+                        if (approxTotalHeight > 0) {
+                            val scrollPercentage = scrollOffset.toFloat() / approxTotalHeight
+
+                            if (scrollPercentage > 0.2f) {
+                                // Load more items
+                                val newCount = minOf(visibleItemCount + 30, items.size)
+                                if (newCount > visibleItemCount) {
+                                    visibleItemCount = newCount
+                                }
+                                return@collect // Break and restart collection
+                            }
+                        }
+                    }
+                }
+
+            // Small delay to prevent tight loop
+            //delay(100)
+        }
     }
 }
 
@@ -436,7 +615,7 @@ private fun ChipGroupSection(
     LaunchedEffect(firstSelectedItem, scrollState) {
         if (firstSelectedItem != null) {
             // We need to wait for layout to complete
-            delay(50) // Small delay to ensure layout is complete
+            //delay(50) // Small delay to ensure layout is complete
 
             // We'll need a different approach since we can't get chip positions easily
             // Instead, let's implement a scroll-to-selected logic
@@ -649,7 +828,7 @@ private fun EnhancedFlowLayout(
     LaunchedEffect(shouldScrollToSelection, scrollState) {
         if (shouldScrollToSelection && !hasScrolled) {
             // Small delay to ensure layout is complete
-            delay(100)
+            //delay(50) //100
 
             // Scroll to show the selected chip
             scrollState.animateScrollTo(
@@ -672,6 +851,8 @@ private fun ChipContent(
     videoCount: Int = 0,
     onPositionMeasured: (Float, Boolean) -> Unit
 ) {
+    if (videoCount <= 0) return
+
     val backgroundColor = if (isSelected) {
         MaterialTheme.colorScheme.primaryContainer
     } else {
@@ -726,26 +907,27 @@ private fun ChipContent(
                     modifier = Modifier.align(Alignment.CenterHorizontally)
                 )
 
-                // DEBUG: Show the actual video count for debugging
-                Text(
-                    text = "($videoCount)",
-                    color = textColor.copy(alpha = 0.7f),
-                    style = MaterialTheme.typography.labelSmall,
-                    modifier = Modifier.align(Alignment.CenterHorizontally)
-                )
+//                // DEBUG: Show the actual video count for debugging
+//                Text(
+//                    text = "($videoCount)",
+//                    color = textColor.copy(alpha = 0.7f),
+//                    style = MaterialTheme.typography.labelSmall,
+//                    modifier = Modifier.align(Alignment.CenterHorizontally)
+//                )
             }
         }
     }
 }
 
 @Composable
-fun <T> CustomChip(
-    text: String,
+private fun PaginatedArtistChip(
+    artist: com.example.jazzlibraryktroomjpcompose.domain.models.Artist,
     isSelected: Boolean,
-    onClick: () -> Unit,
-    data: T,
-    modifier: Modifier = Modifier
+    onPositionMeasured: (Float, Boolean) -> Unit,
+    onClick: () -> Unit
 ) {
+    if (artist.videoCount <= 0) return
+
     val backgroundColor = if (isSelected) {
         MaterialTheme.colorScheme.primaryContainer
     } else {
@@ -764,34 +946,46 @@ fun <T> CustomChip(
         Color.Transparent
     }
 
-    // the weigth of the hilighted selected area/border
-    val borderWidth = if (isSelected) 1.dp else 1.dp
-    //val elevation = if (isSelected) 4.dp else 1.dp
-
     Box(
-        modifier = modifier
+        modifier = Modifier
             .wrapContentWidth()
-            //.shadow(elevation = elevation, shape = RoundedCornerShape(Dimens.chipRoundedCorner))
             .clip(RoundedCornerShape(Dimens.chipRoundedCorner))
             .background(backgroundColor)
             .clickable { onClick() }
             .border(
-                BorderStroke(borderWidth, borderColor),
+                BorderStroke(1.dp, borderColor),
                 RoundedCornerShape(Dimens.chipRoundedCorner)
             )
+            .onGloballyPositioned { coordinates ->
+                // Measure position and pass it up
+                onPositionMeasured(coordinates.positionInParent().y, isSelected)
+            }
     ) {
-        Text(
-            text = text,
-            color = textColor,
-            style = MaterialTheme.typography.bodyMedium,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier
-                .padding(
-                    horizontal = Dimens.chiptextHorizontalPadding,
-                    vertical = Dimens.chiptextVerticalPadding
-                )
-                .align(Alignment.Center)
-        )
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.padding(
+                horizontal = Dimens.chiptextHorizontalPadding,
+                vertical = Dimens.chiptextVerticalPadding
+            )
+        ) {
+            Text(
+                text = artist.fullName,
+                color = textColor,
+                style = MaterialTheme.typography.bodyMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.align(Alignment.CenterHorizontally)
+            )
+
+//            // Show video count if available
+//            if (artist.videoCount >= 0) {
+//                Text(
+//                    text = "(${artist.videoCount})",
+//                    color = textColor.copy(alpha = 0.7f),
+//                    style = MaterialTheme.typography.labelSmall,
+//                    modifier = Modifier.align(Alignment.CenterHorizontally)
+//                )
+//            }
+        }
     }
 }
