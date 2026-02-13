@@ -1,15 +1,11 @@
 package com.example.jazzlibraryktroomjpcompose.ui.main
 
-import android.app.Activity
-import android.content.Context
-import android.content.ContextWrapper
 import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.runtime.*
 import androidx.compose.ui.unit.dp
@@ -20,14 +16,15 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -37,7 +34,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.foundation.layout.Box
 import androidx.compose.material.icons.filled.Fullscreen
-import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.ViewList
 import androidx.compose.material.icons.filled.ViewModule
 import androidx.compose.material3.Text
@@ -47,32 +43,19 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconToggleButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.Snackbar
-import androidx.compose.material3.TopAppBar
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import com.example.jazzlibraryktroomjpcompose.domain.models.Video
 import com.example.jazzlibraryktroomjpcompose.ui.theme.Dimens
-import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material3.*
-import androidx.compose.ui.viewinterop.AndroidView
-import androidx.lifecycle.compose.LocalLifecycleOwner
-import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.YouTubePlayer
-import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.listeners.AbstractYouTubePlayerListener
-import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.views.YouTubePlayerView
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
-import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.utils.YouTubePlayerTracker
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInParent
 
 @Composable
 fun MainScreen(
@@ -230,76 +213,90 @@ fun MainContent(
     onFilterClick: () -> Unit,
     onClearFilters: () -> Unit,
     onRefresh: () -> Unit,
-    // NEW parameters
     isPlayerVisible: Boolean,
     onTogglePlayerVisibility: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+
     Column(
         modifier = modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
             .padding(16.dp)
     ) {
-        // --- Top Bar ---
-        TopAppBar(
-            title = {
-                Text(
-                    text = "Jazz.li",
-                    style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
-                    color = MaterialTheme.colorScheme.primary
-                )
-            },
-            navigationIcon = {
-                IconButton(onClick = onMenuClick) {
-                    Icon(Icons.Default.Menu, contentDescription = "Menu")
-                }
-            },
-            actions = {
-                IconButton(onClick = onRefresh) {
-                    Icon(Icons.Default.Refresh, contentDescription = "Refresh Data")
-                }
-                IconButton(onClick = onFilterClick) {
-                    Icon(Icons.Default.FilterList, contentDescription = "Filters")
-                }
-            }
-        )
+//        // --- Top Bar ---
+//        TopAppBar(
+//            title = {
+//                Text(
+//                    text = "Jazzli",
+//                    style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
+//                    color = MaterialTheme.colorScheme.primary
+//                )
+//            },
+//            navigationIcon = {
+//                IconButton(onClick = onMenuClick) {
+//                    Icon(Icons.Default.Menu, contentDescription = "Menu")
+//                }
+//            },
+//            actions = {
+//                IconButton(onClick = onRefresh) {
+//                    Icon(Icons.Default.Refresh, contentDescription = "Refresh Data")
+//                }
+//                IconButton(onClick = onFilterClick) {
+//                    Icon(Icons.Default.FilterList, contentDescription = "Filters")
+//                }
+//            }
+//        )
+//
+//        Spacer(modifier = Modifier.height(8.dp))
 
-        Spacer(modifier = Modifier.height(8.dp))
 
         // --- Active Filter Chips ---
-        if (filterState.currentFilterPath.isNotEmpty()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            // Clickable Logo Text
+            Text(
+                text = "Jazzli",
+                style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold
+                //fontSize = 32.sp  // Increase this value as needed
+                ),
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier
+                    .clickable { onMenuClick() }
+                    .padding(end = 8.dp)
+                    .align(Alignment.CenterVertically)
+            )
+
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                filterState.currentFilterPath.forEach { filter ->
-                    FilterChip(
-                        selected = true,
-                        onClick = {
-                            viewModel.handleChipSelection(
-                                filter.categoryId,
-                                filter.entityId,
-                                filter.entityName,
-                                false
-                            )
-                        },
-                        label = { Text(filter.entityName) },
-                        trailingIcon = {
-                            Icon(
-                                Icons.Default.Close,
-                                contentDescription = "Remove",
-                                modifier = Modifier.size(16.dp)
-                            )
-                        },
-                        modifier = Modifier.height(32.dp)
-                    )
+
+                if (filterState.currentFilterPath.isNotEmpty()) {
+                    filterState.currentFilterPath.forEach { filter ->
+                        FilterPathChip(
+                            text = filter.entityName,
+                            isSelected = false, //TODO// customisable: true : to make the filter path chips Blue, like got selected at bottom sheet
+                            onClick = {
+                                viewModel.handleChipSelection(
+                                    filter.categoryId,
+                                    filter.entityId,
+                                    filter.entityName,
+                                    false
+                                )
+                            }
+                        )
+                    }
                 }
             }
-            Spacer(modifier = Modifier.height(8.dp))
         }
+        Spacer(modifier = Modifier.height(16.dp))
+
 
         // --- Search Bar ---
         var searchText by remember { mutableStateOf("") }
@@ -309,6 +306,15 @@ fun MainContent(
             modifier = Modifier.fillMaxWidth(),
             placeholder = { Text("Search videos, artists...") },
             leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Search") },
+            trailingIcon = {
+                IconButton(onClick = onFilterClick) {
+                    Icon(
+                        Icons.Default.FilterList,
+                        contentDescription = "Open Filters",
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
+            },
             shape = RoundedCornerShape(12.dp),
             colors = OutlinedTextFieldDefaults.colors(
                 focusedBorderColor = MaterialTheme.colorScheme.primary,
@@ -471,31 +477,31 @@ fun VideoCard(
                         overflow = TextOverflow.Ellipsis
                     )
                     Spacer(modifier = Modifier.height(4.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            Icons.Default.PlayArrow,
-                            contentDescription = "Duration",
-                            modifier = Modifier.size(16.dp),
-                            tint = MaterialTheme.colorScheme.primary
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = video.duration ?: "Unknown",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
+//                    Row(verticalAlignment = Alignment.CenterVertically) {
+//                        Icon(
+//                            Icons.Default.PlayArrow,
+//                            contentDescription = "Duration",
+//                            modifier = Modifier.size(16.dp),
+//                            tint = MaterialTheme.colorScheme.primary
+//                        )
+//                        Spacer(modifier = Modifier.width(4.dp))
+//                        Text(
+//                            text = video.duration ?: "Unknown",
+//                            style = MaterialTheme.typography.bodySmall,
+//                            color = MaterialTheme.colorScheme.onSurfaceVariant
+//                        )
+//                    }
                 }
 
-                Icon(
-                    imageVector = if (expanded || isPlayerVisible)
-                        Icons.Default.ExpandLess
-                    else
-                        Icons.Default.ExpandMore,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(20.dp)
-                )
+//                Icon(
+//                    imageVector = if (expanded || isPlayerVisible)
+//                        Icons.Default.ExpandLess
+//                    else
+//                        Icons.Default.ExpandMore,
+//                    contentDescription = null,
+//                    tint = MaterialTheme.colorScheme.primary,
+//                    modifier = Modifier.size(20.dp)
+//                )
             }
 
             // --- YouTube Player (collapsible) ---
@@ -564,3 +570,60 @@ private fun extractYouTubeVideoId(url: String): String? {
     val regex = Regex(pattern)
     return regex.find(url)?.groupValues?.get(1)
 }
+
+@Composable
+fun FilterPathChip(
+    text: String,
+    isSelected: Boolean,
+    onClick: () -> Unit
+) {
+    val backgroundColor = if (isSelected) {
+        MaterialTheme.colorScheme.primaryContainer
+    } else {
+        MaterialTheme.colorScheme.surfaceVariant
+    }
+
+    val textColor = if (isSelected) {
+        MaterialTheme.colorScheme.onPrimaryContainer
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant
+    }
+
+    val borderColor = if (isSelected) {
+        MaterialTheme.colorScheme.primary
+    } else {
+        Color.Transparent
+    }
+
+    // Use the same border width logic as ChipContent
+    val borderWidth = if (isSelected) 1.dp else 1.dp
+
+        Box(
+            modifier = Modifier
+                .wrapContentWidth()
+                .clip(RoundedCornerShape(Dimens.chipRoundedCorner))
+                .background(backgroundColor)
+                .clickable { onClick() }
+                .border(
+                    BorderStroke(borderWidth, borderColor),
+                    RoundedCornerShape(Dimens.chipRoundedCorner)
+                )
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.padding(
+                    horizontal = Dimens.chiptextHorizontalPadding,
+                    vertical = 6.dp
+                )
+            ) {
+                Text(
+                    text = text,
+                    color = textColor,
+                    style = MaterialTheme.typography.bodyMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.align(Alignment.CenterHorizontally)
+                )
+            }
+        }
+    }
