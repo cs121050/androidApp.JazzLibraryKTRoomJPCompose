@@ -6,6 +6,7 @@ plugins {
     alias(libs.plugins.kotlin.android)       // Apply the Kotlin Android plugin for Kotlin language support
     id("kotlin-kapt")                        // Apply the Kotlin annotation processor plugin for Room
     alias(libs.plugins.dagger.hilt.android)
+    alias(libs.plugins.compose.compiler)
 }
 
 android {
@@ -42,10 +43,9 @@ android {
     }
     buildFeatures {
         compose = true     // Enable Jetpack Compose for UI
-        buildConfig = true // Enable generated BuildConfig class
-    }
-    composeOptions {
-        kotlinCompilerExtensionVersion = libs.versions.composeCompiler.get()  // Use from version catalog
+        // 2. You NO LONGER need buildConfig = true here unless you specifically use it.
+        //    Keep it only if you actually access BuildConfig. Otherwise, remove it.
+        buildConfig = false // Optional: set to false if you don't need it
     }
     packaging {
         resources {
@@ -61,7 +61,6 @@ dependencies {
     implementation(libs.androidx.ui)                          // Compose UI foundational components
     implementation(libs.androidx.ui.graphics)                 // Compose graphics and drawing APIs
     implementation(libs.androidx.ui.tooling.preview)          // Compose preview tooling support
-    implementation(libs.androidx.material.icons.extended)     // Add this
 
     // Material 3
     implementation(libs.androidx.material3)
@@ -94,6 +93,9 @@ dependencies {
     implementation(libs.androidx.lifecycle.livedata.ktx)
     implementation(libs.androidx.lifecycle.viewmodel.compose)  // For Compose integration
     implementation(libs.androidx.lifecycle.runtime.compose)
+
+    //Youtube Video player
+    implementation(libs.android.youtube.player.core)
 
     testImplementation(libs.junit)                           // JUnit 4 for unit tests
     androidTestImplementation(libs.androidx.junit)           // AndroidX JUnit extensions for instrumented tests
