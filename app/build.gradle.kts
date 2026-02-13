@@ -72,7 +72,8 @@ dependencies {
 
     // Room Database
     implementation(libs.androidx.room.runtime)               // Room runtime for database operations
-    implementation(libs.androidx.room.ktx)                   // Room KTX extensions for Coroutines
+    implementation(libs.androidx.room.ktx)
+    implementation(libs.androidx.tools.core)                   // Room KTX extensions for Coroutines
     kapt(libs.androidx.room.compiler)                        // Room annotation processor for code generation
 
     // Coroutines
