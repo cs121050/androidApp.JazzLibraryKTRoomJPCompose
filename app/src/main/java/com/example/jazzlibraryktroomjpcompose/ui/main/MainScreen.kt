@@ -1,6 +1,12 @@
 package com.example.jazzlibraryktroomjpcompose.ui.main
 
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
+import android.content.Intent
+import android.net.Uri
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.filled.Menu
@@ -9,6 +15,11 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -25,6 +36,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.foundation.layout.Box
+import androidx.compose.material.icons.filled.Fullscreen
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.ViewList
+import androidx.compose.material.icons.filled.ViewModule
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.Button
@@ -35,13 +50,29 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconToggleButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.Snackbar
 import androidx.compose.material3.TopAppBar
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextOverflow
+import com.example.jazzlibraryktroomjpcompose.domain.models.Video
 import com.example.jazzlibraryktroomjpcompose.ui.theme.Dimens
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.YouTubePlayer
+import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.listeners.AbstractYouTubePlayerListener
+import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.views.YouTubePlayerView
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.utils.YouTubePlayerTracker
+import androidx.compose.material3.OutlinedTextFieldDefaults
 
 @Composable
 fun MainScreen(
@@ -54,6 +85,8 @@ fun MainScreen(
     // NEW: Snackbar states
     val showError by viewModel.showError.collectAsState()
     val errorMessage by viewModel.errorMessage.collectAsState()
+    // --- State for player visibility (global toggle) ---
+    var isPlayerVisible by remember { mutableStateOf(true) }
 
     val leftDrawerOffset by animateDpAsState(
         targetValue = if (leftDrawerState == DrawerState.OPEN) 0.dp else (-320).dp
@@ -100,16 +133,19 @@ fun MainScreen(
             modifier = Modifier.fillMaxSize()
         ) {
             // MAIN CONTENT
+            // --- MAIN CONTENT (with global player toggle passed) ---
             MainContent(
                 uiState = uiState,
                 filterState = filterState,
                 viewModel = viewModel,
                 onMenuClick = { viewModel.toggleLeftDrawer() },
-                onFilterClick =  { viewModel.toggleBottomSheet() }, // Updated to use toggle
+                onFilterClick = { viewModel.toggleBottomSheet() },
                 onClearFilters = { viewModel.clearAllFilters() },
                 onRefresh = { viewModel.safeRefreshData() },
-                modifier = Modifier
-                    .fillMaxSize()
+                // NEW: global player visibility + toggle callback
+                isPlayerVisible = isPlayerVisible,
+                onTogglePlayerVisibility = { isPlayerVisible = !isPlayerVisible },
+                modifier = Modifier.fillMaxSize()
             )
 
             // LEFT DRAWER
@@ -193,16 +229,19 @@ fun MainContent(
     onMenuClick: () -> Unit,
     onFilterClick: () -> Unit,
     onClearFilters: () -> Unit,
-    onRefresh: () -> Unit, // NEW: Refresh callback
+    onRefresh: () -> Unit,
+    // NEW parameters
+    isPlayerVisible: Boolean,
+    onTogglePlayerVisibility: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Column(
         modifier = modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
-            .padding(Dimens.largePadding)
+            .padding(16.dp)
     ) {
-        // Top Bar
+        // --- Top Bar ---
         TopAppBar(
             title = {
                 Text(
@@ -217,32 +256,29 @@ fun MainContent(
                 }
             },
             actions = {
-                // Refresh button
                 IconButton(onClick = onRefresh) {
                     Icon(Icons.Default.Refresh, contentDescription = "Refresh Data")
                 }
-                // Filter button
                 IconButton(onClick = onFilterClick) {
                     Icon(Icons.Default.FilterList, contentDescription = "Filters")
                 }
             }
         )
 
-        Spacer(modifier = Modifier.height(Dimens.commonSpacing))
+        Spacer(modifier = Modifier.height(8.dp))
 
-        // Filter Path Chips (Active Filters)
+        // --- Active Filter Chips ---
         if (filterState.currentFilterPath.isNotEmpty()) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(Dimens.parthChipSpacing)
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 filterState.currentFilterPath.forEach { filter ->
                     FilterChip(
                         selected = true,
                         onClick = {
-                            // Now we can access viewModel
                             viewModel.handleChipSelection(
                                 filter.categoryId,
                                 filter.entityId,
@@ -250,25 +286,22 @@ fun MainContent(
                                 false
                             )
                         },
-                        label = {
-                            Text(filter.entityName)
-                        },
+                        label = { Text(filter.entityName) },
                         trailingIcon = {
-                            Icon(Icons.Default.Close, contentDescription = "Remove", modifier = Modifier.size(16.dp))
+                            Icon(
+                                Icons.Default.Close,
+                                contentDescription = "Remove",
+                                modifier = Modifier.size(16.dp)
+                            )
                         },
-                        modifier = Modifier.height(Dimens.pathChipHeight)
+                        modifier = Modifier.height(32.dp)
                     )
                 }
-
-//                // Clear All Button
-//                TextButton(onClick = onClearFilters) {
-//                    Text("Clear All")
-//                }
             }
-            Spacer(modifier = Modifier.height(Dimens.commonSpacing)) //spacing between searchbar and filterpath bar
+            Spacer(modifier = Modifier.height(8.dp))
         }
 
-        // Search Bar
+        // --- Search Bar ---
         var searchText by remember { mutableStateOf("") }
         OutlinedTextField(
             value = searchText,
@@ -277,37 +310,57 @@ fun MainContent(
             placeholder = { Text("Search videos, artists...") },
             leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Search") },
             shape = RoundedCornerShape(12.dp),
-            colors = TextFieldDefaults.outlinedTextFieldColors(
+            colors = OutlinedTextFieldDefaults.colors(
                 focusedBorderColor = MaterialTheme.colorScheme.primary,
                 unfocusedBorderColor = MaterialTheme.colorScheme.outline
             )
         )
 
-        Spacer(modifier = Modifier.height(Dimens.largeSpacing))
+        Spacer(modifier = Modifier.height(16.dp))
 
-        // Data Stats
-        // FIX: Use the same logic as videosToShow to determine which count to display
+        // --- Data Stats Row with List Toggle Icon ---
         val videosToShow = if (filterState.currentFilterPath.isEmpty()) {
             uiState.videos
         } else {
             uiState.filteredVideos
         }
 
-        // Data Stats
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = "Videos (${videosToShow.size})", // Use videosToShow.size here too!
+                text = "Videos (${videosToShow.size})",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold
             )
+
+            // 🔁 NEW: IconToggleButton for global player visibility
+            IconToggleButton(
+                checked = isPlayerVisible,
+                onCheckedChange = { onTogglePlayerVisibility() }
+            ) {
+                Icon(
+                    imageVector = if (isPlayerVisible)
+                        Icons.Default.ViewList
+                    else
+                        Icons.Default.ViewModule,
+                    contentDescription = if (isPlayerVisible)
+                        "hide players"
+                    else
+                        "Show players",
+                    tint = if (isPlayerVisible)
+                        MaterialTheme.colorScheme.primary
+                    else
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
 
-        Spacer(modifier = Modifier.height(Dimens.largeSpacing))
+        Spacer(modifier = Modifier.height(16.dp))
 
-        // Videos List
+        // --- Videos List ---
         if (filterState.isFiltering) {
             Box(
                 modifier = Modifier.fillMaxSize(),
@@ -318,12 +371,11 @@ fun MainContent(
                     verticalArrangement = Arrangement.Center
                 ) {
                     CircularProgressIndicator()
-                    Spacer(modifier = Modifier.height(Dimens.commonSpacing))
+                    Spacer(modifier = Modifier.height(8.dp))
                     Text("Applying filters...")
                 }
             }
         } else {
-
             if (videosToShow.isEmpty()) {
                 Box(
                     modifier = Modifier.fillMaxSize(),
@@ -334,21 +386,27 @@ fun MainContent(
                         verticalArrangement = Arrangement.Center
                     ) {
                         Text(
-                            text = if (uiState.videos.isEmpty()) "No videos in library" else "No videos found",
+                            text = if (uiState.videos.isEmpty())
+                                "No videos in library"
+                            else
+                                "No videos found",
                             style = MaterialTheme.typography.bodyLarge,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                        Spacer(modifier = Modifier.height(Dimens.commonSpacing))
+                        Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = if (uiState.videos.isEmpty()) "Try refreshing data" else "Try changing your filters",
+                            text = if (uiState.videos.isEmpty())
+                                "Try refreshing data"
+                            else
+                                "Try changing your filters",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.outline
                         )
                         if (uiState.videos.isEmpty()) {
-                            Spacer(modifier = Modifier.height(Dimens.largeSpacing))
+                            Spacer(modifier = Modifier.height(16.dp))
                             Button(onClick = onRefresh) {
                                 Icon(Icons.Default.Refresh, contentDescription = "Refresh")
-                                Spacer(modifier = Modifier.width(Dimens.commonSpacing))
+                                Spacer(modifier = Modifier.width(8.dp))
                                 Text("Load Data")
                             }
                         }
@@ -357,10 +415,14 @@ fun MainContent(
             } else {
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
-                    verticalArrangement = Arrangement.spacedBy(Dimens.largeSpacing)
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
                     items(videosToShow) { video ->
-                        VideoCard(video = video)
+                        // 🔁 Pass only isPlayerVisible – no per‑card toggle callback
+                        VideoCard(
+                            video = video,
+                            isPlayerVisible = isPlayerVisible
+                        )
                     }
                 }
             }
@@ -370,102 +432,135 @@ fun MainContent(
 
 @Composable
 fun VideoCard(
-    video: com.example.jazzlibraryktroomjpcompose.domain.models.Video
+    video: Video,
+    isPlayerVisible: Boolean,
+    modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
+
+    var expanded by remember { mutableStateOf(false) }
+
+    val videoId = remember(video.path) {
+        extractYouTubeVideoId(video.path)
+    }
+
     Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { /* Handle video click */ },
+        modifier = modifier.fillMaxWidth(),
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant
-        )
+        shape = RoundedCornerShape(12.dp)
     ) {
         Column(
-            modifier = Modifier.padding(Dimens.largePadding)
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
         ) {
+            // --- Video info row ---
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { expanded = !expanded },
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column(
-                    modifier = Modifier.weight(1f)
-                ) {
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = video.name,
-                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-                        maxLines = 2
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
                     )
-                    Spacer(modifier = Modifier.height(Dimens.smallSpacing))
-                    Text(
-                        text = video.path ?: "No location",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            Icons.Default.PlayArrow,
+                            contentDescription = "Duration",
+                            modifier = Modifier.size(16.dp),
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = video.duration ?: "Unknown",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
 
-                // Pin button
-                IconButton(
-                    onClick = { /* Handle pin/unpin */ },
-                    modifier = Modifier.size(24.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.FilterList, // Placeholder - change to pin icon
-                        contentDescription = "Pin video",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
+                Icon(
+                    imageVector = if (expanded || isPlayerVisible)
+                        Icons.Default.ExpandLess
+                    else
+                        Icons.Default.ExpandMore,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(20.dp)
+                )
             }
 
-            Spacer(modifier = Modifier.height(Dimens.midSpacing))
-
-            // Placeholder for YouTubePlayerView
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(180.dp)
-                    .clip(RoundedCornerShape(Dimens.chipRoundedCorner))
-                    .background(Color.DarkGray.copy(alpha = 0.8f)),
-                contentAlignment = Alignment.Center
+            // --- YouTube Player (collapsible) ---
+            AnimatedVisibility(
+                visible = isPlayerVisible || expanded,
+                enter = fadeIn() + expandVertically(expandFrom = Alignment.Top, animationSpec = tween(300)),
+                exit  = fadeOut() + shrinkVertically(shrinkTowards = Alignment.Top, animationSpec = tween(300))
             ) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center
-                ) {
-                    Text(
-                        text = "YouTube Player",
-                        color = Color.White,
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                    Spacer(modifier = Modifier.height(Dimens.commonSpacing))
-                    Text(
-                        text = video.duration,
-                        color = Color.White.copy(alpha = 0.8f),
-                        style = MaterialTheme.typography.bodySmall
-                    )
+                Column {
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(200.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(MaterialTheme.colorScheme.surfaceVariant)
+                    ) {
+                        if (videoId != null) {
+                            YoutubeVideoPlayer(
+                                videoId = videoId,
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        } else {
+                            Box(
+                                modifier = Modifier.fillMaxSize(),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = "Invalid video URL",
+                                    color = MaterialTheme.colorScheme.error
+                                )
+                            }
+                        }
+
+                        // --- Fullscreen button (opens YouTube app) ---
+                        IconButton(
+                            onClick = {
+                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(video.path))
+                                context.startActivity(intent)
+                            },
+                            modifier = Modifier
+                                .align(Alignment.BottomEnd)
+                                .padding(8.dp)
+                                .size(48.dp)
+                                .background(
+                                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.7f),
+                                    shape = RoundedCornerShape(24.dp)
+                                )
+                        ) {
+                            Icon(
+                                Icons.Default.Fullscreen,
+                                contentDescription = "Open in YouTube app",
+                                tint = Color.White
+                            )
+                        }
+                    }
                 }
-            }
-
-            Spacer(modifier = Modifier.height(Dimens.midSpacing))
-
-            // Video metadata
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text(
-                    text = "Duration: ${video.duration}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.outline
-                )
-
-                Text(
-                    text = "Available: ${video.availability}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.outline
-                )
             }
         }
     }
+}
+
+private fun extractYouTubeVideoId(url: String): String? {
+    val pattern = "(?:youtube\\.com\\/watch\\?v=|youtu\\.be\\/|youtube\\.com\\/embed\\/)([a-zA-Z0-9_-]{11})"
+    val regex = Regex(pattern)
+    return regex.find(url)?.groupValues?.get(1)
 }
