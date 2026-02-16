@@ -98,6 +98,11 @@ dependencies {
     //Youtube Video player
     implementation(libs.android.youtube.player.core)
 
+    // ===== Accompanist ======
+    //allows easy colloring of  the status bar and more
+    //implementation(libs.accompanist.systemuicontroller)
+
+
     testImplementation(libs.junit)                           // JUnit 4 for unit tests
     androidTestImplementation(libs.androidx.junit)           // AndroidX JUnit extensions for instrumented tests
     androidTestImplementation(libs.androidx.espresso.core)   // Espresso for UI tests
@@ -105,6 +110,7 @@ dependencies {
     androidTestImplementation(libs.androidx.ui.test.junit4)  // Compose UI testing JUnit 4 integration
     debugImplementation(libs.androidx.ui.tooling)            // Compose tooling for debug builds
     debugImplementation(libs.androidx.ui.test.manifest)      // Test manifest for Compose UI tests in debug
+
 
 
 }

@@ -25,7 +25,7 @@ navigationCompose = "2.7.7"
 android-youtube-player = "13.0.0"   # Check for latest
 androidx-lifecycle = "2.7.0"
 toolsCore = "1.0.0-alpha14"
-
+accompanist = "0.35.0-alpha"
 
 [libraries]
 # This table defines library dependencies referenced by alias, specifying group, name, and version reference.
@@ -69,8 +69,8 @@ hilt-android = { group = "com.google.dagger", name = "hilt-android", version.ref
 hilt-compiler = { group = "com.google.dagger", name = "hilt-compiler", version.ref = "hilt" }
 hilt-navigation-compose = { group = "androidx.hilt", name = "hilt-navigation-compose", version.ref = "hiltNavigationCompose" }
 
-#acompanis
-
+#acompanist
+accompanist-systemuicontroller = { group = "com.google.accompanist", name = "accompanist-systemuicontroller", version.ref = "accompanist" }
 # Retrofit & Networking
 retrofit = { group = "com.squareup.retrofit2", name = "retrofit", version.ref = "retrofit" }
 retrofit-converter-gson = { group = "com.squareup.retrofit2", name = "converter-gson", version.ref = "retrofit" }
