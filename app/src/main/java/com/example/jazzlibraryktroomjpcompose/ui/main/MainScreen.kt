@@ -1,6 +1,7 @@
 package com.example.jazzlibraryktroomjpcompose.ui.main
 
 import android.content.Intent
+import android.health.connect.datatypes.units.Velocity
 import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
@@ -56,11 +57,35 @@ import com.example.jazzlibraryktroomjpcompose.ui.theme.Dimens
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInParent
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberTopAppBarState
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.material3.TopAppBarScrollBehavior
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.IntOffset
+import com.example.jazzlibraryktroomjpcompose.domain.models.FilterPath
+import kotlin.math.roundToInt
+import android.os.Build
+import androidx.compose.runtime.*
+import androidx.compose.ui.platform.LocalContext
+import androidx.core.view.WindowCompat
+import androidx.activity.ComponentActivity
+import androidx.compose.runtime.*
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.platform.LocalContext
 
 @Composable
 fun MainScreen(
     viewModel: MainViewModel = hiltViewModel()
 ) {
+    SetStatusBarColor(MaterialTheme.colorScheme.background)
+    SetNavigationBarColor(MaterialTheme.colorScheme.background)
+
     val uiState by viewModel.uiState.collectAsState()
     val filterState by viewModel.filterState.collectAsState()
     val leftDrawerState by viewModel.leftDrawerState.collectAsState()
@@ -128,7 +153,7 @@ fun MainScreen(
                 // NEW: global player visibility + toggle callback
                 isPlayerVisible = isPlayerVisible,
                 onTogglePlayerVisibility = { isPlayerVisible = !isPlayerVisible },
-                modifier = Modifier.fillMaxSize()
+                modifier = Modifier.fillMaxSize().padding(horizontal = 8.dp)
             )
 
             // LEFT DRAWER
@@ -217,224 +242,402 @@ fun MainContent(
     onTogglePlayerVisibility: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    // Heights of the two top elements
+    val chipsHeightPx = remember { mutableIntStateOf(0) }
+    val toolbarHeightPx = remember { mutableIntStateOf(0) }
 
-    Column(
+    // Vertical offset of the toolbar (0 = fully visible, negative = hidden)
+    val toolbarOffset = remember { mutableFloatStateOf(0f) }
+
+    // Nested scroll connection to update toolbar offset based on list scroll
+    val nestedScrollConnection = remember {
+        object : NestedScrollConnection {
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                val delta = available.y
+                // Calculate new offset, clamped between -fullHeight and 0
+                val newOffset = (toolbarOffset.floatValue + delta)
+                    .coerceIn(-toolbarHeightPx.intValue.toFloat(), 0f)
+                val consumed = newOffset - toolbarOffset.floatValue
+                toolbarOffset.floatValue = newOffset
+                // Consume the vertical scroll used to move the toolbar
+                return Offset(0f, consumed)
+            }
+        }
+    }
+
+    val videosToShow = if (filterState.currentFilterPath.isEmpty()) {
+        uiState.videos
+    } else {
+        uiState.filteredVideos
+    }
+
+    Box(
         modifier = modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
-            .padding(16.dp)
+            // Attach scroll connection to receive scroll events from the list
+            .nestedScroll(nestedScrollConnection)
     ) {
-//        // --- Top Bar ---
-//        TopAppBar(
-//            title = {
-//                Text(
-//                    text = "Jazzli",
-//                    style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
-//                    color = MaterialTheme.colorScheme.primary
-//                )
-//            },
-//            navigationIcon = {
-//                IconButton(onClick = onMenuClick) {
-//                    Icon(Icons.Default.Menu, contentDescription = "Menu")
-//                }
-//            },
-//            actions = {
-//                IconButton(onClick = onRefresh) {
-//                    Icon(Icons.Default.Refresh, contentDescription = "Refresh Data")
-//                }
-//                IconButton(onClick = onFilterClick) {
-//                    Icon(Icons.Default.FilterList, contentDescription = "Filters")
-//                }
-//            }
-//        )
-//
-//        Spacer(modifier = Modifier.height(8.dp))
-
-
-        // --- Active Filter Chips ---
-        Row(
+        // --- Video list (lowest z‑order) ---
+        // It fills the whole area but is shifted down by the space occupied
+        // by the fixed chips row and the (possibly hidden) toolbar.
+        Box(
             modifier = Modifier
-                .fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            // Clickable Logo Text
-            Text(
-                text = "Jazzli",
-                style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold
-                //fontSize = 32.sp  // Increase this value as needed
-                ),
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier
-                    .clickable { onMenuClick() }
-                    .padding(end = 8.dp)
-                    .align(Alignment.CenterVertically)
-            )
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-
-                if (filterState.currentFilterPath.isNotEmpty()) {
-                    filterState.currentFilterPath.forEach { filter ->
-                        FilterPathChip(
-                            text = filter.entityName,
-                            isSelected = false, //TODO// customisable: true : to make the filter path chips Blue, like got selected at bottom sheet
-                            onClick = {
-                                viewModel.handleChipSelection(
-                                    filter.categoryId,
-                                    filter.entityId,
-                                    filter.entityName,
-                                    false
-                                )
-                            }
-                        )
+                .fillMaxSize()
+                .padding(
+                    top = with(LocalDensity.current) {
+                        // Visible top space = chips height + visible part of toolbar
+                        (chipsHeightPx.intValue +
+                                (toolbarHeightPx.intValue + toolbarOffset.floatValue)
+                                    .coerceAtLeast(0f))
+                            .toDp()
                     }
-                }
-            }
-        }
-        Spacer(modifier = Modifier.height(16.dp))
-
-
-        // --- Search Bar ---
-        var searchText by remember { mutableStateOf("") }
-        OutlinedTextField(
-            value = searchText,
-            onValueChange = { searchText = it },
-            modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text("Search videos, artists...") },
-            leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Search") },
-            trailingIcon = {
-                IconButton(onClick = onFilterClick) {
-                    Icon(
-                        Icons.Default.FilterList,
-                        contentDescription = "Open Filters",
-                        tint = MaterialTheme.colorScheme.primary
-                    )
-                }
-            },
-            shape = RoundedCornerShape(12.dp),
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor = MaterialTheme.colorScheme.primary,
-                unfocusedBorderColor = MaterialTheme.colorScheme.outline
+                )
+        ) {
+            VideoListContent(
+                uiState = uiState,
+                filterState = filterState,
+                videosToShow = videosToShow,
+                isPlayerVisible = isPlayerVisible,
+                onRefresh = onRefresh
             )
+        }
+
+        // --- Toolbar column (scrolls away) ---
+        // This column contains the spacer and the toolbar box.
+        // It is placed above the video list but below the fixed chips row.
+        Column(
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .fillMaxWidth()
+                // Measure its full height (spacer + toolbar)
+                .onGloballyPositioned { coordinates ->
+                    toolbarHeightPx.intValue = coordinates.size.height
+                }
+                // Apply vertical offset based on scroll
+                //make sure  the 'toolbarbox' starts right under the 'ActiveFilterChipsRow'
+                .offset { IntOffset(0, (chipsHeightPx.intValue + toolbarOffset.floatValue).roundToInt()) }                .background(MaterialTheme.colorScheme.background)
+        ) {
+
+            toolbarBox(
+                onFilterClick = onFilterClick,
+                videoCount = videosToShow.size,
+                isPlayerVisible = isPlayerVisible,
+                onTogglePlayerVisibility = onTogglePlayerVisibility
+            )
+        }
+
+        // --- Fixed chips row (always visible, highest z‑order) ---
+        // This row stays at the top regardless of scrolling.
+        ActiveFilterChipsRow(
+            filterPath = filterState.currentFilterPath,
+            onMenuClick = onMenuClick,
+            onChipClick = { categoryId, entityId, entityName ->
+                viewModel.handleChipSelection(categoryId, entityId, entityName, false)
+            },
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .fillMaxWidth()
+                // Measure its height to compute the top padding for the list
+                .onGloballyPositioned { coordinates ->
+                    chipsHeightPx.intValue = coordinates.size.height
+                }
+                .background(MaterialTheme.colorScheme.background)
+        )
+    }
+}
+
+@Composable
+fun toolbarBox(
+    onFilterClick: () -> Unit,
+    videoCount: Int,
+    isPlayerVisible: Boolean,
+    onTogglePlayerVisibility: () -> Unit
+) {
+    SearchBar(
+        onFilterClick = onFilterClick,
+        modifier = Modifier.fillMaxWidth()
+            .padding(top = 4.dp)
+    )
+    //Spacer(modifier = Modifier.height(16.dp))
+    VideoStatsRow(
+        videoCount = videoCount,
+        isPlayerVisible = isPlayerVisible,
+        onTogglePlayerVisibility = onTogglePlayerVisibility,
+        modifier = Modifier.fillMaxWidth()
+    )
+}
+
+@Composable
+fun ActiveFilterChipsRow(
+    filterPath: List<FilterPath>,  // Use your actual type here
+    onMenuClick: () -> Unit,
+    onChipClick: (categoryId: Int, entityId: Int, entityName: String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        // Clickable Logo Text
+        Text(
+            text = "Jazzli",
+            style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier
+                .clickable { onMenuClick() }
+                .padding(end = 16.dp)
+                .align(Alignment.CenterVertically)
         )
 
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // --- Data Stats Row with List Toggle Icon ---
-        val videosToShow = if (filterState.currentFilterPath.isEmpty()) {
-            uiState.videos
-        } else {
-            uiState.filteredVideos
-        }
-
+        // Horizontally scrolling chips
         Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 4.dp)
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Text(
-                text = "Videos (${videosToShow.size})",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold
-            )
-
-            // 🔁 NEW: IconToggleButton for global player visibility
-            IconToggleButton(
-                checked = isPlayerVisible,
-                onCheckedChange = { onTogglePlayerVisibility() }
-            ) {
-                Icon(
-                    imageVector = if (isPlayerVisible)
-                        Icons.Default.ViewList
-                    else
-                        Icons.Default.ViewModule,
-                    contentDescription = if (isPlayerVisible)
-                        "hide players"
-                    else
-                        "Show players",
-                    tint = if (isPlayerVisible)
-                        MaterialTheme.colorScheme.primary
-                    else
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                )
+            if (filterPath.isNotEmpty()) {
+                filterPath.forEach { filter ->
+                    FilterPathChip(
+                        text = filter.entityName,
+                        isSelected = false,  // always false – chips are not "selected", just showing applied filters
+                        onClick = {
+                            onChipClick(filter.categoryId, filter.entityId, filter.entityName)
+                        }
+                    )
+                }
             }
         }
+    }
+}
 
-        Spacer(modifier = Modifier.height(16.dp))
+@Composable
+fun VideoStatsRow(
+    videoCount: Int,
+    isPlayerVisible: Boolean,
+    onTogglePlayerVisibility: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = "Videos ($videoCount)",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold
+        )
 
-        // --- Videos List ---
-        if (filterState.isFiltering) {
+        // IconToggleButton for global player visibility
+        IconToggleButton(
+            checked = isPlayerVisible,
+            onCheckedChange = { onTogglePlayerVisibility() }
+        ) {
+            Icon(
+                imageVector = if (isPlayerVisible)
+                    Icons.Default.ViewList
+                else
+                    Icons.Default.ViewModule,
+                contentDescription = if (isPlayerVisible)
+                    "Hide players"
+                else
+                    "Show players",
+                tint = if (isPlayerVisible)
+                    MaterialTheme.colorScheme.primary
+                else
+                    MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun TopBar(
+    onMenuClick: () -> Unit,
+    onRefresh: () -> Unit,
+    onFilterClick: () -> Unit,
+    scrollBehavior: TopAppBarScrollBehavior, // Add this parameter
+    modifier: Modifier = Modifier
+) {
+    TopAppBar(
+        title = {
+            Text(
+                text = "Jazzli",
+                style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
+                color = MaterialTheme.colorScheme.primary
+            )
+        },
+        navigationIcon = {
+            IconButton(onClick = onMenuClick) {
+                Icon(Icons.Default.Menu, contentDescription = "Menu")
+            }
+        },
+        actions = {
+            IconButton(onClick = onRefresh) {
+                Icon(Icons.Default.Refresh, contentDescription = "Refresh Data")
+            }
+            IconButton(onClick = onFilterClick) {
+                Icon(Icons.Default.FilterList, contentDescription = "Filters")
+            }
+        },
+        scrollBehavior = scrollBehavior, // Pass scroll behavior to TopAppBar
+        modifier = modifier
+    )
+}
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SearchTopBar(
+    videoCount: Int,
+    onMenuClick: () -> Unit,
+    onRefresh: () -> Unit,
+    onFilterClick: () -> Unit,
+    scrollBehavior: TopAppBarScrollBehavior,
+    modifier: Modifier = Modifier,
+    isPlayerVisible: Boolean,
+    onTogglePlayerVisibility: () -> Unit,
+) {
+    TopAppBar(
+        title = {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.background)
+                    // No nestedScroll here – scrollBehavior is already on TopAppBar
+                    .padding(16.dp) // Consider using windowInsets if needed
+            ) {
+                SearchBar(
+                    onFilterClick = onFilterClick,
+                    modifier = Modifier.weight(1f)
+                )
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                VideoStatsRow(
+                    videoCount = videoCount,
+                    isPlayerVisible = isPlayerVisible,
+                    onTogglePlayerVisibility = onTogglePlayerVisibility,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp)
+                        .padding(bottom = 8.dp)
+                )
+            }
+        },
+        scrollBehavior = scrollBehavior,
+        modifier = modifier // outer modifier for TopAppBar itself
+    )
+}
+
+@Composable
+private fun SearchBar(
+    onFilterClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var searchText by remember { mutableStateOf("") }
+    OutlinedTextField(
+        value = searchText,
+        onValueChange = { searchText = it },
+        modifier = modifier,
+        placeholder = { Text("Search videos, artists...") },
+        leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Search") },
+        trailingIcon = {
+            IconButton(onClick = onFilterClick) {
+                Icon(
+                    Icons.Default.FilterList,
+                    contentDescription = "Open Filters",
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            }
+        },
+        shape = RoundedCornerShape(12.dp),
+        colors = OutlinedTextFieldDefaults.colors(
+            focusedBorderColor = MaterialTheme.colorScheme.primary,
+            unfocusedBorderColor = MaterialTheme.colorScheme.outline
+        )
+    )
+}
+
+@Composable
+private fun VideoListContent(
+    uiState: MainUiState,
+    filterState: FilterState,
+    videosToShow: List<Video>,
+    isPlayerVisible: Boolean,
+    onRefresh: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    if (filterState.isFiltering) {
+        Box(
+            modifier = modifier,
+            contentAlignment = Alignment.Center
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                CircularProgressIndicator()
+                Spacer(modifier = Modifier.height(8.dp))
+                Text("Applying filters...")
+            }
+        }
+    } else {
+        if (videosToShow.isEmpty()) {
             Box(
-                modifier = Modifier.fillMaxSize(),
+                modifier = modifier,
                 contentAlignment = Alignment.Center
             ) {
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center
                 ) {
-                    CircularProgressIndicator()
+                    Text(
+                        text = if (uiState.videos.isEmpty())
+                            "No videos in library"
+                        else
+                            "No videos found",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                     Spacer(modifier = Modifier.height(8.dp))
-                    Text("Applying filters...")
-                }
-            }
-        } else {
-            if (videosToShow.isEmpty()) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center
-                    ) {
-                        Text(
-                            text = if (uiState.videos.isEmpty())
-                                "No videos in library"
-                            else
-                                "No videos found",
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = if (uiState.videos.isEmpty())
-                                "Try refreshing data"
-                            else
-                                "Try changing your filters",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.outline
-                        )
-                        if (uiState.videos.isEmpty()) {
-                            Spacer(modifier = Modifier.height(16.dp))
-                            Button(onClick = onRefresh) {
-                                Icon(Icons.Default.Refresh, contentDescription = "Refresh")
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text("Load Data")
-                            }
+                    Text(
+                        text = if (uiState.videos.isEmpty())
+                            "Try refreshing data"
+                        else
+                            "Try changing your filters",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.outline
+                    )
+                    if (uiState.videos.isEmpty()) {
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Button(onClick = onRefresh) {
+                            Icon(Icons.Default.Refresh, contentDescription = "Refresh")
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Load Data")
                         }
                     }
                 }
-            } else {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    items(videosToShow) { video ->
-                        // 🔁 Pass only isPlayerVisible – no per‑card toggle callback
-                        VideoCard(
-                            video = video,
-                            isPlayerVisible = isPlayerVisible
-                        )
-                    }
+            }
+        } else {
+            LazyColumn(
+                modifier = modifier,
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                items(videosToShow) { video ->
+                    // 🔁 Pass only isPlayerVisible – no per‑card toggle callback
+                    VideoCard(
+                        video = video,
+                        isPlayerVisible = isPlayerVisible
+                    )
                 }
             }
         }
     }
 }
+
 
 @Composable
 fun VideoCard(
@@ -627,3 +830,30 @@ fun FilterPathChip(
             }
         }
     }
+
+@Composable
+fun SetStatusBarColor(color: Color) {
+    val context = LocalContext.current
+    val window = (context as? ComponentActivity)?.window
+
+    DisposableEffect(window, color) {
+        if (window != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            // setStatusBarColor is NOT deprecated – it's a stable API since Lollipop
+            window.setStatusBarColor(color.toArgb())
+        }
+        onDispose { } // Required by DisposableEffect, but we don't need to restore
+    }
+}
+
+@Composable
+fun SetNavigationBarColor(color: Color) {
+    val context = LocalContext.current
+    val window = (context as? ComponentActivity)?.window
+
+    DisposableEffect(window, color) {
+        if (window != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            window.setNavigationBarColor(color.toArgb())
+        }
+        onDispose { }
+    }
+}
