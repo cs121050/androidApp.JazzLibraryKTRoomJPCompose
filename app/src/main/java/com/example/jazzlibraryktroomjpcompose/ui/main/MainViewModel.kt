@@ -8,7 +8,10 @@ import com.example.jazzlibraryktroomjpcompose.domain.models.FilterPath
 import com.example.jazzlibraryktroomjpcompose.data.local.db.JazzDatabase
 import com.example.jazzlibraryktroomjpcompose.data.mappers.*
 import com.example.jazzlibraryktroomjpcompose.data.repository.JazzRepositoryImpl
+import com.example.jazzlibraryktroomjpcompose.ui.settings.SettingsRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -17,7 +20,8 @@ import javax.inject.Inject
 class MainViewModel @Inject constructor(
     private val database: JazzDatabase,
     private val filterManager: FilterManager,
-    private val jazzRepository: JazzRepositoryImpl
+    private val jazzRepository: JazzRepositoryImpl,
+    private val settingsRepository: SettingsRepository
 ) : ViewModel() {
 
     // UI State
@@ -49,6 +53,13 @@ class MainViewModel @Inject constructor(
 
     private val _errorMessage = MutableStateFlow<String?>(null)
     val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
+
+    private val refreshTrigger = MutableStateFlow(0)
+
+    private val _isRefreshing = MutableStateFlow(false)
+    val isRefreshing: StateFlow<Boolean> = _isRefreshing.asStateFlow()
+
+    private var filterJob: Job? = null
 
     init {
         checkAndLoadData()
@@ -110,7 +121,7 @@ class MainViewModel @Inject constructor(
         }
     }
 
-    fun safeRefreshData() {
+    fun safeRefreshDataFromAPI() {
         viewModelScope.launch {
             _loadingState.value = LoadingState.LOADING
 
@@ -180,12 +191,18 @@ class MainViewModel @Inject constructor(
             // Launch separate coroutines for each data type to collect concurrently
             val jobs = listOf(
                 launch {
-                    database.videoDao().getAllVideos()
-                        .map { entities -> entities.map { VideoMapper.toDomain(it) } }
-                        .collect { videos ->
-                            _uiState.update { it.copy(videos = videos) }
-                            println("DEBUG: Loaded ${videos.size} videos")
-                        }
+                    combine(
+                        database.videoDao().getAllVideos()
+                            .map { entities -> entities.map { VideoMapper.toDomain(it) } },
+                        settingsRepository.randomiseVideoList,
+                        refreshTrigger   // <-- new
+                    ) { videos, shouldRandomise, _ ->
+                        // The third parameter is the trigger – we ignore its value,
+                        // but its emission causes the lambda to run again.
+                        if (shouldRandomise) videos.shuffled() else videos
+                    }.collect { randomisedVideos ->
+                        _uiState.update { it.copy(videos = randomisedVideos) }
+                    }
                 },
                 launch {
                     database.instrumentDao().getAllInstrumentsWithArtistCount()
@@ -252,40 +269,49 @@ class MainViewModel @Inject constructor(
                     if (filterPaths.isNotEmpty()) {
                         applyFiltersFromPath(filterPaths)
                     }
+//                    else{
+//                        // FIX: If path is empty, explicitly clear the filtered UI state
+//                        _uiState.update { it.copy(filteredVideos = it.videos) }
+//                        _filterState.update { it.copy(isFiltering = false) }
+//                    }
                 }
         }
     }
 
     private fun applyFiltersFromPath(filterPaths: List<FilterPath>) {
-        viewModelScope.launch {
-            // Show filtering indicator in UI (not API loading)
+        // Cancel previous job to avoid multiple collectors
+        filterJob?.cancel()
+        filterJob = viewModelScope.launch {
             _filterState.update { it.copy(isFiltering = true) }
 
-            filterManager.getFilteredDataFlow(filterPaths)
-                .collect { filteredData ->
-                    _uiState.update { uiState ->
-                        uiState.copy(
-                            filteredVideos = filteredData.videos,
-                            availableArtists = filteredData.artists,
-                            availableInstruments = filteredData.instruments,
-                            availableDurations = filteredData.durations,
-                            availableTypes = filteredData.types
-                        )
-                    }
+            combine(
+                filterManager.getFilteredDataFlow(filterPaths),
+                settingsRepository.randomiseVideoList,
+                refreshTrigger
+            ) { filteredData, shouldRandomise, _ ->
+                filteredData to shouldRandomise
+            }.collect { (filteredData, shouldRandomise) ->
+                val finalVideos = if (shouldRandomise) filteredData.videos.shuffled() else filteredData.videos
 
-                    _filterState.update { filterState ->
-                        filterState.copy(
-                            currentFilterPath = filteredData.filterPath,
-                            isFiltering = false
-                        )
-                    }
-
-                    println("=== Filtered Videos (${filteredData.videos.size}) ===")
-                    filteredData.videos.forEach { video ->
-                        println("- ${video.name}")
-                    }
-                    println("=============================")
+                _uiState.update { uiState ->
+                    uiState.copy(
+                        filteredVideos = finalVideos,
+                        availableArtists = filteredData.artists,
+                        availableInstruments = filteredData.instruments,
+                        availableDurations = filteredData.durations,
+                        availableTypes = filteredData.types
+                    )
                 }
+
+                _filterState.update { filterState ->
+                    filterState.copy(
+                        currentFilterPath = filteredData.filterPath,
+                        isFiltering = false
+                    )
+                }
+
+                // Optional logging
+            }
         }
     }
 
@@ -336,7 +362,11 @@ class MainViewModel @Inject constructor(
 
     private fun clearFilters() {
         viewModelScope.launch {
+            // 1. Clear the Database
             database.filterPathDao().deleteAllFilterPaths()
+            // 2. Stop any active filtering job immediately
+            filterJob?.cancel()
+            // 3. Reset the Filter State in memory
             _filterState.update {
                 it.copy(
                     currentFilterPath = emptyList(),
@@ -387,6 +417,18 @@ class MainViewModel @Inject constructor(
             clearFilters()
         }
     }
+
+    fun shuffleVideoList() {
+        viewModelScope.launch {
+            _isRefreshing.value = true
+            refreshTrigger.value += 1  // this is your existing trigger
+            // Simulate a tiny delay to make the spinner visible
+            delay(300)
+            _isRefreshing.value = false
+        }
+    }
+
+
 }
 
 // UI State classes (unchanged)

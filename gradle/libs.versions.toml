@@ -26,6 +26,7 @@ android-youtube-player = "13.0.0"   # Check for latest
 androidx-lifecycle = "2.7.0"
 toolsCore = "1.0.0-alpha14"
 accompanist = "0.35.0-alpha"
+preferences = "1.1.1"
 
 [libraries]
 # This table defines library dependencies referenced by alias, specifying group, name, and version reference.
@@ -53,7 +54,11 @@ androidx-lifecycle-livedata-ktx = { group = "androidx.lifecycle", name = "lifecy
 androidx-lifecycle-viewmodel-compose = { group = "androidx.lifecycle", name = "lifecycle-viewmodel-compose", version.ref = "lifecycle" }
 androidx-lifecycle-runtime-compose = { module = "androidx.lifecycle:lifecycle-runtime-compose", version.ref = "lifecycle" }
 # androidx-material-icons-extended = { group = "androidx.compose.material", name = "material-icons-extended", version.ref = "composeBom" }
+androidx-datastore-preferences = { group = "androidx.datastore", name = "datastore-preferences", version.ref = "preferences" }
+
+#for the settitngs
 androidx-material-icons-extended = { module = "androidx.compose.material:material-icons-extended" }
+
 
 # Add these Room dependencies
 androidx-room-runtime = { group = "androidx.room", name = "room-runtime", version.ref = "room" }             # Room runtime library for database operations

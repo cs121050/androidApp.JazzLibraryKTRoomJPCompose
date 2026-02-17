@@ -1,7 +1,6 @@
 package com.example.jazzlibraryktroomjpcompose.ui.main
 
 import android.content.Intent
-import android.health.connect.datatypes.units.Velocity
 import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
@@ -56,11 +55,8 @@ import com.example.jazzlibraryktroomjpcompose.domain.models.Video
 import com.example.jazzlibraryktroomjpcompose.ui.theme.Dimens
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.layout.positionInParent
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material.icons.filled.Menu
-import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.ui.geometry.Offset
@@ -71,13 +67,13 @@ import androidx.compose.ui.unit.IntOffset
 import com.example.jazzlibraryktroomjpcompose.domain.models.FilterPath
 import kotlin.math.roundToInt
 import android.os.Build
-import androidx.compose.runtime.*
-import androidx.compose.ui.platform.LocalContext
-import androidx.core.view.WindowCompat
 import androidx.activity.ComponentActivity
-import androidx.compose.runtime.*
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.ui.graphics.toArgb
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
+import androidx.compose.ui.zIndex
 
 @Composable
 fun MainScreen(
@@ -104,6 +100,8 @@ fun MainScreen(
     val context = LocalContext.current
     // Double back press state
     var backPressTime by remember { mutableLongStateOf(0L) }
+    //for the swipe torefresh button, that actualy just suffles the videolist
+    val isRefreshing by viewModel.isRefreshing.collectAsState()
 
     // Single BackHandler that handles both cases
     BackHandler(
@@ -149,10 +147,12 @@ fun MainScreen(
                 onMenuClick = { viewModel.toggleLeftDrawer() },
                 onFilterClick = { viewModel.toggleBottomSheet() },
                 onClearFilters = { viewModel.clearAllFilters() },
-                onRefresh = { viewModel.safeRefreshData() },
+                onRefresh = { viewModel.safeRefreshDataFromAPI() },
                 // NEW: global player visibility + toggle callback
                 isPlayerVisible = isPlayerVisible,
                 onTogglePlayerVisibility = { isPlayerVisible = !isPlayerVisible },
+                isRefreshing = isRefreshing,
+                onShuffle = { viewModel.shuffleVideoList() },
                 modifier = Modifier.fillMaxSize().padding(horizontal = 8.dp)
             )
 
@@ -160,7 +160,7 @@ fun MainScreen(
             LeftDrawer(
                 isOpen = leftDrawerState == DrawerState.OPEN,
                 onClose = { viewModel.toggleLeftDrawer() },
-                onRefreshClick = { viewModel.safeRefreshData() },
+                onRefreshClick = { viewModel.safeRefreshDataFromAPI() },
                 modifier = Modifier
                     .fillMaxHeight()
                     .width(280.dp)
@@ -240,9 +240,11 @@ fun MainContent(
     onRefresh: () -> Unit,
     isPlayerVisible: Boolean,
     onTogglePlayerVisibility: () -> Unit,
+    isRefreshing: Boolean,
+    onShuffle: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    // Heights of the two top elements
+    // Heights of the chips row and toolbar (used for offsets and padding)
     val chipsHeightPx = remember { mutableIntStateOf(0) }
     val toolbarHeightPx = remember { mutableIntStateOf(0) }
 
@@ -271,64 +273,16 @@ fun MainContent(
         uiState.filteredVideos
     }
 
+    //for auto-scrolling to the top of videolistcontent after refresh
+    val listState = rememberLazyListState()
+
     Box(
         modifier = modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
-            // Attach scroll connection to receive scroll events from the list
-            .nestedScroll(nestedScrollConnection)
     ) {
-        // --- Video list (lowest z‑order) ---
-        // It fills the whole area but is shifted down by the space occupied
-        // by the fixed chips row and the (possibly hidden) toolbar.
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(
-                    top = with(LocalDensity.current) {
-                        // Visible top space = chips height + visible part of toolbar
-                        (chipsHeightPx.intValue +
-                                (toolbarHeightPx.intValue + toolbarOffset.floatValue)
-                                    .coerceAtLeast(0f))
-                            .toDp()
-                    }
-                )
-        ) {
-            VideoListContent(
-                uiState = uiState,
-                filterState = filterState,
-                videosToShow = videosToShow,
-                isPlayerVisible = isPlayerVisible,
-                onRefresh = onRefresh
-            )
-        }
-
-        // --- Toolbar column (scrolls away) ---
-        // This column contains the spacer and the toolbar box.
-        // It is placed above the video list but below the fixed chips row.
-        Column(
-            modifier = Modifier
-                .align(Alignment.TopStart)
-                .fillMaxWidth()
-                // Measure its full height (spacer + toolbar)
-                .onGloballyPositioned { coordinates ->
-                    toolbarHeightPx.intValue = coordinates.size.height
-                }
-                // Apply vertical offset based on scroll
-                //make sure  the 'toolbarbox' starts right under the 'ActiveFilterChipsRow'
-                .offset { IntOffset(0, (chipsHeightPx.intValue + toolbarOffset.floatValue).roundToInt()) }                .background(MaterialTheme.colorScheme.background)
-        ) {
-
-            toolbarBox(
-                onFilterClick = onFilterClick,
-                videoCount = videosToShow.size,
-                isPlayerVisible = isPlayerVisible,
-                onTogglePlayerVisibility = onTogglePlayerVisibility
-            )
-        }
-
         // --- Fixed chips row (always visible, highest z‑order) ---
-        // This row stays at the top regardless of scrolling.
+        // Placed outside PullToRefreshBox so it stays on top of the refresh indicator.
         ActiveFilterChipsRow(
             filterPath = filterState.currentFilterPath,
             onMenuClick = onMenuClick,
@@ -338,12 +292,80 @@ fun MainContent(
             modifier = Modifier
                 .align(Alignment.TopStart)
                 .fillMaxWidth()
-                // Measure its height to compute the top padding for the list
+                // Measure its height to later offset the PullToRefreshBox
                 .onGloballyPositioned { coordinates ->
                     chipsHeightPx.intValue = coordinates.size.height
                 }
                 .background(MaterialTheme.colorScheme.background)
+                .zIndex(1f)  // Ensures chips row is drawn above everything else
         )
+
+        // --- PullToRefreshBox, shifted down by the height of the chips row ---
+        PullToRefreshBox(
+            isRefreshing = isRefreshing,
+            onRefresh = onShuffle,
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(
+                    top = with(LocalDensity.current) {
+                        chipsHeightPx.intValue.toDp()
+                    }
+                )
+        ) {
+            // --- Inner content: toolbar + video list with nested scroll ---
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    // Attach scroll connection to receive scroll events from the list
+                    .nestedScroll(nestedScrollConnection)
+            ) {
+                // Video list container (drawn first, so it appears below the toolbar)
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(
+                            top = with(LocalDensity.current) {
+                                // Visible top space = toolbar height minus hidden part
+                                (toolbarHeightPx.intValue + toolbarOffset.floatValue)
+                                    .coerceAtLeast(0f)
+                                    .toDp()
+                            }
+                        )
+                ) {
+                    VideoListContent(
+                        uiState = uiState,
+                        filterState = filterState,
+                        videosToShow = videosToShow,
+                        isPlayerVisible = isPlayerVisible,
+                        onRefresh = onRefresh,
+                        listState = listState
+                    )
+                }
+
+                // --- Toolbar column (scrolls away, drawn on top of the list) ---
+                Column(
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .fillMaxWidth()
+                        // Measure its full height to know how far it can scroll
+                        .onGloballyPositioned { coordinates ->
+                            toolbarHeightPx.intValue = coordinates.size.height
+                        }
+                        // Apply vertical offset based on scroll (now without chips height)
+                        .offset {
+                            IntOffset(0, toolbarOffset.floatValue.roundToInt())
+                        }
+                        .background(MaterialTheme.colorScheme.background)
+                ) {
+                    toolbarBox(
+                        onFilterClick = onFilterClick,
+                        videoCount = videosToShow.size,
+                        isPlayerVisible = isPlayerVisible,
+                        onTogglePlayerVisibility = onTogglePlayerVisibility
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -376,7 +398,8 @@ fun ActiveFilterChipsRow(
     modifier: Modifier = Modifier
 ) {
     Row(
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth()
+            .padding(bottom = 4.dp, top = 4.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         // Clickable Logo Text
@@ -394,7 +417,6 @@ fun ActiveFilterChipsRow(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(bottom = 4.dp)
                 .horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
@@ -568,8 +590,10 @@ private fun VideoListContent(
     videosToShow: List<Video>,
     isPlayerVisible: Boolean,
     onRefresh: () -> Unit,
+    listState: LazyListState,
     modifier: Modifier = Modifier
 ) {
+
     if (filterState.isFiltering) {
         Box(
             modifier = modifier,
@@ -622,11 +646,19 @@ private fun VideoListContent(
                 }
             }
         } else {
+            LaunchedEffect(videosToShow) {
+                listState.animateScrollToItem(0)
+            }
+
             LazyColumn(
+                state = listState,
                 modifier = modifier,
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                items(videosToShow) { video ->
+                items(
+                    items = videosToShow,
+                    key = { it.id }
+                ) { video ->
                     // 🔁 Pass only isPlayerVisible – no per‑card toggle callback
                     VideoCard(
                         video = video,
