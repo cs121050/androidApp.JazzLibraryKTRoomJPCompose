@@ -61,6 +61,7 @@ dependencies {
     implementation(libs.androidx.ui)                          // Compose UI foundational components
     implementation(libs.androidx.ui.graphics)                 // Compose graphics and drawing APIs
     implementation(libs.androidx.ui.tooling.preview)          // Compose preview tooling support
+    implementation(libs.androidx.datastore.preferences)
 
     // Material 3
     implementation(libs.androidx.material3)
