@@ -1,4 +1,4 @@
-package com.example.di
+package com.example.jazzlibraryktroomjpcompose.di
 
 
 import android.content.Context

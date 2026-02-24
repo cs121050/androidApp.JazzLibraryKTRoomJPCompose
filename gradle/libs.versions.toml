@@ -27,6 +27,9 @@ androidx-lifecycle = "2.7.0"
 toolsCore = "1.0.0-alpha14"
 accompanist = "0.35.0-alpha"
 preferences = "1.1.1"
+animation = "1.8.2"
+composeMaterial = "1.5.6"
+coil = "2.7.0"
 
 [libraries]
 # This table defines library dependencies referenced by alias, specifying group, name, and version reference.
@@ -56,6 +59,9 @@ androidx-lifecycle-runtime-compose = { module = "androidx.lifecycle:lifecycle-ru
 # androidx-material-icons-extended = { group = "androidx.compose.material", name = "material-icons-extended", version.ref = "composeBom" }
 androidx-datastore-preferences = { group = "androidx.datastore", name = "datastore-preferences", version.ref = "preferences" }
 
+androidx-compose-animation = { module = "androidx.compose.animation:animation", version.ref = "animation" }
+
+
 #for the settitngs
 androidx-material-icons-extended = { module = "androidx.compose.material:material-icons-extended" }
 
@@ -84,6 +90,9 @@ okhttp-logging-interceptor = { group = "com.squareup.okhttp3", name = "logging-i
 # Gson
 gson = { group = "com.google.code.gson", name = "gson", version.ref = "gson" }
 androidx-tools-core = { group = "androidx.privacysandbox.tools", name = "tools-core", version.ref = "toolsCore" }
+androidx-compose-material = { group = "androidx.compose.material", name = "material" }
+
+coil-compose = { module = "io.coil-kt:coil-compose", version.ref = "coil" }
 
 [plugins]
 # This table defines Gradle plugins with their IDs and version references.

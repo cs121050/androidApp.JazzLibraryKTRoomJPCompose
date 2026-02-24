@@ -1,4 +1,4 @@
-package com.example.jazzlibraryktroomjpcompose
+package com.example.jazzlibraryktroomjpcompose.unittest
 
 import org.junit.Test
 
