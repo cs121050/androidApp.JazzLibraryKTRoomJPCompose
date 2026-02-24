@@ -74,7 +74,8 @@ dependencies {
     // Room Database
     implementation(libs.androidx.room.runtime)               // Room runtime for database operations
     implementation(libs.androidx.room.ktx)
-    implementation(libs.androidx.tools.core)                   // Room KTX extensions for Coroutines
+    implementation(libs.androidx.tools.core)
+    implementation(libs.androidx.compose.material)                   // Room KTX extensions for Coroutines
     kapt(libs.androidx.room.compiler)                        // Room annotation processor for code generation
 
     // Coroutines
@@ -103,6 +104,9 @@ dependencies {
     //allows easy colloring of  the status bar and more
     //implementation(libs.accompanist.systemuicontroller)
 
+    implementation(libs.androidx.compose.animation)
+
+    implementation(libs.coil.compose)
 
     testImplementation(libs.junit)                           // JUnit 4 for unit tests
     androidTestImplementation(libs.androidx.junit)           // AndroidX JUnit extensions for instrumented tests

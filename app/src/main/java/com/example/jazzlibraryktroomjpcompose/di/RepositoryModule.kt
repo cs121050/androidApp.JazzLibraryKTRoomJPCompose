@@ -1,4 +1,4 @@
-package com.example.di
+package com.example.jazzlibraryktroomjpcompose.di
 
 import com.example.jazzlibraryktroomjpcompose.data.repository.JazzRepositoryImpl
 import dagger.Module
