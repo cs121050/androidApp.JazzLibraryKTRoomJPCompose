@@ -12,6 +12,7 @@ interface VideoPlayerController {
     val isPlaying: StateFlow<Boolean>
     val playbackPosition: StateFlow<Long>          // in milliseconds
     val playerState: StateFlow<PlayerState>
+    val videoDuration: StateFlow<Long>
 
     // Playback control
     fun loadVideo(videoId: String, autoPlay: Boolean = true)

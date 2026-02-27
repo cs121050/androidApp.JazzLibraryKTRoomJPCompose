@@ -7,7 +7,9 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 interface VideoDao {
 
-    @Query("SELECT * FROM videos ORDER BY video_name ASC")
+    @Query("SELECT * FROM videos " +
+            "WHERE video_availability = '1' " +
+            "ORDER BY video_name ASC")
     fun getAllVideos(): Flow<List<VideoRoomEntity>>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
@@ -207,6 +209,7 @@ interface VideoDao {
         WHERE v.type_id = :typeId 
           AND v.duration_id = :durationId 
           AND vca.artist_id = :artistId
+          AND v.video_availability = '1'
         ORDER BY v.video_name ASC
     """)
     fun getVideosByArtistAndTypeAndDuration(
@@ -223,6 +226,7 @@ interface VideoDao {
       AND (:typeId = 0 OR v.type_id = :typeId)
       AND (:durationId = 0 OR v.duration_id = :durationId)
       AND (:artistId = 0 OR vca.artist_id = :artistId)
+      AND v.video_availability = '1'
     ORDER BY v.video_name
 """)
     fun getVideosByMultipleFilters(
@@ -231,8 +235,4 @@ interface VideoDao {
         durationId: Int = 0,
         typeId: Int = 0
     ): Flow<List<VideoRoomEntity>>
-
-
-
-
 }

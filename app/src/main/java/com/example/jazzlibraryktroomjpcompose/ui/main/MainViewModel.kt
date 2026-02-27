@@ -61,6 +61,12 @@ class MainViewModel @Inject constructor(
 
     private var filterJob: Job? = null
 
+    private val _isPlayerVisible = MutableStateFlow(true)
+    val isPlayerVisible: StateFlow<Boolean> = _isPlayerVisible.asStateFlow()
+
+    private val _cardUiStates = MutableStateFlow<Map<String, CardUiState>>(emptyMap())
+    val cardUiStates: StateFlow<Map<String, CardUiState>> = _cardUiStates.asStateFlow()
+
     init {
         checkAndLoadData()
     }
@@ -428,7 +434,39 @@ class MainViewModel @Inject constructor(
         }
     }
 
+    fun togglePlayerVisibility() {
+        val newValue = !_isPlayerVisible.value
+        _isPlayerVisible.value = newValue
+        // When hiding players globally, reset all per‑card showVideo flags
+        if (!newValue) {
+            _cardUiStates.update { map ->
+                map.mapValues { it.value.copy(showVideo = false) }
+            }
+        }
+    }
 
+    fun onCardTitleClick(videoId: String) {
+        val currentMap = _cardUiStates.value
+        val currentState = currentMap[videoId] ?: CardUiState()
+        val isGloballyVisible = _isPlayerVisible.value
+
+        val newState = when {
+            // Global toggle ON → clicking toggles only expanded state
+            isGloballyVisible -> currentState.copy(expanded = !currentState.expanded)
+            // Global toggle OFF → first click shows video, second click toggles expanded
+            else -> {
+                if (!currentState.showVideo) {
+                    // Video hidden → show video (and keep expanded false)
+                    CardUiState(showVideo = true, expanded = false)
+                } else {
+                    // Video visible → toggle expanded
+                    currentState.copy(expanded = !currentState.expanded)
+                }
+            }
+        }
+
+        _cardUiStates.update { it + (videoId to newState) }
+    }
 }
 
 // UI State classes (unchanged)
@@ -443,6 +481,11 @@ data class MainUiState(
     val availableVideoContainsArtists: List<com.example.jazzlibraryktroomjpcompose.domain.models.VideoContainsArtist> = emptyList(),
     val isLoading: Boolean = false, // General UI loading (any operation) (USER POINT OF VIEW LOADING)
     val errorMessage: String? = null
+)
+
+data class CardUiState(
+    val showVideo: Boolean = false,   // whether video section is visible when global toggle is off
+    val expanded: Boolean = false     // whether extra details are shown
 )
 
 data class FilterState(

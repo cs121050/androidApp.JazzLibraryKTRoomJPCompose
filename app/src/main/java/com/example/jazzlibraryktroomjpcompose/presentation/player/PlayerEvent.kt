@@ -1,4 +1,3 @@
-// PlayerEvent.kt
 package com.example.jazzlibraryktroomjpcompose.presentation.player
 
 import com.example.jazzlibraryktroomjpcompose.domain.models.FilterPath

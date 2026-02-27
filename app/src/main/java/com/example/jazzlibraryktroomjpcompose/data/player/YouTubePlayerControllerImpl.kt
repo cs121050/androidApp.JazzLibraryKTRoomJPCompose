@@ -37,6 +37,10 @@ class YouTubePlayerControllerImpl @Inject constructor(
     private var savedPosition: Long = 0L
     private var wasPlaying: Boolean = false
 
+    private val _videoDuration = MutableStateFlow(0L)
+    override val videoDuration: StateFlow<Long> = _videoDuration
+
+
     override fun loadVideo(videoId: String, autoPlay: Boolean) {
         _currentVideoId.value = videoId
         _playerState.value = PlayerState.BUFFERING
@@ -136,6 +140,12 @@ class YouTubePlayerControllerImpl @Inject constructor(
             override fun onCurrentSecond(youTubePlayer: YouTubePlayer, second: Float) {
                 _playbackPosition.value = (second * 1000).toLong()
             }
+
+            // In the listener's onReady or add a new callback:
+            override fun onVideoDuration(youTubePlayer: YouTubePlayer, duration: Float) {
+                _videoDuration.value = (duration * 1000).toLong()
+            }
+
         }
         youTubePlayer.addListener(listener)
         currentListener = listener
