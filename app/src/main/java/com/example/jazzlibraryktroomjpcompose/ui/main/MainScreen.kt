@@ -61,8 +61,11 @@ import androidx.compose.ui.unit.IntOffset
 import com.example.jazzlibraryktroomjpcompose.domain.models.FilterPath
 import kotlin.math.roundToInt
 import android.os.Build
+import android.webkit.WebView
 import androidx.activity.ComponentActivity
+import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.filled.PlayArrow
@@ -74,26 +77,27 @@ import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.zIndex
-import com.example.jazzlibraryktroomjpcompose.presentation.player.PlayerUiState
 import com.example.jazzlibraryktroomjpcompose.presentation.player.PlayerViewModel
-import com.example.jazzlibraryktroomjpcompose.ui.main.player.MiniPlayerControls
-import com.example.jazzlibraryktroomjpcompose.ui.main.player.YoutubePlayerHost
 import kotlinx.coroutines.launch
 import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.material.rememberSwipeableState
-import androidx.compose.material.swipeable
-import androidx.compose.material.ExperimentalMaterialApi
-import androidx.compose.material.FractionalThreshold
 import androidx.compose.material.icons.filled.BrokenImage
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import androidx.compose.ui.res.painterResource
+import coil.ImageLoader
 import com.example.jazzlibraryktroomjpcompose.R
+import com.example.jazzlibraryktroomjpcompose.presentation.player.PlayerUiState
+import com.example.jazzlibraryktroomjpcompose.ui.main.player.CustomMiniPlayerControls
+import com.example.jazzlibraryktroomjpcompose.ui.main.player.SmartYoutubePlayerHost
+import com.example.jazzlibraryktroomjpcompose.ui.main.util.ScrollingSlowFlingBehavior
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 
-enum class MiniPlayerDragState { Bottom, Top, Hidden }
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterialApi::class)
+
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScreen(
     viewModel: MainViewModel = hiltViewModel(),
@@ -109,7 +113,6 @@ fun MainScreen(
     val loadingState by viewModel.loadingState.collectAsState()
     val showError by viewModel.showError.collectAsState()
     val errorMessage by viewModel.errorMessage.collectAsState()
-    var isPlayerVisible by remember { mutableStateOf(true) }
 
     val leftDrawerOffset by animateDpAsState(
         targetValue = if (leftDrawerState == DrawerState.OPEN) 0.dp else (-320).dp
@@ -127,26 +130,12 @@ fun MainScreen(
     var activeCardSize by remember { mutableStateOf<IntSize?>(null) }
     var contentBoxRootPosition by remember { mutableStateOf(IntOffset.Zero) }
 
-    // --- NEW: swipeable state for mini player ---
-    val swipeableState = rememberSwipeableState(initialValue = MiniPlayerDragState.Bottom)
-    val containerSize = remember { mutableStateOf(IntSize.Zero) }
 
-    LaunchedEffect(playerUiState.isInMiniMode) {
-        if (playerUiState.isInMiniMode) {
-            activeCardBounds = null
-            // Reset to bottom when entering mini mode
-            swipeableState.snapTo(MiniPlayerDragState.Bottom)
-        }
-    }
 
-    // --- When the player is hidden via swipe, close it ---
-    LaunchedEffect(swipeableState.currentValue) {
-        if (swipeableState.currentValue == MiniPlayerDragState.Hidden) {
-            playerViewModel.closePlayer()
-            // Reset for next time
-            swipeableState.snapTo(MiniPlayerDragState.Bottom)
-        }
-    }
+    //i have made the isPlayerVisible global (placed it in the viewmodel) so to access it independently
+    val isPlayerVisible by viewModel.isPlayerVisible.collectAsState()
+    val cardUiStates by viewModel.cardUiStates.collectAsState()
+
 
     // BackHandler (unchanged)
     BackHandler(
@@ -229,9 +218,6 @@ fun MainScreen(
                     modifier = Modifier
                         .fillMaxSize()
                         .nestedScroll(nestedScrollConnection)
-                        .onSizeChanged { size ->
-                            containerSize.value = size
-                        }
                         .onGloballyPositioned { coordinates ->
                             contentBoxRootPosition = IntOffset(
                                 x = coordinates.positionInRoot().x.roundToInt(),
@@ -257,7 +243,7 @@ fun MainScreen(
                             onFilterClick = { viewModel.toggleBottomSheet() },
                             videoCount = videosToShow.size,
                             isPlayerVisible = isPlayerVisible,
-                            onTogglePlayerVisibility = { isPlayerVisible = !isPlayerVisible }
+                            onTogglePlayerVisibility = { viewModel.togglePlayerVisibility() }
                         )
                     }
 
@@ -277,7 +263,6 @@ fun MainScreen(
                             uiState = uiState,
                             filterState = filterState,
                             videosToShow = videosToShow,
-                            isPlayerVisible = isPlayerVisible,
                             onRefresh = { viewModel.safeRefreshDataFromAPI() },
                             onActiveCardBoundsChanged = { cardId, rootPosition, size ->
                                 if (cardId == playerUiState.activeCardId) {
@@ -288,55 +273,65 @@ fun MainScreen(
                             },
                             playerUiState = playerUiState,
                             playerViewModel = playerViewModel,
-                            listState = listState
+                            listState = listState,
+                            isPlayerVisible = isPlayerVisible,
+                            cardUiStates = cardUiStates,
+                            onCardTitleClick = { videoId -> viewModel.onCardTitleClick(videoId) }
                         )
                     }
 
                     // ----- PLAYER (draggable mini player) -----
-                    val density = LocalDensity.current
+                    // Add these states at the top of your MainScreen composable (with other states)
+                    val webView = remember { mutableStateOf<WebView?>(null) }
+
+// Then your player section should look like this:
+
+// ----- PLAYER (draggable mini player) -----
                     if (playerUiState.isVisible) {
-                        val baseModifier = if (playerUiState.isInMiniMode) {
-                            val playerWidth = 240.dp
-                            val playerHeight = 160.dp
-                            val playerPadding = 16.dp
+                        val density = LocalDensity.current
+                        val scope = rememberCoroutineScope()
 
-                            // Compute anchors only when container size is known
-                            val anchors = if (containerSize.value.height > 0) {
-                                val containerH = containerSize.value.height
-                                val playerH = with(density) { playerHeight.roundToPx() }
-                                val paddingPx = with(density) { playerPadding.roundToPx() }
+                        // Dragging state (only used in mini mode)
+                        val dragOffsetY = remember { Animatable(0f) }
+                        val closeThresholdPx = with(density) { 100.dp.toPx() }
 
-                                // Bottom anchor: 0 offset from aligned bottom‑end position
-                                val bottomY = 0f
-                                // Top anchor: move up so top edge is at paddingPx from top
-                                val topY = -(containerH - playerH - 2 * paddingPx).toFloat()
-                                // Hidden anchor: off‑screen top
-                                val hiddenY = -containerH.toFloat()
-
-                                mapOf(
-                                    bottomY to MiniPlayerDragState.Bottom,
-                                    topY to MiniPlayerDragState.Top,
-                                    hiddenY to MiniPlayerDragState.Hidden
-                                )
-                            } else {
-                                // Fallback: simple anchors (just bottom)
-                                mapOf(0f to MiniPlayerDragState.Bottom)
+                        // Reset offset when entering mini mode
+                        LaunchedEffect(playerUiState.isInMiniMode) {
+                            if (playerUiState.isInMiniMode) {
+                                dragOffsetY.snapTo(0f)
                             }
+                        }
 
+                        val baseModifier = if (playerUiState.isInMiniMode) {
+                            // Mini mode: bottom‑end + draggable
                             Modifier
-                                .size(playerWidth, playerHeight)
-                                .padding(playerPadding)
+                                .size(width = 240.dp, height = 132.dp)
+                                .padding(bottom = 8.dp, end = 6.dp)
                                 .align(Alignment.BottomEnd)
-                                .swipeable(
-                                    state = swipeableState,
-                                    anchors = anchors,
-                                    orientation = Orientation.Vertical,
-                                    enabled = true,
-                                    thresholds = { _, _ -> FractionalThreshold(0.3f) }
-                                )
-                                .offset {
-                                    // Apply the vertical offset from swipeable state
-                                    IntOffset(0, swipeableState.offset.value.roundToInt())
+                                .offset { IntOffset(0, dragOffsetY.value.roundToInt()) }
+                                .pointerInput(Unit) {
+                                    detectDragGestures(
+                                        onDragStart = { scope.launch { dragOffsetY.stop() } },
+                                        onDrag = { change, dragAmount ->
+                                            change.consume()
+                                            scope.launch {
+                                                val newValue = (dragOffsetY.value + dragAmount.y).coerceAtLeast(0f)
+                                                dragOffsetY.snapTo(newValue)
+                                            }
+                                        },
+                                        onDragEnd = {
+                                            scope.launch {
+                                                if (dragOffsetY.value > closeThresholdPx) {
+                                                    playerViewModel.closePlayer()
+                                                } else {
+                                                    dragOffsetY.animateTo(0f)
+                                                }
+                                            }
+                                        },
+                                        onDragCancel = {
+                                            scope.launch { dragOffsetY.animateTo(0f) }
+                                        }
+                                    )
                                 }
                         } else {
                             // Full mode: position over the active card
@@ -358,24 +353,32 @@ fun MainScreen(
                         Box(
                             modifier = baseModifier
                                 .zIndex(5f)
-                                .clip(RoundedCornerShape(8.dp))
                         ) {
-                            YoutubePlayerHost(
-                                modifier = Modifier.fillMaxSize(),
+                            // Use ONLY SmartYoutubePlayerHost (not CustomYoutubePlayer)
+                            SmartYoutubePlayerHost(
+                                key = playerUiState.playerInstanceId,
+                                videoId = playerUiState.currentVideoId,
+                                isMiniMode = playerUiState.isInMiniMode,
                                 onPlayerReady = { youTubePlayer ->
-                                    coroutineScope.launch {
-                                        playerViewModel.setPlayer(youTubePlayer)
-                                    }
-                                }
+                                    playerViewModel.setPlayer(youTubePlayer)
+                                },
+                                onWebViewReady = { capturedWebView ->
+                                    webView.value = capturedWebView
+                                },
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .clip(RoundedCornerShape(8.dp))
                             )
 
+                            // Only show custom controls in mini mode
                             if (playerUiState.isInMiniMode) {
-                                MiniPlayerControls(
+                                CustomMiniPlayerControls(
                                     isPlaying = playerUiState.isPlaying,
-                                    onLeftTap = { playerViewModel.onMiniPlayerLeftTap() },
-                                    onCenterTap = { playerViewModel.onMiniPlayerCenterTap() },
-                                    onRightTap = { playerViewModel.onMiniPlayerRightTap() },
-                                    onClose = { playerViewModel.closePlayer() },
+                                    currentPosition = playerUiState.playbackPosition,
+                                    duration = playerUiState.videoDuration,
+                                    onSeek = { position -> playerViewModel.seekTo(position) },
+                                    onLeftTap = { playerViewModel.onMiniPlayerLeftTap() },  // Play/Pause
+                                    onRightTap = { playerViewModel.onMiniPlayerRightTap() }, // Back/Scroll
                                     modifier = Modifier.fillMaxSize()
                                 )
                             }
@@ -453,153 +456,6 @@ fun LoadingScreen() {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun MainContent(
-    uiState: MainUiState,
-    filterState: FilterState,
-    viewModel: MainViewModel,
-    playerViewModel: PlayerViewModel,
-    onActiveCardBoundsChanged: (String, IntOffset, IntSize) -> Unit,
-    playerUiState: PlayerUiState,
-    onMenuClick: () -> Unit,
-    onFilterClick: () -> Unit,
-    onClearFilters: () -> Unit,
-    onRefresh: () -> Unit,
-    isPlayerVisible: Boolean,
-    onTogglePlayerVisibility: () -> Unit,
-    isRefreshing: Boolean,
-    onShuffle: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    // Heights of the chips row and toolbar (used for offsets and padding)
-    val chipsHeightPx = remember { mutableIntStateOf(0) }
-    val toolbarHeightPx = remember { mutableIntStateOf(0) }
-
-    // Vertical offset of the toolbar (0 = fully visible, negative = hidden)
-    val toolbarOffset = remember { mutableFloatStateOf(0f) }
-
-    // Nested scroll connection to update toolbar offset based on list scroll
-    val nestedScrollConnection = remember {
-        object : NestedScrollConnection {
-            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
-                val delta = available.y
-                // Calculate new offset, clamped between -fullHeight and 0
-                val newOffset = (toolbarOffset.floatValue + delta)
-                    .coerceIn(-toolbarHeightPx.intValue.toFloat(), 0f)
-                val consumed = newOffset - toolbarOffset.floatValue
-                toolbarOffset.floatValue = newOffset
-                // Consume the vertical scroll used to move the toolbar
-                return Offset(0f, consumed)
-            }
-        }
-    }
-
-    val videosToShow = if (filterState.currentFilterPath.isEmpty()) {
-        uiState.videos
-    } else {
-        uiState.filteredVideos
-    }
-
-    //for auto-scrolling to the top of videolistcontent after refresh
-    val listState = rememberLazyListState()
-
-    Box(
-        modifier = modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-    ) {
-        // --- Fixed chips row (always visible, highest z‑order) ---
-        // Placed outside PullToRefreshBox so it stays on top of the refresh indicator.
-        ActiveFilterChipsRow(
-            filterPath = filterState.currentFilterPath,
-            onMenuClick = onMenuClick,
-            onChipClick = { categoryId, entityId, entityName ->
-                viewModel.handleChipSelection(categoryId, entityId, entityName, false)
-            },
-            modifier = Modifier
-                .align(Alignment.TopStart)
-                .fillMaxWidth()
-                // Measure its height to later offset the PullToRefreshBox
-                .onGloballyPositioned { coordinates ->
-                    chipsHeightPx.intValue = coordinates.size.height
-                }
-                .background(MaterialTheme.colorScheme.background)
-                .zIndex(1f)  // Ensures chips row is drawn above everything else
-        )
-
-        // --- PullToRefreshBox, shifted down by the height of the chips row ---
-        PullToRefreshBox(
-            isRefreshing = isRefreshing,
-            onRefresh = onShuffle,
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(
-                    top = with(LocalDensity.current) {
-                        chipsHeightPx.intValue.toDp()
-                    }
-                )
-        ) {
-            // --- Inner content: toolbar + video list with nested scroll ---
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    // Attach scroll connection to receive scroll events from the list
-                    .nestedScroll(nestedScrollConnection)
-            ) {
-                // Video list container (drawn first, so it appears below the toolbar)
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(
-                            top = with(LocalDensity.current) {
-                                // Visible top space = toolbar height minus hidden part
-                                (toolbarHeightPx.intValue + toolbarOffset.floatValue)
-                                    .coerceAtLeast(0f)
-                                    .toDp()
-                            }
-                        )
-                ) {
-                    VideoListContent(
-                        uiState = uiState,
-                        filterState = filterState,
-                        videosToShow = videosToShow,
-                        isPlayerVisible = isPlayerVisible,
-                        onRefresh = onRefresh,
-                        onActiveCardBoundsChanged = onActiveCardBoundsChanged,
-                        playerUiState = playerUiState,
-                        playerViewModel = playerViewModel,
-                        listState = listState
-                    )
-                }
-
-                // --- Toolbar column (scrolls away, drawn on top of the list) ---
-                Column(
-                    modifier = Modifier
-                        .align(Alignment.TopStart)
-                        .fillMaxWidth()
-                        // Measure its full height to know how far it can scroll
-                        .onGloballyPositioned { coordinates ->
-                            toolbarHeightPx.intValue = coordinates.size.height
-                        }
-                        // Apply vertical offset based on scroll (now without chips height)
-                        .offset {
-                            IntOffset(0, toolbarOffset.floatValue.roundToInt())
-                        }
-                        .background(MaterialTheme.colorScheme.background)
-                ) {
-                    toolbarBox(
-                        onFilterClick = onFilterClick,
-                        videoCount = videosToShow.size,
-                        isPlayerVisible = isPlayerVisible,
-                        onTogglePlayerVisibility = onTogglePlayerVisibility
-                    )
-                }
-            }
-        }
-    }
-}
-
 @Composable
 fun toolbarBox(
     onFilterClick: () -> Unit,
@@ -635,7 +491,7 @@ fun ActiveFilterChipsRow(
     ) {
         // Clickable Logo Text
         Text(
-            text = "Jazzli",
+            text = "JazzTalk",
             style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
             color = MaterialTheme.colorScheme.primary,
             modifier = Modifier
@@ -825,33 +681,61 @@ private fun VideoListContent(
     listState: LazyListState,
     playerViewModel: PlayerViewModel,
     onActiveCardBoundsChanged: (String, IntOffset, IntSize) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    cardUiStates: Map<String, CardUiState>,
+    onCardTitleClick: (String) -> Unit
 ) {
 // Find the index of the currently active video card
     val activeCardIndex = videosToShow.indexOfFirst { it.locationId == playerUiState.activeCardId }
+    val context = LocalContext.current
+    val imageLoader = coil.ImageLoader(context)
 
+    //helps with loading the thubnails faster while scrolling
+    LaunchedEffect(listState) {
+        snapshotFlow { listState.firstVisibleItemIndex }
+            .collect { firstVisible ->
+                // Preload the next 5 items ahead
+                val preloadRange = (firstVisible + 1)..(firstVisible + 5).coerceAtMost(videosToShow.lastIndex)
 
+                for (index in preloadRange) {
+                    val video = videosToShow.getOrNull(index) ?: continue
+                    val thumbnailUrl = video.getThumbnailUrl() ?: continue
 
+                    // Launch a background coroutine to fetch and cache the image
+                    launch(Dispatchers.IO) {
+                        val request = ImageRequest.Builder(context)
+                            .data(thumbnailUrl)
+                            .build()
+                        imageLoader.execute(request) // downloads and caches
+                    }
+                }
+            }
+    }
 // Monitor scroll state and manage player mode based on card visibility
+// that monitors scroll position and active card visibility.
     LaunchedEffect(
         listState.firstVisibleItemIndex,
         listState.layoutInfo,
         activeCardIndex,
         playerUiState.isVisible,
-        playerUiState.isInMiniMode
+        playerUiState.isInMiniMode,
+        isPlayerVisible
     ) {
         if (activeCardIndex >= 0 && playerUiState.isVisible) {
             val visibleItems = listState.layoutInfo.visibleItemsInfo
             val isVisible = visibleItems.any { it.index == activeCardIndex }
 
             when {
-                // Card is visible but player is mini → restore full mode
-                isVisible && playerUiState.isInMiniMode -> {
-                    playerViewModel.restoreFullMode()
-                }
-                // Card is invisible and player is full → minimize
-                !isVisible && !playerUiState.isInMiniMode -> {
+                // If "Hide players" is on, force mini mode
+                !isPlayerVisible && !playerUiState.isInMiniMode -> {
                     playerViewModel.minimizePlayer()
+                }
+                // If "Show players" is on, use scroll-based logic
+                isPlayerVisible -> {
+                    when {
+                        isVisible && playerUiState.isInMiniMode -> playerViewModel.restoreFullMode()
+                        !isVisible && !playerUiState.isInMiniMode -> playerViewModel.minimizePlayer()
+                    }
                 }
             }
         }
@@ -955,7 +839,9 @@ private fun VideoListContent(
                                     currentFilterPath = filterState.currentFilterPath
                                 )
                             }
-                        }
+                        },
+                        cardState = cardUiStates[video.locationId] ?: CardUiState(),
+                        onCardTitleClick = { onCardTitleClick(video.locationId) }
                     )
                 }
             }
@@ -970,16 +856,16 @@ fun VideoCard(
     isActive: Boolean, // true if this card is the currently active one
     onActiveCardBoundsChanged: (String, IntOffset, IntSize) -> Unit,
     onCardClicked: () -> Unit, // called when user taps to load video
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    cardState: CardUiState,
+    onCardTitleClick: () -> Unit
 ) {
     val context = LocalContext.current
 
-    var expanded by remember { mutableStateOf(false) }
 
-    val videoId = remember(video.path) {
-        extractYouTubeVideoId(video.path)
-    }
-
+// Get the thumbnail URL from the video object
+    val videoId = remember(video.path) { extractYouTubeVideoId(video.path) }
+    val thumbnailUrl = video.getThumbnailUrl() // now defined here
     Card(
         modifier = modifier.fillMaxWidth(),
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
@@ -994,7 +880,7 @@ fun VideoCard(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable { expanded = !expanded },
+                    .clickable { onCardTitleClick() },
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -1010,89 +896,91 @@ fun VideoCard(
                 }
             }
 
-            // --- Placeholder / thumbnail area (always visible) ---
-            Spacer(modifier = Modifier.height(12.dp))
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(200.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant)
-                    .clickable { onCardClicked() }   // start video only on placeholder tap
-                    .then(
-                        if (isActive) {
-                            Modifier.onPlaced { coordinates ->
-                                onActiveCardBoundsChanged(
-                                    video.locationId,
-                                    IntOffset(
-                                        x = coordinates.positionInRoot().x.roundToInt(),
-                                        y = coordinates.positionInRoot().y.roundToInt()
-                                    ),
-                                    IntSize(coordinates.size.width, coordinates.size.height)
-                                )
-                            }
-                        } else {
-                            Modifier
-                        }
-                    )
-            ) {
-                // Placeholder content (e.g., play icon, future thumbnail)
-                Icon(
-                    Icons.Default.PlayArrow,
-                    contentDescription = "Play video",
-                    modifier = Modifier.align(Alignment.Center),
-                    tint = MaterialTheme.colorScheme.primary
-                )
-
-                // Get the thumbnail URL from the video object
-                val thumbnailUrl = video.getThumbnailUrl() // or video.getThumbnailUrl("maxresdefault")
-
-                if (thumbnailUrl != null) {
-                    AsyncImage(
-                        model = ImageRequest.Builder(LocalContext.current)
-                            .data(thumbnailUrl)
-                            .crossfade(true)
-                            .build(),
-                        contentDescription = "Video thumbnail",
-                        modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Crop,
-                        error = painterResource(id = R.drawable.ic_error)
-                    )
-                } else {
-                    // Fallback when URL is invalid
-                    Icon(
-                        Icons.Default.BrokenImage,
-                        contentDescription = "Invalid video",
-                        modifier = Modifier.align(Alignment.Center),
-                        tint = MaterialTheme.colorScheme.error
-                    )
-                }
-
-                // Optional: keep the fullscreen button (opens YouTube app)
-                IconButton(
-                    onClick = {
-                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(video.path))
-                        context.startActivity(intent)
-                    },
+            // --- Placeholder / thumbnail area (always visible) / Video area ---
+            if (isPlayerVisible || cardState.showVideo) {
+                Spacer(modifier = Modifier.height(12.dp))
+                Box(
                     modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(8.dp)
-                        .size(48.dp)
-                        .background(
-                            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.7f),
-                            shape = RoundedCornerShape(24.dp)
+                        .fillMaxWidth()
+                        .height(200.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                        .clickable(enabled = thumbnailUrl != null) { onCardClicked() }   // start video only on placeholder tap
+                        .then(
+                            if (isActive) {
+                                Modifier.onPlaced { coordinates ->
+                                    onActiveCardBoundsChanged(
+                                        video.locationId,
+                                        IntOffset(
+                                            x = coordinates.positionInRoot().x.roundToInt(),
+                                            y = coordinates.positionInRoot().y.roundToInt()
+                                        ),
+                                        IntSize(coordinates.size.width, coordinates.size.height)
+                                    )
+                                }
+                            } else {
+                                Modifier
+                            }
                         )
                 ) {
+                    if (thumbnailUrl != null) {
+                        AsyncImage(
+                            model = ImageRequest.Builder(LocalContext.current)
+                                .data(thumbnailUrl)
+                                .crossfade(true)
+                                .build(),
+                            contentDescription = "Video thumbnail",
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Crop,
+                            error = painterResource(id = R.drawable.ic_error)
+                        )
+                    } else {
+                        // Fallback when URL is invalid
+                        Icon(
+                            Icons.Default.BrokenImage,
+                            contentDescription = "Invalid video",
+                            modifier = Modifier.align(Alignment.Center),
+                            tint = MaterialTheme.colorScheme.error
+                        )
+                    }
+                    // Placeholder content (e.g., play icon, future thumbnail)
                     Icon(
-                        Icons.Default.Fullscreen,
-                        contentDescription = "Open in YouTube app",
-                        tint = Color.White
+                        Icons.Default.PlayArrow,
+                        contentDescription = "Play video",
+                        modifier = Modifier
+                            .align(Alignment.Center)
+                            .size(42.dp),
+                        tint = MaterialTheme.colorScheme.primary
                     )
+
+                    // Optional: keep the fullscreen button (opens YouTube app)
+                    IconButton(
+                        onClick = {
+                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(video.path))
+                            context.startActivity(intent)
+                        },
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .padding(8.dp)
+                            .size(48.dp)
+                            .background(
+                                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.7f),
+                                shape = RoundedCornerShape(24.dp)
+                            )
+                    ) {
+                        Icon(
+                            Icons.Default.Fullscreen,
+                            contentDescription = "Open in YouTube app",
+                            tint = Color.White
+                        )
+                    }
                 }
+
+
             }
 
             // --- Expanded content (if any) ---
-            if (expanded) {
+            if (cardState.expanded && isPlayerVisible) {
                 // You can add more details here (description, artist list, etc.)
                 Text(
                     text = "Additional info here...",

@@ -1,0 +1,86 @@
+<!-- youtube_player.html -->
+<!DOCTYPE html>
+<html>
+    <head>
+        <style>
+            body {
+            margin: 0;
+            padding: 0;
+            background: black;
+            }
+            #player {
+            width: 100%;
+            height: 100%;
+            position: absolute;
+            top: 0;
+            left: 0;
+            }
+        </style>
+    </head>
+    <body>
+        <div id="player"></div>
+
+        <script>
+            var player;
+            var tag = document.createElement('script');
+            tag.src = "https://www.youtube.com/iframe_api";
+            var firstScriptTag = document.getElementsByTagName('script')[0];
+            firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+
+            function onYouTubeIframeAPIReady() {
+            player = new YT.Player('player', {
+            height: '100%',
+            width: '100%',
+            playerVars: {
+            'autoplay': 1,
+            'controls': 1,
+            'rel': 0,
+            'showinfo': 0,
+            'modestbranding': 1
+            },
+            events: {
+            'onReady': onPlayerReady,
+            'onStateChange': onPlayerStateChange
+            }
+            });
+            }
+
+            function onPlayerReady(event) {
+            // Player is ready
+            setInterval(function() {
+            if (player && player.getCurrentTime) {
+            Android.onTimeUpdate(player.getCurrentTime());
+            }
+            }, 100);
+            }
+
+            function onPlayerStateChange(event) {
+            Android.onStateChange(event.data);
+            }
+
+            function loadVideo(videoId, autoPlay) {
+            if (player) {
+            player.loadVideoById(videoId, 0, autoPlay ? 'large' : 'default');
+            }
+            }
+
+            function playVideo() {
+            if (player) player.playVideo();
+            }
+
+            function pauseVideo() {
+            if (player) player.pauseVideo();
+            }
+
+            function seekTo(seconds) {
+            if (player) player.seekTo(seconds, true);
+            }
+
+            function setControlsVisible(visible) {
+            if (player) {
+            player.setOption('controls', visible ? 1 : 0);
+            }
+            }
+        </script>
+    </body>
+</html>

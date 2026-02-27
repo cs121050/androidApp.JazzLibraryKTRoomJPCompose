@@ -26,19 +26,19 @@ class PlayerViewModel @Inject constructor(
     val playerEvents: SharedFlow<PlayerEvent> = _playerEvents.asSharedFlow()
 
     init {
-        // Sync with controller's flows to keep playback state updated
         viewModelScope.launch {
             combine(
                 playerController.currentVideoId,
                 playerController.isPlaying,
-                playerController.playbackPosition
-            ) { videoId, isPlaying, position ->
-                // Update only the playback-related fields, preserve others
+                playerController.playbackPosition,
+                playerController.videoDuration
+            ) { videoId, isPlaying, position, duration ->
                 _uiState.update { currentState ->
                     currentState.copy(
                         currentVideoId = videoId,
                         isPlaying = isPlaying,
-                        playbackPosition = position
+                        playbackPosition = position,
+                        videoDuration = duration
                     )
                 }
             }.launchIn(viewModelScope)
@@ -171,5 +171,22 @@ class PlayerViewModel @Inject constructor(
 
     fun restoreFullMode() {
         _uiState.update { it.copy(isInMiniMode = false) }
+    }
+
+
+    fun seekTo(positionMs: Long) {
+        playerController.seekTo(positionMs)
+    }
+
+    fun rewind10Seconds() {
+        val newPosition = (_uiState.value.playbackPosition - 10000).coerceAtLeast(0)
+        playerController.seekTo(newPosition)
+    }
+
+    fun forward10Seconds() {
+        // You'll need to track video duration - add it to PlayerUiState
+        val newPosition = (_uiState.value.playbackPosition + 10000)
+            .coerceAtMost(_uiState.value.videoDuration)
+        playerController.seekTo(newPosition)
     }
 }
