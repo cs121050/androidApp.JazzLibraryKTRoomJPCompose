@@ -134,7 +134,18 @@ fun MainScreen(
     //i have made the isPlayerVisible global (placed it in the viewmodel) so to access it independently
     val isPlayerVisible by viewModel.isPlayerVisible.collectAsState()
     val cardUiStates by viewModel.cardUiStates.collectAsState()
+    //witch tab is the main tab
+    val currentTab by viewModel.currentTab.collectAsState()
+    val hasArtistFilter = filterState.currentFilterPath.any { it.categoryId == 2 }
+    val artistCount = if (hasArtistFilter) 1 else uiState.availableArtists.size
+    val historyCount = 0 // Placeholder – you can later replace with a real count
 
+    // Monitor tab changes and minimize player when leaving Videos tab
+    LaunchedEffect(currentTab) {
+        if (playerUiState.isVisible && !playerUiState.isInMiniMode) {
+            playerViewModel.minimizePlayer()
+        }
+    }
 
     // BackHandler (unchanged)
     BackHandler(
@@ -241,6 +252,10 @@ fun MainScreen(
                         toolbarBox(
                             onFilterClick = { viewModel.toggleBottomSheet() },
                             videoCount = videosToShow.size,
+                            artistCount = artistCount,
+                            historyCount = historyCount,
+                            currentTab = currentTab,
+                            onTabSelected = { viewModel.setCurrentTab(it) },
                             isPlayerVisible = isPlayerVisible,
                             onTogglePlayerVisibility = { viewModel.togglePlayerVisibility() }
                         )
@@ -258,7 +273,9 @@ fun MainScreen(
                                 }
                             )
                     ) {
-                        VideoListContent(
+                        //depending of witch tab of the toolbarbox is selected give me the relevant screen
+                        when (currentTab) {
+                            MainTab.VIDEOS -> VideoListContent(
                             uiState = uiState,
                             filterState = filterState,
                             videosToShow = videosToShow,
@@ -276,7 +293,16 @@ fun MainScreen(
                             isPlayerVisible = isPlayerVisible,
                             cardUiStates = cardUiStates,
                             onCardTitleClick = { videoId -> viewModel.onCardTitleClick(videoId) }
-                        )
+                            )
+                            MainTab.ARTISTS -> ArtistContent(
+                                modifier = Modifier.fillMaxSize(),
+                                onRefresh = { /* TODO: refresh artists data */ }
+                            )
+                            MainTab.HISTORY -> HistoryContent(
+                                modifier = Modifier.fillMaxSize(),
+                                onRefresh = { /* TODO: refresh history data */ }
+                            )
+                        }
                     }
 
                     // ----- PLAYER (draggable mini player) -----
@@ -459,17 +485,26 @@ fun LoadingScreen() {
 fun toolbarBox(
     onFilterClick: () -> Unit,
     videoCount: Int,
+    artistCount: Int,
+    historyCount: Int,
+    currentTab: MainTab,
+    onTabSelected: (MainTab) -> Unit,
     isPlayerVisible: Boolean,
     onTogglePlayerVisibility: () -> Unit
 ) {
     SearchBar(
         onFilterClick = onFilterClick,
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier
+            .fillMaxWidth()
             .padding(top = 4.dp)
     )
     //Spacer(modifier = Modifier.height(16.dp))
     VideoStatsRow(
         videoCount = videoCount,
+        artistCount = artistCount,
+        historyCount = historyCount,
+        currentTab = currentTab,
+        onTabSelected = onTabSelected,
         isPlayerVisible = isPlayerVisible,
         onTogglePlayerVisibility = onTogglePlayerVisibility,
         modifier = Modifier.fillMaxWidth()
@@ -524,6 +559,10 @@ fun ActiveFilterChipsRow(
 @Composable
 fun VideoStatsRow(
     videoCount: Int,
+    artistCount: Int,
+    historyCount: Int,
+    currentTab: MainTab,
+    onTabSelected: (MainTab) -> Unit,
     isPlayerVisible: Boolean,
     onTogglePlayerVisibility: () -> Unit,
     modifier: Modifier = Modifier
@@ -533,33 +572,56 @@ fun VideoStatsRow(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(
-            text = "Videos ($videoCount)",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold
-        )
+        // Tab row
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            TabText(
+                text = "Videos ($videoCount)",
+                selected = currentTab == MainTab.VIDEOS,
+                onClick = { onTabSelected(MainTab.VIDEOS) }
+            )
+            TabText(
+                text = "Artists ($artistCount)",
+                selected = currentTab == MainTab.ARTISTS,
+                onClick = { onTabSelected(MainTab.ARTISTS) }
+            )
+            TabText(
+                text = "History ($historyCount)",
+                selected = currentTab == MainTab.HISTORY,
+                onClick = { onTabSelected(MainTab.HISTORY) }
+            )
+        }
 
-        // IconToggleButton for global player visibility
+        // Player visibility toggle (unchanged)
         IconToggleButton(
             checked = isPlayerVisible,
             onCheckedChange = { onTogglePlayerVisibility() }
         ) {
             Icon(
-                imageVector = if (isPlayerVisible)
-                    Icons.Default.ViewList
-                else
-                    Icons.Default.ViewModule,
-                contentDescription = if (isPlayerVisible)
-                    "Hide players"
-                else
-                    "Show players",
-                tint = if (isPlayerVisible)
-                    MaterialTheme.colorScheme.primary
-                else
-                    MaterialTheme.colorScheme.onSurfaceVariant
+                imageVector = if (isPlayerVisible) Icons.Default.ViewList else Icons.Default.ViewModule,
+                contentDescription = if (isPlayerVisible) "Hide players" else "Show players",
+                tint = if (isPlayerVisible) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
     }
+}
+
+@Composable
+fun TabText(
+    text: String,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.titleMedium,
+        fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+        color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+        modifier = Modifier
+            .clickable { onClick() }
+            .padding(vertical = 8.dp)
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -594,49 +656,6 @@ fun TopBar(
         },
         scrollBehavior = scrollBehavior, // Pass scroll behavior to TopAppBar
         modifier = modifier
-    )
-}
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun SearchTopBar(
-    videoCount: Int,
-    onMenuClick: () -> Unit,
-    onRefresh: () -> Unit,
-    onFilterClick: () -> Unit,
-    scrollBehavior: TopAppBarScrollBehavior,
-    modifier: Modifier = Modifier,
-    isPlayerVisible: Boolean,
-    onTogglePlayerVisibility: () -> Unit,
-) {
-    TopAppBar(
-        title = {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(MaterialTheme.colorScheme.background)
-                    // No nestedScroll here – scrollBehavior is already on TopAppBar
-                    .padding(16.dp) // Consider using windowInsets if needed
-            ) {
-                SearchBar(
-                    onFilterClick = onFilterClick,
-                    modifier = Modifier.weight(1f)
-                )
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                VideoStatsRow(
-                    videoCount = videoCount,
-                    isPlayerVisible = isPlayerVisible,
-                    onTogglePlayerVisibility = onTogglePlayerVisibility,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp)
-                        .padding(bottom = 8.dp)
-                )
-            }
-        },
-        scrollBehavior = scrollBehavior,
-        modifier = modifier // outer modifier for TopAppBar itself
     )
 }
 
@@ -1134,5 +1153,31 @@ fun SetNavigationBarColor(color: Color) {
             window.setNavigationBarColor(color.toArgb())
         }
         onDispose { }
+    }
+}
+
+@Composable
+fun ArtistContent(
+    modifier: Modifier = Modifier,
+    onRefresh: () -> Unit = {}
+) {
+    Box(
+        modifier = modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
+    ) {
+        Text("Artists Content")
+    }
+}
+
+@Composable
+fun HistoryContent(
+    modifier: Modifier = Modifier,
+    onRefresh: () -> Unit = {}
+) {
+    Box(
+        modifier = modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
+    ) {
+        Text("History Content")
     }
 }
