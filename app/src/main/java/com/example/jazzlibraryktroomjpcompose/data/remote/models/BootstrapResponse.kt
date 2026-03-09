@@ -93,7 +93,16 @@ data class RemoteArtist(
     val rank: Int?,
 
     @SerializedName("instrument_id")
-    val instrumentId: Int
+    val instrumentId: Int,
+
+    @SerializedName("spotify_playlist_id")
+    val spotifyPlaylistId: String?,
+
+    @SerializedName("musicbrainz_uuid")
+    val musicbrainzUUID: String?,
+
+    @SerializedName("discogs_id")
+    val discogsId: Int?
 )
 
 data class RemoteQuote(

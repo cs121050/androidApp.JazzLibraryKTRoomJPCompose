@@ -165,7 +165,4 @@ GROUP BY a.artist_id, a.artist_name, a.artist_surname, a.artist_rank --, a.wiki,
         typeId: Int = 0,
         durationId: Int = 0
     ): Flow<List<ArtistWithVideoCount>>
-
-
-
 }

@@ -19,7 +19,10 @@ object ArtistMapper {
             name = domain.name,
             surname = domain.surname,
             instrumentId = domain.instrumentId,
-            rank = domain.rank
+            rank = domain.rank,
+            spotifyPlaylistId = domain.spotifyPlaylistId,
+            musicbrainzUUID = domain.musicbrainzUUID,
+            discogsId = domain.discogsId
         )
     }
 
@@ -30,7 +33,10 @@ object ArtistMapper {
             name = entity.name,
             surname = entity.surname,
             instrumentId = entity.instrumentId,
-            rank = entity.rank
+            rank = entity.rank,
+            spotifyPlaylistId = entity.spotifyPlaylistId,
+            musicbrainzUUID = entity.musicbrainzUUID,
+            discogsId = entity.discogsId
         )
     }
     // Local Entity → Domain
@@ -41,6 +47,9 @@ object ArtistMapper {
             surname = entity.artist.surname,
             instrumentId = entity.artist.instrumentId,
             rank = entity.artist.rank,
+            spotifyPlaylistId = entity.artist.spotifyPlaylistId,
+            musicbrainzUUID = entity.artist.musicbrainzUUID,
+            discogsId = entity.artist.discogsId,
             videoCount = entity.videoCount
         )
     }

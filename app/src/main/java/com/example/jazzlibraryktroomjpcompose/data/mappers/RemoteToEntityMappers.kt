@@ -47,7 +47,10 @@ object RemoteToEntityMappers {
             name = this.name,
             surname = this.surname,
             instrumentId = this.instrumentId,
-            rank = this.rank ?: 0
+            rank = this.rank ?: 0,
+            spotifyPlaylistId = this.spotifyPlaylistId,
+            musicbrainzUUID = this.musicbrainzUUID,
+            discogsId = this.discogsId ?: 0
         )
     }
 

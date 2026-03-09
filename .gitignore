@@ -74,3 +74,6 @@ lint/tmp/
 # OS
 .DS_Store
 Thumbs.db
+
+#secrets
+secrets.txt
