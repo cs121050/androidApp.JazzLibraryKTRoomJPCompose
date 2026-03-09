@@ -31,5 +31,14 @@ data class ArtistRoomEntity(
     val instrumentId: Int,
 
     @ColumnInfo(name = "artist_rank")
-    val rank: Int? = 0
+    val rank: Int? = 0,
+
+    @ColumnInfo(name = "spotify_playlist_id")
+    val spotifyPlaylistId: String?,
+
+    @ColumnInfo(name = "musicbrainz_uuid")
+    val musicbrainzUUID: String?,
+
+    @ColumnInfo(name = "discogs_id")
+    val discogsId: Int? = 0,
 )

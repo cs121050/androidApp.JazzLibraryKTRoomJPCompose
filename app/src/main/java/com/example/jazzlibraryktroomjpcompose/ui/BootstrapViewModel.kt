@@ -269,14 +269,14 @@ class BootstrapViewModel @Inject constructor(
 
             // Insert test artists
             val testArtists = listOf(
-                ArtistRoomEntity(1, "Miles", "Davis", 1, 100),
-                ArtistRoomEntity(2, "John", "Coltrane", 2, 95),
-                ArtistRoomEntity(3, "Bill", "Evans", 3, 90),
-                ArtistRoomEntity(4, "Charlie", "Parker", 2, 98),
-                ArtistRoomEntity(5, "Duke", "Ellington", 3, 92),
-                ArtistRoomEntity(6, "Wes", "Montgomery", 6, 85),
-                ArtistRoomEntity(7, "Charles", "Mingus", 4, 88),
-                ArtistRoomEntity(8, "Art", "Blakey", 5, 86)
+                ArtistRoomEntity(1, "Miles", "Davis", 1, 100, "","",1),
+                ArtistRoomEntity(2, "John", "Coltrane", 2, 95, "","",1),
+                ArtistRoomEntity(3, "Bill", "Evans", 3, 90, "","",1),
+                ArtistRoomEntity(4, "Charlie", "Parker", 2, 98, "","",1),
+                ArtistRoomEntity(5, "Duke", "Ellington", 3, 92, "","",1),
+                ArtistRoomEntity(6, "Wes", "Montgomery", 6, 85, "","",1),
+                ArtistRoomEntity(7, "Charles", "Mingus", 4, 88, "","",1),
+                ArtistRoomEntity(8, "Art", "Blakey", 5, 86, "","",1)
             )
             database.artistDao().insertAllArtists(testArtists)
 

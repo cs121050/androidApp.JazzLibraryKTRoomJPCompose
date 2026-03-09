@@ -97,6 +97,7 @@ class FilterManager @Inject constructor(
                 durationsFlowWithCount,//durationsFlow,
                 typesFlowWithCount//typesFlow
             ) { videos, artists, instruments, durations, types ->
+
                 FilteredData(
                     videos = videos.map { com.example.jazzlibraryktroomjpcompose.data.mappers.VideoMapper.toDomain(it) },
                     artists = artists.map { com.example.jazzlibraryktroomjpcompose.data.mappers.ArtistMapper.toDomainWithCount(it) },
