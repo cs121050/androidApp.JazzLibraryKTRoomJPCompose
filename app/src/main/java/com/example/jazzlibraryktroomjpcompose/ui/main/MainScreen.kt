@@ -96,7 +96,6 @@ import com.example.jazzlibraryktroomjpcompose.ui.main.util.ScrollingSlowFlingBeh
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScreen(
