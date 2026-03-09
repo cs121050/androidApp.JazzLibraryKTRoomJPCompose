@@ -67,6 +67,9 @@ class MainViewModel @Inject constructor(
     private val _cardUiStates = MutableStateFlow<Map<String, CardUiState>>(emptyMap())
     val cardUiStates: StateFlow<Map<String, CardUiState>> = _cardUiStates.asStateFlow()
 
+    private val _currentTab = MutableStateFlow(MainTab.VIDEOS)
+    val currentTab: StateFlow<MainTab> = _currentTab.asStateFlow()
+
     init {
         checkAndLoadData()
     }
@@ -467,6 +470,10 @@ class MainViewModel @Inject constructor(
 
         _cardUiStates.update { it + (videoId to newState) }
     }
+
+    fun setCurrentTab(tab: MainTab) {
+        _currentTab.value = tab
+    } //(Later you can trigger data loading for the selected tab here)
 }
 
 // UI State classes (unchanged)
@@ -510,3 +517,5 @@ enum class BottomSheetState {
     HALF_EXPANDED,
     EXPANDED
 }
+
+enum class MainTab { VIDEOS, ARTISTS, HISTORY }
