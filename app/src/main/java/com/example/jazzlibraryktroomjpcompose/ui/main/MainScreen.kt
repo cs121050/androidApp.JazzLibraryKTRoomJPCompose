@@ -1411,6 +1411,7 @@ fun ArtistCard(
     modifier: Modifier = Modifier,
     onClick: () -> Unit = {}
 ) {
+    val hasVideos = artist.videoCount > 0
     val shape = RoundedCornerShape(12.dp)
 
     Box(
@@ -1418,7 +1419,7 @@ fun ArtistCard(
             .shadow(4.dp, shape)
             .clip(shape)
             .background(MaterialTheme.colorScheme.surfaceVariant, shape = shape)
-            .clickable { onClick() } // use the provided onClick
+            .clickable { onClick() }
     ) {
         Row(
             modifier = Modifier
@@ -1442,7 +1443,8 @@ fun ArtistCard(
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Medium,
                     maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
+                    overflow = TextOverflow.Ellipsis,
+                    color = MaterialTheme.colorScheme.onSurface
                 )
 
                 if (artist.imageAuthor != null || artist.imageLicense != null) {
@@ -1462,6 +1464,15 @@ fun ArtistCard(
                     )
                 }
             }
+        }
+
+        // Overlay for zero‑video artists
+        if (!hasVideos) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.4f))
+            )
         }
     }
 }

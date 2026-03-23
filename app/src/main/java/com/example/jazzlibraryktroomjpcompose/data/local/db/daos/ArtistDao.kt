@@ -153,12 +153,13 @@ interface ArtistDao {
     @Query("""
     SELECT a.*, COUNT(DISTINCT v.video_id) as video_count 
 FROM artists a
-INNER JOIN video_contains_artist vca ON a.artist_id = vca.artist_id
-INNER JOIN videos v ON vca.video_id = v.video_id
+LEFT JOIN video_contains_artist vca ON a.artist_id = vca.artist_id
+LEFT JOIN videos v ON vca.video_id = v.video_id
 WHERE (:instrumentId = 0 OR a.instrument_id = :instrumentId)
   AND (:typeId = 0 OR v.type_id = :typeId)
   AND (:durationId = 0 OR v.duration_id = :durationId)
-GROUP BY a.artist_id, a.artist_name, a.artist_surname, a.artist_rank --, a.wiki, a.spoti
+GROUP BY a.artist_id, a.artist_name, a.artist_surname, a.artist_rank 
+ORDER BY a.artist_name
 """)
     fun getArtistsWithVideoCountByMultipleFilters(
         instrumentId: Int = 0,
