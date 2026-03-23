@@ -228,7 +228,10 @@ class MainViewModel @Inject constructor(
                     database.artistDao().getAllArtistsWithVideoCount()
                         .map { entities -> entities.map { ArtistMapper.toDomainWithCount(it) } }
                         .collect { artists ->
-                            _uiState.update { it.copy(availableArtists = artists) }
+                            _uiState.update {
+                                it.copy(availableArtists = artists,
+                                availableArtistsDisplay = artists)
+                            }
                             println("DEBUG: Loaded ${artists.size} artists")
                         }
                 },
@@ -305,6 +308,7 @@ class MainViewModel @Inject constructor(
                 _uiState.update { uiState ->
                     uiState.copy(
                         filteredVideos = finalVideos,
+                        availableArtistsDisplay = filteredData.artists,
                         availableArtists = filteredData.artists,
                         availableInstruments = filteredData.instruments,
                         availableDurations = filteredData.durations,
@@ -437,6 +441,15 @@ class MainViewModel @Inject constructor(
         }
     }
 
+    fun shuffleArtists() {
+        viewModelScope.launch {
+            // Shuffle the current display list
+            val current = _uiState.value.availableArtistsDisplay
+            val shuffled = current.shuffled()
+            _uiState.update { it.copy(availableArtistsDisplay = shuffled) }
+        }
+    }
+
     fun togglePlayerVisibility() {
         val newValue = !_isPlayerVisible.value
         _isPlayerVisible.value = newValue
@@ -481,7 +494,8 @@ data class MainUiState(
     val videos: List<com.example.jazzlibraryktroomjpcompose.domain.models.Video> = emptyList(),
     val filteredVideos: List<com.example.jazzlibraryktroomjpcompose.domain.models.Video> = emptyList(),
     val allInstruments: List<com.example.jazzlibraryktroomjpcompose.domain.models.Instrument> = emptyList(),
-    val availableArtists: List<com.example.jazzlibraryktroomjpcompose.domain.models.Artist> = emptyList(),
+    val availableArtists: List<com.example.jazzlibraryktroomjpcompose.domain.models.Artist> = emptyList(), // natural order, used for chips
+    val availableArtistsDisplay: List<com.example.jazzlibraryktroomjpcompose.domain.models.Artist> = emptyList(),   // display order (shuffled or base)
     val availableInstruments: List<com.example.jazzlibraryktroomjpcompose.domain.models.Instrument> = emptyList(),
     val availableDurations: List<com.example.jazzlibraryktroomjpcompose.domain.models.Duration> = emptyList(),
     val availableTypes: List<com.example.jazzlibraryktroomjpcompose.domain.models.Type> = emptyList(),

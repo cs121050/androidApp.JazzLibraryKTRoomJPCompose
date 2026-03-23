@@ -9,9 +9,12 @@ data class Artist(
     val videoCount: Int = 0,
     val spotifyPlaylistId: String?,
     val musicbrainzUUID: String?,
-    val discogsId: Int? = 0
-    // Note: We don't include nested objects here for simplicity
-    // They'll be handled separately
+    val discogsId: Int? = 0,
+    val wikipediaUrl: String? = null,
+    val thumbnailUrl: String? = null,
+    val imageAuthor: String? = null,
+    val imageLicense: String? = null,
+    val imageSourceUrl: String? = null
 ) {
     // ✅ BUSINESS LOGIC in domain class methods
 

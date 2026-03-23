@@ -41,4 +41,19 @@ data class ArtistRoomEntity(
 
     @ColumnInfo(name = "discogs_id")
     val discogsId: Int? = 0,
+
+    @ColumnInfo(name = "wikipedia_url")
+    val wikipediaUrl: String? = null,
+
+    @ColumnInfo(name = "thumbnail_url")
+    val thumbnailUrl: String? = null,
+
+    @ColumnInfo(name = "image_author")
+    val imageAuthor: String? = null,
+
+    @ColumnInfo(name = "image_license")
+    val imageLicense: String? = null,
+
+    @ColumnInfo(name = "image_source_url")
+    val imageSourceUrl: String? = null
 )
