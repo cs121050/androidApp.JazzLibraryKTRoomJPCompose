@@ -61,13 +61,22 @@ import androidx.compose.ui.unit.IntOffset
 import com.example.jazzlibraryktroomjpcompose.domain.models.FilterPath
 import kotlin.math.roundToInt
 import android.os.Build
+import android.text.Html
 import android.webkit.WebView
 import androidx.activity.ComponentActivity
 import androidx.compose.animation.core.Animatable
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
@@ -81,6 +90,7 @@ import com.example.jazzlibraryktroomjpcompose.presentation.player.PlayerViewMode
 import kotlinx.coroutines.launch
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.material.icons.filled.BrokenImage
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
@@ -95,6 +105,25 @@ import com.example.jazzlibraryktroomjpcompose.ui.main.player.SmartYoutubePlayerH
 import com.example.jazzlibraryktroomjpcompose.ui.main.util.ScrollingSlowFlingBehavior
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import coil.compose.AsyncImage
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.painter.BitmapPainter
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.unit.sp
+import com.example.jazzlibraryktroomjpcompose.domain.models.Artist
+import com.example.jazzlibraryktroomjpcompose.ui.main.util.generateIdenticon
+import androidx.compose.runtime.key
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.layout.positionInParent
+import androidx.compose.ui.window.Dialog
+import kotlinx.coroutines.withContext
+import org.json.JSONObject
+import java.net.HttpURLConnection
+import java.net.URL
+import kotlin.math.abs
+
+
+import java.net.URLEncoder
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -214,7 +243,10 @@ fun MainScreen(
             // ----- PULL TO REFRESH + CONTENT -----
             PullToRefreshBox(
                 isRefreshing = isRefreshing,
-                onRefresh = { viewModel.shuffleVideoList() },
+                onRefresh = {
+                    viewModel.shuffleVideoList()
+                    viewModel.shuffleArtists()
+                },
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(
@@ -296,11 +328,21 @@ fun MainScreen(
                             )
                             MainTab.ARTISTS -> ArtistContent(
                                 modifier = Modifier.fillMaxSize(),
-                                onRefresh = { /* TODO: refresh artists data */ }
+                                artistsShuffled = uiState.availableArtistsDisplay,
+                                artistsBase = uiState.availableArtists,
+                                filterPath = filterState.currentFilterPath, // pass filter path
+                                onRefresh = { viewModel.shuffleArtists() },
+                                onArtistSelected = { artist ->
+                                    viewModel.handleChipSelection(
+                                        FilterPath.CATEGORY_ARTIST,
+                                        artist.id,
+                                        artist.fullName,
+                                        true // add filter
+                                    )
+                                }
                             )
                             MainTab.HISTORY -> HistoryContent(
                                 modifier = Modifier.fillMaxSize(),
-                                onRefresh = { /* TODO: refresh history data */ }
                             )
                         }
                     }
@@ -525,7 +567,7 @@ fun ActiveFilterChipsRow(
     ) {
         // Clickable Logo Text
         Text(
-            text = "JazzTalk",
+            text = "JazzLib",
             style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
             color = MaterialTheme.colorScheme.primary,
             modifier = Modifier
@@ -621,41 +663,6 @@ fun TabText(
         modifier = Modifier
             .clickable { onClick() }
             .padding(vertical = 8.dp)
-    )
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun TopBar(
-    onMenuClick: () -> Unit,
-    onRefresh: () -> Unit,
-    onFilterClick: () -> Unit,
-    scrollBehavior: TopAppBarScrollBehavior, // Add this parameter
-    modifier: Modifier = Modifier
-) {
-    TopAppBar(
-        title = {
-            Text(
-                text = "Jazzli",
-                style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
-                color = MaterialTheme.colorScheme.primary
-            )
-        },
-        navigationIcon = {
-            IconButton(onClick = onMenuClick) {
-                Icon(Icons.Default.Menu, contentDescription = "Menu")
-            }
-        },
-        actions = {
-            IconButton(onClick = onRefresh) {
-                Icon(Icons.Default.Refresh, contentDescription = "Refresh Data")
-            }
-            IconButton(onClick = onFilterClick) {
-                Icon(Icons.Default.FilterList, contentDescription = "Filters")
-            }
-        },
-        scrollBehavior = scrollBehavior, // Pass scroll behavior to TopAppBar
-        modifier = modifier
     )
 }
 
@@ -1159,20 +1166,278 @@ fun SetNavigationBarColor(color: Color) {
 @Composable
 fun ArtistContent(
     modifier: Modifier = Modifier,
-    onRefresh: () -> Unit = {}
+    artistsShuffled: List<Artist>,
+    artistsBase: List<Artist>,
+    onRefresh: () -> Unit = {},
+    filterPath: List<FilterPath>, // new parameter
+    onArtistSelected: (Artist) -> Unit = {} // new callback
 ) {
-    Box(
-        modifier = modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
+    // Check if there's an artist filter
+    val selectedArtist = filterPath
+        .firstOrNull { it.categoryId == FilterPath.CATEGORY_ARTIST }
+        ?.let { filter ->
+            // Find the artist in the base list (or shuffled) by ID
+            artistsBase.find { it.id == filter.entityId }
+        }
+
+    if (selectedArtist != null) {
+        // Single artist view
+        SingleArtistView(
+            artist = selectedArtist,
+            modifier = modifier
+        )
+        return
+    }
+
+    if (artistsShuffled.isEmpty()) {
+        Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text("No artists loaded")
+        }
+        return
+    }
+
+    // Single artist case
+    if (artistsShuffled.size == 1) {
+        SingleArtistView(
+            artist = artistsShuffled.first(),
+            modifier = modifier
+        )
+        return
+    }
+
+    // More than one artist: show grid pager (unchanged logic, but pass onArtistSelected to cards)
+    val configuration = LocalConfiguration.current
+    val screenWidthDp = configuration.screenWidthDp.dp
+    val cardWidth = (screenWidthDp - 32.dp - 8.dp) / 2
+    val cardHeight = 80.dp
+
+    var useAlphabetical by remember { mutableStateOf(false) }
+    val artists = if (useAlphabetical) artistsBase else artistsShuffled
+    val pages = remember(artists) { artists.chunked(8) }
+
+    val pagerState = rememberPagerState(
+        initialPage = 0,
+        pageCount = { pages.size }
+    )
+
+    LaunchedEffect(artistsShuffled) {
+        useAlphabetical = false
+        pagerState.scrollToPage(0)
+    }
+
+    var targetPage by remember { mutableIntStateOf(-1) }
+    LaunchedEffect(useAlphabetical, targetPage) {
+        if (useAlphabetical && targetPage >= 0 && targetPage < pages.size) {
+            pagerState.scrollToPage(targetPage)
+            targetPage = -1
+        }
+    }
+
+    val coroutineScope = rememberCoroutineScope()
+
+    LazyColumn(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        Text("Artists Content")
+        item {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                HorizontalPager(
+                    state = pagerState,
+                    modifier = Modifier.fillMaxWidth(),
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                    pageSpacing = 16.dp
+                ) { page ->
+                    val pageArtists = pages[page]
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.TopStart
+                    ) {
+                        Column(
+                            modifier = Modifier.height(cardHeight * 4 + 8.dp * 3),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            for (row in 0 until 4) {
+                                val start = row * 2
+                                val rowArtists = pageArtists.slice(start until minOf(start + 2, pageArtists.size))
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    rowArtists.forEach { artist ->
+                                        key(artist.id) {
+                                            ArtistCard(
+                                                artist = artist,
+                                                modifier = Modifier
+                                                    .width(cardWidth)
+                                                    .height(cardHeight),
+                                                onClick = { onArtistSelected(artist) } // pass click handler
+                                            )
+                                        }
+                                    }
+                                    repeat(2 - rowArtists.size) {
+                                        Spacer(modifier = Modifier.width(cardWidth))
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if (pages.size > 1) {
+                    FastScrollingDotsRow(
+                        pageCount = pages.size,
+                        currentPage = pagerState.currentPage,
+                        onSwitchToAlphabeticalAndScrollTo = { pageIndex ->
+                            coroutineScope.launch {
+                                if (!useAlphabetical) {
+                                    useAlphabetical = true
+                                    targetPage = pageIndex
+                                } else {
+                                    pagerState.scrollToPage(pageIndex)
+                                }
+                            }
+                        },
+                        modifier = Modifier.padding(horizontal = 8.dp)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun FastScrollingDotsRow(
+    pageCount: Int,
+    currentPage: Int,
+    onSwitchToAlphabeticalAndScrollTo: (Int) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var rowWidth by remember { mutableIntStateOf(0) }
+
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .onGloballyPositioned { layoutCoordinates ->
+                rowWidth = layoutCoordinates.size.width
+            }
+            .pointerInput(pageCount) {
+                detectDragGestures(
+                    onDragStart = { offset ->
+                        if (rowWidth > 0 && pageCount > 0) {
+                            val x = offset.x.coerceIn(0f, rowWidth.toFloat())
+                            val pageIndex = ((x / rowWidth) * pageCount).toInt().coerceIn(0, pageCount - 1)
+                            onSwitchToAlphabeticalAndScrollTo(pageIndex)
+                        }
+                    },
+                    onDrag = { change, _ ->
+                        change.consume()
+                        if (rowWidth > 0 && pageCount > 0) {
+                            val x = change.position.x.coerceIn(0f, rowWidth.toFloat())
+                            val pageIndex = ((x / rowWidth) * pageCount).toInt().coerceIn(0, pageCount - 1)
+                            if (pageIndex != currentPage) {
+                                onSwitchToAlphabeticalAndScrollTo(pageIndex)
+                            }
+                        }
+                    }
+                )
+            }
+            .pointerInput(pageCount) {
+                detectTapGestures { offset ->
+                    if (rowWidth > 0 && pageCount > 0) {
+                        val x = offset.x.coerceIn(0f, rowWidth.toFloat())
+                        val pageIndex = ((x / rowWidth) * pageCount).toInt().coerceIn(0, pageCount - 1)
+                        onSwitchToAlphabeticalAndScrollTo(pageIndex)
+                    }
+                }
+            },
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        for (i in 0 until pageCount) {
+            Box(
+                modifier = Modifier
+                    .size(if (i == currentPage) 6.dp else 4.dp)
+                    .clip(CircleShape)
+                    .background(
+                        if (i == currentPage)
+                            MaterialTheme.colorScheme.primary
+                        else
+                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
+                    )
+            )
+            if (i != pageCount - 1) {
+                Spacer(modifier = Modifier.width(4.dp))
+            }
+        }
+    }
+}
+
+@Composable
+fun ArtistCard(
+    artist: Artist,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit = {}
+) {
+    val shape = RoundedCornerShape(12.dp)
+
+    Box(
+        modifier = modifier
+            .shadow(4.dp, shape)
+            .clip(shape)
+            .background(MaterialTheme.colorScheme.surfaceVariant, shape = shape)
+            .clickable { onClick() } // use the provided onClick
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Start
+        ) {
+            ArtistImage(
+                artist = artist,
+                modifier = Modifier.size(48.dp)
+            )
+
+            Spacer(modifier = Modifier.width(12.dp))
+
+            Column(
+                modifier = Modifier.weight(1f)
+            ) {
+                Text(
+                    text = artist.fullName,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+
+                if (artist.imageAuthor != null || artist.imageLicense != null) {
+                    Text(
+                        text = buildString {
+                            artist.imageAuthor?.let { append(it) }
+                            if (artist.imageLicense != null) {
+                                if (artist.imageAuthor != null) append(" / ")
+                                append(artist.imageLicense)
+                            }
+                        },
+                        style = MaterialTheme.typography.labelSmall,
+                        fontSize = 10.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
     }
 }
 
 @Composable
 fun HistoryContent(
-    modifier: Modifier = Modifier,
-    onRefresh: () -> Unit = {}
+    modifier: Modifier = Modifier
 ) {
     Box(
         modifier = modifier.fillMaxSize(),
@@ -1180,4 +1445,603 @@ fun HistoryContent(
     ) {
         Text("History Content")
     }
+}
+
+@Composable
+fun ArtistImage(
+    artist: Artist,
+    modifier: Modifier = Modifier,
+    contentScale: ContentScale = ContentScale.Crop
+) {
+    // Generate on each composition – cheap enough
+    val fallbackPainter = BitmapPainter(generateIdenticon(artist).asImageBitmap())
+
+    AsyncImage(
+        model = ImageRequest.Builder(LocalContext.current)
+            .data(artist.thumbnailUrl)
+            .crossfade(true)
+            .build(),
+        contentDescription = artist.fullName,
+        modifier = modifier,
+        contentScale = contentScale,
+        error = fallbackPainter,
+    )
+}
+@Composable
+fun SingleArtistView(
+    artist: Artist,
+    modifier: Modifier = Modifier
+) {
+    val context = LocalContext.current
+    var showFullscreenImage by remember { mutableStateOf(false) }
+
+    // Determine if we have a real thumbnail
+    val hasThumbnail = artist.thumbnailUrl != null
+    val imageHeight = if (hasThumbnail) 300.dp else 150.dp
+
+    Box(modifier = modifier.fillMaxSize()) {
+        // Fixed image area at top
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(imageHeight)
+                .align(Alignment.TopCenter)
+        ) {
+            if (hasThumbnail) {
+                // Thumbnail fills width
+                AsyncImage(
+                    model = ImageRequest.Builder(context)
+                        .data(artist.thumbnailUrl)
+                        .crossfade(true)
+                        .build(),
+                    contentDescription = artist.fullName,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(imageHeight)
+                        .clickable { showFullscreenImage = true },
+                    contentScale = ContentScale.Crop,
+                    error = painterResource(id = R.drawable.ic_error)
+                )
+            } else {
+                // Identicon: centered and smaller
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        //.background(MaterialTheme.colorScheme.surfaceVariant) // gray background
+                        .clickable { showFullscreenImage = true },
+                    contentAlignment = Alignment.TopCenter
+                ) {
+                    val fallbackPainter = BitmapPainter(generateIdenticon(artist).asImageBitmap())
+                    Image(
+                        painter = fallbackPainter,
+                        contentDescription = artist.fullName,
+                        modifier = Modifier
+                            .size(150.dp)
+                    )
+                }
+            }
+
+            // Attribution text (if any) anchored at top‑end
+            if (artist.imageAuthor != null || artist.imageLicense != null) {
+                Text(
+                    text = buildString {
+                        artist.imageAuthor?.let { append(it) }
+                        if (artist.imageLicense != null) {
+                            if (artist.imageAuthor != null) append(" / ")
+                            append(artist.imageLicense)
+                        }
+                    },
+                    style = MaterialTheme.typography.labelSmall,
+                    fontSize = 10.sp,
+                    color = Color.White.copy(alpha = 0.7f),
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(8.dp)
+                )
+            }
+        }
+
+        // Scrollable content (starts below the image)
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(top = imageHeight), // ✅ fixed: directly use Dp
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            // Artist name
+            item {
+                Text(
+                    text = artist.fullName,
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                )
+            }
+
+            // Wiki info card
+            item {
+                WikiInfoCard(
+                    artist = artist,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+
+            // Albums section header
+            item {
+                Text(
+                    text = "Albums",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                )
+            }
+
+            // Horizontal albums row placeholder
+            item {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(200.dp)
+                        .padding(horizontal = 16.dp)
+                ) {
+                    Text(
+                        text = "Album cards will be placed here",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+    }
+
+    // Fullscreen image dialog (unchanged)
+    if (showFullscreenImage) {
+        Dialog(onDismissRequest = { showFullscreenImage = false }) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black)
+                    .clickable { showFullscreenImage = false }
+            ) {
+                if (hasThumbnail) {
+                    AsyncImage(
+                        model = ImageRequest.Builder(context)
+                            .data(artist.thumbnailUrl)
+                            .crossfade(true)
+                            .build(),
+                        contentDescription = artist.fullName,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Fit
+                    )
+                } else {
+                    val fallbackPainter = BitmapPainter(generateIdenticon(artist).asImageBitmap())
+                    Image(
+                        painter = fallbackPainter,
+                        contentDescription = artist.fullName,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Fit
+                    )
+                }
+                IconButton(
+                    onClick = { showFullscreenImage = false },
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(16.dp)
+                ) {
+                    Icon(
+                        Icons.Default.Close,
+                        contentDescription = "Close",
+                        tint = Color.White
+                    )
+                }
+            }
+        }
+    }
+}
+
+data class WikipediaSection(
+    val index: String,
+    val title: String,
+    val content: String
+)
+
+suspend fun fetchSections(pageTitle: String): List<WikipediaSection>? {
+    return withContext(Dispatchers.IO) {
+        try {
+            val encodedTitle = java.net.URLEncoder.encode(pageTitle, "UTF-8")
+            val apiUrl = "https://en.wikipedia.org/w/api.php?action=parse&page=$encodedTitle&prop=sections&format=json"
+            val url = URL(apiUrl)
+            val connection = url.openConnection() as HttpURLConnection
+            connection.requestMethod = "GET"
+            connection.connectTimeout = 5000
+            connection.readTimeout = 5000
+
+            if (connection.responseCode == HttpURLConnection.HTTP_OK) {
+                val content = connection.inputStream.bufferedReader().use { it.readText() }
+                val json = JSONObject(content)
+                val sectionsArray = json.getJSONObject("parse").getJSONArray("sections")
+                val sections = mutableListOf<WikipediaSection>()
+                for (i in 0 until sectionsArray.length()) {
+                    val sectionObj = sectionsArray.getJSONObject(i)
+                    val index = sectionObj.getString("index")
+                    val title = sectionObj.getString("line")
+                    sections.add(WikipediaSection(index, title, ""))
+                }
+                sections
+            } else null
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        }
+    }
+}
+
+suspend fun fetchSectionContent(pageTitle: String, sectionIndex: String): String? {
+    return withContext(Dispatchers.IO) {
+        try {
+            val encodedTitle = java.net.URLEncoder.encode(pageTitle, "UTF-8")
+            val apiUrl = "https://en.wikipedia.org/w/api.php?action=parse&page=$encodedTitle&prop=text&section=$sectionIndex&format=json"
+            val url = URL(apiUrl)
+            val connection = url.openConnection() as HttpURLConnection
+            connection.requestMethod = "GET"
+            connection.connectTimeout = 5000
+            connection.readTimeout = 5000
+
+            if (connection.responseCode == HttpURLConnection.HTTP_OK) {
+                val content = connection.inputStream.bufferedReader().use { it.readText() }
+                val json = JSONObject(content)
+                val parse = json.optJSONObject("parse")
+                val text = parse?.optJSONObject("text")
+                val html = text?.optString("*")
+                if (html != null) {
+                    val plainText = Html.fromHtml(html, Html.FROM_HTML_MODE_LEGACY).toString()
+                    cleanWikipediaText(plainText) // returns null if length < 40
+                } else null
+            } else null
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+fun WikiInfoCard(
+    artist: Artist,
+    modifier: Modifier = Modifier
+) {
+    val configuration = LocalConfiguration.current
+    val screenHeight = configuration.screenHeightDp.dp
+    val maxHeight = screenHeight * 0.4f
+    val minHeight = 150.dp
+
+    var isLoading by remember { mutableStateOf(true) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var allPages by remember { mutableStateOf<List<String>>(emptyList()) }
+    var sectionsLoading by remember { mutableStateOf(false) }
+
+    LaunchedEffect(artist.wikipediaUrl) {
+        isLoading = true
+        error = null
+        sectionsLoading = false
+
+        if (artist.wikipediaUrl == null) {
+            error = "No Wikipedia link available"
+            isLoading = false
+            return@LaunchedEffect
+        }
+
+        val introSummary = fetchWikipediaIntro(artist.wikipediaUrl)
+        if (introSummary == null) {
+            error = "Could not load Wikipedia intro"
+            isLoading = false
+            return@LaunchedEffect
+        }
+
+        // Build intro pages
+        val introParagraphs = introSummary.extract.split("\n\n").filter { it.isNotBlank() }
+        val introPages = if (introParagraphs.isEmpty()) listOf(introSummary.extract) else introParagraphs
+
+        // Fetch sections
+        sectionsLoading = true
+        val sections = fetchSections(introSummary.title)
+        val sectionPages = mutableListOf<String>()
+        if (sections != null) {
+            val keywords = setOf("life", "career", "biography", "music", "death", "artistry", "legacy")
+            val matchingSections = sections.filter { section ->
+                keywords.any { keyword -> section.title.contains(keyword, ignoreCase = true) }
+            }
+            for (section in matchingSections) {
+                val content = fetchSectionContent(introSummary.title, section.index)
+                if (content != null) {
+                    val sectionText = "### ${section.title}\n\n$content"
+                    sectionPages.add(sectionText)
+                }
+            }
+        }
+        sectionsLoading = false
+
+        val attributionPage = """
+            ℹ️ This information is sourced from Wikipedia.
+            View the full article at: ${artist.wikipediaUrl}
+            
+            This content is available under the Creative Commons Attribution-ShareAlike License.
+        """.trimIndent()
+
+        allPages = introPages + sectionPages + listOf(attributionPage)
+        isLoading = false
+    }
+
+    val pagerState = rememberPagerState(
+        initialPage = 0,
+        pageCount = { allPages.size }
+    )
+    val coroutineScope = rememberCoroutineScope()
+
+    Card(
+        modifier = modifier
+            .fillMaxWidth()
+            .heightIn(min = minHeight, max = maxHeight)
+            .padding(horizontal = 16.dp),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
+        )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp)
+        ) {
+            when {
+                isLoading -> {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator()
+                    }
+                }
+                error != null -> {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Text(error!!, color = MaterialTheme.colorScheme.error)
+                    }
+                }
+                else -> {
+                    // Pager area takes remaining space
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth()
+                    ) {
+                        HorizontalPager(
+                            state = pagerState,
+                            modifier = Modifier.fillMaxSize()
+                        ) { page ->
+                            ScrollableTextPage(
+                                text = allPages[page],
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        }
+                        if (sectionsLoading && allPages.isNotEmpty()) {
+                            CircularProgressIndicator(
+                                modifier = Modifier
+                                    .size(24.dp)
+                                    .align(Alignment.BottomEnd)
+                                    .padding(8.dp)
+                            )
+                        }
+                    }
+                    // Dots row below the pager
+                    DotsRow(
+                        pageCount = allPages.size,
+                        currentPage = pagerState.currentPage,
+                        onPageSelected = { pageIndex ->
+                            coroutineScope.launch {
+                                pagerState.animateScrollToPage(pageIndex)
+                            }
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 12.dp)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ScrollableTextPage(
+    text: String,
+    modifier: Modifier = Modifier
+) {
+    val context = LocalContext.current
+    val lines = text.lines()
+    Column(
+        modifier = modifier
+            .verticalScroll(rememberScrollState())
+    ) {
+        for (line in lines) {
+            if (line.startsWith("### ")) {
+                // Render as heading
+                Text(
+                    text = line.removePrefix("### "),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(bottom = 4.dp)
+                )
+            } else {
+                Text(
+                    text = line,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(bottom = 4.dp)
+                )
+            }
+        }
+
+        // Extract and handle URL if present
+        val urlRegex = Regex("https?://[\\w\\-._~:/?#\\[\\]@!$&'()*+,;=]+")
+        val url = urlRegex.find(text)?.value
+        if (url != null && text.contains(url)) {
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = "🔗 $url",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.clickable {
+                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                    context.startActivity(intent)
+                }
+            )
+        }
+    }
+}
+
+@Composable
+fun DotsRow(
+    pageCount: Int,
+    currentPage: Int,
+    onPageSelected: (Int) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var rowWidth by remember { mutableIntStateOf(0) }
+
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .onGloballyPositioned { coordinates ->
+                rowWidth = coordinates.size.width
+            }
+            .pointerInput(pageCount) {
+                detectDragGestures(
+                    onDragStart = { offset ->
+                        if (rowWidth > 0 && pageCount > 0) {
+                            val x = offset.x.coerceIn(0f, rowWidth.toFloat())
+                            val pageIndex = ((x / rowWidth) * pageCount).toInt().coerceIn(0, pageCount - 1)
+                            onPageSelected(pageIndex)
+                        }
+                    },
+                    onDrag = { change, _ ->
+                        change.consume()
+                        if (rowWidth > 0 && pageCount > 0) {
+                            val x = change.position.x.coerceIn(0f, rowWidth.toFloat())
+                            val pageIndex = ((x / rowWidth) * pageCount).toInt().coerceIn(0, pageCount - 1)
+                            if (pageIndex != currentPage) {
+                                onPageSelected(pageIndex)
+                            }
+                        }
+                    }
+                )
+            }
+            .pointerInput(pageCount) {
+                detectTapGestures { offset ->
+                    if (rowWidth > 0 && pageCount > 0) {
+                        val x = offset.x.coerceIn(0f, rowWidth.toFloat())
+                        val pageIndex = ((x / rowWidth) * pageCount).toInt().coerceIn(0, pageCount - 1)
+                        onPageSelected(pageIndex)
+                    }
+                }
+            },
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        for (i in 0 until pageCount) {
+            Box(
+                modifier = Modifier
+                    .size(if (i == currentPage) 6.dp else 4.dp)
+                    .clip(CircleShape)
+                    .background(
+                        if (i == currentPage)
+                            MaterialTheme.colorScheme.primary
+                        else
+                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
+                    )
+            )
+            if (i != pageCount - 1) {
+                Spacer(modifier = Modifier.width(4.dp))
+            }
+        }
+    }
+}
+
+data class WikipediaSummary(
+    val title: String,
+    val extract: String,
+    val thumbnail: String? = null
+)
+
+suspend fun fetchWikipediaIntro(wikipediaUrl: String): WikipediaSummary? {
+    return withContext(Dispatchers.IO) {
+        try {
+            val title = wikipediaUrl
+                .substringAfterLast("/")
+                .takeWhile { it != '?' && it != '#' }
+                .replace('_', ' ')
+            val apiUrl = "https://en.wikipedia.org/w/api.php?action=query&prop=extracts&exintro=true&explaintext=true&titles=${java.net.URLEncoder.encode(title, "UTF-8")}&format=json"
+            val url = URL(apiUrl)
+            val connection = url.openConnection() as HttpURLConnection
+            connection.requestMethod = "GET"
+            connection.connectTimeout = 5000
+            connection.readTimeout = 5000
+
+            if (connection.responseCode == HttpURLConnection.HTTP_OK) {
+                val content = connection.inputStream.bufferedReader().use { it.readText() }
+                val json = JSONObject(content)
+                val pages = json.getJSONObject("query").getJSONObject("pages")
+                val firstPage = pages.keys().asSequence().firstOrNull()?.let { pages.getJSONObject(it) }
+                val extract = firstPage?.optString("extract", "No extract found.") ?: "No extract found."
+                val cleanedExtract = cleanWikipediaText(extract)
+                if (cleanedExtract != null) {
+                    val pageTitle = firstPage?.optString("title", title) ?: title
+                    WikipediaSummary(pageTitle, cleanedExtract, null)
+                } else null
+            } else null
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        }
+    }
+}
+
+fun cleanWikipediaText(rawText: String): String? {
+    val lines = rawText.lines().toMutableList()
+
+    // Remove everything up to and including the first "edit" line (main header)
+    val firstEditIndex = lines.indexOfFirst { it.trim() == "edit" }
+    if (firstEditIndex != -1) {
+        lines.subList(0, firstEditIndex + 1).clear()
+    }
+
+    // Remove any subsequent "edit" line and everything after it
+    val secondEditIndex = lines.indexOfFirst { it.trim() == "edit" }
+    if (secondEditIndex != -1) {
+        lines.subList(secondEditIndex, lines.size).clear()
+    }
+
+    val cleanedLines = mutableListOf<String>()
+    for (line in lines) {
+        var l = line.trim()
+        if (l.isEmpty()) continue
+
+        // Remove citations like [1], [2]
+        l = l.replace(Regex("\\[.*?\\]"), "")
+
+        // Skip lines that start with "obj"
+        if (l.startsWith("obj", ignoreCase = true)) continue
+
+        // Stop at footnote markers (lines starting with '^')
+        if (l.startsWith('^')) break
+
+        if (l.isNotBlank()) {
+            cleanedLines.add(l)
+        }
+    }
+
+    val result = cleanedLines.joinToString("\n")
+    return if (result.length >= 40) result else null
 }

@@ -102,7 +102,10 @@ data class RemoteArtist(
     val musicbrainzUUID: String?,
 
     @SerializedName("discogs_id")
-    val discogsId: Int?
+    val discogsId: Int?,
+
+    @SerializedName("wikipedia_url")
+    val wikipediaUrl: String?
 )
 
 data class RemoteQuote(

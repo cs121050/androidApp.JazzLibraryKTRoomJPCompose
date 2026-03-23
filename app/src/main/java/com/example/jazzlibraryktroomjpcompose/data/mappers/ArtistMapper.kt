@@ -22,7 +22,12 @@ object ArtistMapper {
             rank = domain.rank,
             spotifyPlaylistId = domain.spotifyPlaylistId,
             musicbrainzUUID = domain.musicbrainzUUID,
-            discogsId = domain.discogsId
+            discogsId = domain.discogsId,
+            wikipediaUrl = domain.wikipediaUrl,
+            thumbnailUrl = domain.thumbnailUrl,
+            imageAuthor = domain.imageAuthor,
+            imageLicense = domain.imageLicense,
+            imageSourceUrl = domain.imageSourceUrl
         )
     }
 
@@ -36,10 +41,16 @@ object ArtistMapper {
             rank = entity.rank,
             spotifyPlaylistId = entity.spotifyPlaylistId,
             musicbrainzUUID = entity.musicbrainzUUID,
-            discogsId = entity.discogsId
+            discogsId = entity.discogsId,
+            wikipediaUrl = entity.wikipediaUrl,
+            thumbnailUrl = entity.thumbnailUrl,
+            imageAuthor = entity.imageAuthor,
+            imageLicense = entity.imageLicense,
+            imageSourceUrl = entity.imageSourceUrl
         )
     }
-    // Local Entity → Domain
+
+    // Local Entity (with video count) → Domain
     fun toDomainWithCount(entity: ArtistWithVideoCount): Artist {
         return Artist(
             id = entity.artist.id,
@@ -50,31 +61,24 @@ object ArtistMapper {
             spotifyPlaylistId = entity.artist.spotifyPlaylistId,
             musicbrainzUUID = entity.artist.musicbrainzUUID,
             discogsId = entity.artist.discogsId,
+            wikipediaUrl = entity.artist.wikipediaUrl,
+            thumbnailUrl = entity.artist.thumbnailUrl,
+            imageAuthor = entity.artist.imageAuthor,
+            imageLicense = entity.artist.imageLicense,
+            imageSourceUrl = entity.artist.imageSourceUrl,
             videoCount = entity.videoCount
         )
     }
 
-    //TODO//// Remote Response → Domain
+    // Remote Response → Domain (placeholder)
     fun toDomain(response: ArtistResponse): Artist {
-//        return Artist(
-//            id = response.artistId,
-//            name = response.artistName,
-//            surname = response.artistSurname,
-//            instrumentId = response.instrumentId ?: 0,
-//            rank = response.artistRank
-//        )
+        // TODO: Implement when remote model is updated
         return TODO("Provide the return value")
     }
 
-    //TODO//// Domain → Remote Response (if needed for POST/PUT)
+    // Domain → Remote Response (placeholder)
     fun toResponse(domain: Artist): ArtistResponse {
-//        return ArtistResponse(
-//            artistId = domain.id,
-//            artistName = domain.name,
-//            artistSurname = domain.surname,
-//            instrumentId = domain.instrumentId,
-//            artistRank = domain.rank
-//        )
+        // TODO: Implement when remote model is updated
         return TODO("Provide the return value")
     }
 }
