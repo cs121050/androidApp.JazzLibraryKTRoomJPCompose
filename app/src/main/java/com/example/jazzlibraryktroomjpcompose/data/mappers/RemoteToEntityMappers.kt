@@ -51,7 +51,8 @@ object RemoteToEntityMappers {
             spotifyPlaylistId = this.spotifyPlaylistId,
             musicbrainzUUID = this.musicbrainzUUID,
             discogsId = this.discogsId ?: 0,
-            wikipediaUrl = this.wikipediaUrl
+            wikipediaUrl = this.wikipediaUrl,
+            wikipediaData = this.wikipedia_data
         )
     }
 
