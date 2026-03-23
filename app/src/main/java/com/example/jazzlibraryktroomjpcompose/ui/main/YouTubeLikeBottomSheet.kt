@@ -958,22 +958,25 @@ private fun PaginatedArtistChip(
     onPositionMeasured: (Float, Boolean) -> Unit,
     onClick: () -> Unit
 ) {
-    if (artist.videoCount <= 0) return
+    // Determine if this chip has any videos
+    val hasVideos = artist.videoCount > 0
+    val alpha = if (hasVideos) 1f else 0.5f
 
+    // Colors with alpha applied
     val backgroundColor = if (isSelected) {
-        MaterialTheme.colorScheme.primaryContainer
+        MaterialTheme.colorScheme.primaryContainer.copy(alpha = alpha)
     } else {
-        MaterialTheme.colorScheme.surfaceVariant
+        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = alpha)
     }
 
     val textColor = if (isSelected) {
-        MaterialTheme.colorScheme.onPrimaryContainer
+        MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = alpha)
     } else {
-        MaterialTheme.colorScheme.onSurfaceVariant
+        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = alpha)
     }
 
     val borderColor = if (isSelected) {
-        MaterialTheme.colorScheme.primary
+        MaterialTheme.colorScheme.primary.copy(alpha = alpha)
     } else {
         Color.Transparent
     }
@@ -989,7 +992,7 @@ private fun PaginatedArtistChip(
                 RoundedCornerShape(Dimens.chipRoundedCorner)
             )
             .onGloballyPositioned { coordinates ->
-                // Measure position and pass it up
+                // Still report position even if disabled, for possible auto‑scroll
                 onPositionMeasured(coordinates.positionInParent().y, isSelected)
             }
     ) {
@@ -1008,16 +1011,6 @@ private fun PaginatedArtistChip(
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.align(Alignment.CenterHorizontally)
             )
-
-//            // Show video count if available
-//            if (artist.videoCount >= 0) {
-//                Text(
-//                    text = "(${artist.videoCount})",
-//                    color = textColor.copy(alpha = 0.7f),
-//                    style = MaterialTheme.typography.labelSmall,
-//                    modifier = Modifier.align(Alignment.CenterHorizontally)
-//                )
-//            }
         }
     }
 }
