@@ -27,7 +27,8 @@ object ArtistMapper {
             thumbnailUrl = domain.thumbnailUrl,
             imageAuthor = domain.imageAuthor,
             imageLicense = domain.imageLicense,
-            imageSourceUrl = domain.imageSourceUrl
+            imageSourceUrl = domain.imageSourceUrl,
+            wikipediaData = domain.wikipediaData
         )
     }
 
@@ -46,7 +47,8 @@ object ArtistMapper {
             thumbnailUrl = entity.thumbnailUrl,
             imageAuthor = entity.imageAuthor,
             imageLicense = entity.imageLicense,
-            imageSourceUrl = entity.imageSourceUrl
+            imageSourceUrl = entity.imageSourceUrl,
+            wikipediaData = entity.wikipediaData
         )
     }
 
@@ -66,6 +68,7 @@ object ArtistMapper {
             imageAuthor = entity.artist.imageAuthor,
             imageLicense = entity.artist.imageLicense,
             imageSourceUrl = entity.artist.imageSourceUrl,
+            wikipediaData = entity.artist.wikipediaData,
             videoCount = entity.videoCount
         )
     }

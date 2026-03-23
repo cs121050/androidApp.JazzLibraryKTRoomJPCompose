@@ -55,5 +55,13 @@ data class ArtistRoomEntity(
     val imageLicense: String? = null,
 
     @ColumnInfo(name = "image_source_url")
-    val imageSourceUrl: String? = null
+    val imageSourceUrl: String? = null,
+
+    @ColumnInfo(name = "wikipedia_data")
+    val wikipediaData: String? = null
+
 )
+
+
+
+

@@ -68,6 +68,8 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.lazy.LazyListState
@@ -77,6 +79,7 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
+
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
@@ -114,16 +117,21 @@ import com.example.jazzlibraryktroomjpcompose.domain.models.Artist
 import com.example.jazzlibraryktroomjpcompose.ui.main.util.generateIdenticon
 import androidx.compose.runtime.key
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.window.Dialog
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
-import java.net.HttpURLConnection
-import java.net.URL
-import kotlin.math.abs
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.ui.window.DialogProperties
 
 
-import java.net.URLEncoder
+class ScrollLockState {
+    var isLocked by mutableStateOf(false)
+}
+
+val LocalScrollLock = compositionLocalOf { ScrollLockState() }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -169,6 +177,8 @@ fun MainScreen(
     val artistCount = if (hasArtistFilter) 1 else uiState.availableArtists.size
     val historyCount = 0 // Placeholder – you can later replace with a real count
 
+    val scrollLockState = remember { ScrollLockState() }   // That is for the singleartistvie's wikidatacard scrolling, it locks the scrolling in order for items to consume the whole scrolling gesture
+
     // Monitor tab changes and minimize player when leaving Videos tab
     LaunchedEffect(currentTab) {
         if (playerUiState.isVisible && !playerUiState.isInMiniMode) {
@@ -202,9 +212,13 @@ fun MainScreen(
             val toolbarHeightPx = remember { mutableIntStateOf(0) }
             val toolbarOffset = remember { mutableFloatStateOf(0f) }
 
-            val nestedScrollConnection = remember {
+            val nestedScrollConnection = remember(scrollLockState) {
                 object : NestedScrollConnection {
                     override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                        // If the wiki card is locked, do NOT move the toolbar
+                        if (scrollLockState.isLocked) {
+                            return Offset.Zero
+                        }
                         val delta = available.y
                         val newOffset = (toolbarOffset.floatValue + delta)
                             .coerceIn(-toolbarHeightPx.intValue.toFloat(), 0f)
@@ -240,214 +254,231 @@ fun MainScreen(
                     .zIndex(7f)
             )
 
-            // ----- PULL TO REFRESH + CONTENT -----
-            PullToRefreshBox(
-                isRefreshing = isRefreshing,
-                onRefresh = {
-                    viewModel.shuffleVideoList()
-                    viewModel.shuffleArtists()
-                },
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(
-                        top = with(LocalDensity.current) {
-                            chipsHeightPx.intValue.toDp()
-                        }
-                    )
-            ) {
-                // This Box contains toolbar, list, and player
-                Box(
+
+
+
+
+            CompositionLocalProvider(LocalScrollLock provides scrollLockState) { // LOCK all the scrolling gestures to ensure that a nested item consume all of it
+
+                // ----- PULL TO REFRESH + CONTENT -----
+                PullToRefreshBox(
+                    isRefreshing = isRefreshing,
+                    onRefresh = {
+                        viewModel.shuffleVideoList()
+                        viewModel.shuffleArtists()
+                        //todo// album list
+                    },
                     modifier = Modifier
                         .fillMaxSize()
-                        .nestedScroll(nestedScrollConnection)
-                        .onGloballyPositioned { coordinates ->
-                            contentBoxRootPosition = IntOffset(
-                                x = coordinates.positionInRoot().x.roundToInt(),
-                                y = coordinates.positionInRoot().y.roundToInt()
-                            )
-                        }
-                ) {
-                    // ----- TOOLBAR (unchanged) -----
-                    Column(
-                        modifier = Modifier
-                            .align(Alignment.TopStart)
-                            .fillMaxWidth()
-                            .onGloballyPositioned { coordinates ->
-                                toolbarHeightPx.intValue = coordinates.size.height
+                        .padding(
+                            top = with(LocalDensity.current) {
+                                chipsHeightPx.intValue.toDp()
                             }
-                            .offset {
-                                IntOffset(0, toolbarOffset.floatValue.roundToInt())
-                            }
-                            .background(MaterialTheme.colorScheme.background)
-                            .zIndex(6f)
-                    ) {
-                        toolbarBox(
-                            onFilterClick = { viewModel.toggleBottomSheet() },
-                            videoCount = videosToShow.size,
-                            artistCount = artistCount,
-                            historyCount = historyCount,
-                            currentTab = currentTab,
-                            onTabSelected = { viewModel.setCurrentTab(it) },
-                            isPlayerVisible = isPlayerVisible,
-                            onTogglePlayerVisibility = { viewModel.togglePlayerVisibility() }
                         )
-                    }
-
-                    // ----- VIDEO LIST (unchanged) -----
+                ) {
+                    // This Box contains toolbar, list, and player
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .padding(
-                                top = with(LocalDensity.current) {
-                                    (toolbarHeightPx.intValue + toolbarOffset.floatValue)
-                                        .coerceAtLeast(0f)
-                                        .toDp()
-                                }
-                            )
+                            .nestedScroll(nestedScrollConnection)
+                            .onGloballyPositioned { coordinates ->
+                                contentBoxRootPosition = IntOffset(
+                                    x = coordinates.positionInRoot().x.roundToInt(),
+                                    y = coordinates.positionInRoot().y.roundToInt()
+                                )
+                            }
                     ) {
-                        //depending of witch tab of the toolbarbox is selected give me the relevant screen
-                        when (currentTab) {
-                            MainTab.VIDEOS -> VideoListContent(
-                            uiState = uiState,
-                            filterState = filterState,
-                            videosToShow = videosToShow,
-                            onRefresh = { viewModel.safeRefreshDataFromAPI() },
-                            onActiveCardBoundsChanged = { cardId, rootPosition, size ->
-                                if (cardId == playerUiState.activeCardId) {
-                                    val relativePos = rootPosition - contentBoxRootPosition
-                                    activeCardRelativePosition = relativePos
-                                    activeCardSize = size
+                        // ----- TOOLBAR (unchanged) -----
+                        Column(
+                            modifier = Modifier
+                                .align(Alignment.TopStart)
+                                .fillMaxWidth()
+                                .onGloballyPositioned { coordinates ->
+                                    toolbarHeightPx.intValue = coordinates.size.height
                                 }
-                            },
-                            playerUiState = playerUiState,
-                            playerViewModel = playerViewModel,
-                            listState = listState,
-                            isPlayerVisible = isPlayerVisible,
-                            cardUiStates = cardUiStates,
-                            onCardTitleClick = { videoId -> viewModel.onCardTitleClick(videoId) }
-                            )
-                            MainTab.ARTISTS -> ArtistContent(
-                                modifier = Modifier.fillMaxSize(),
-                                artistsShuffled = uiState.availableArtistsDisplay,
-                                artistsBase = uiState.availableArtists,
-                                filterPath = filterState.currentFilterPath, // pass filter path
-                                onRefresh = { viewModel.shuffleArtists() },
-                                onArtistSelected = { artist ->
-                                    viewModel.handleChipSelection(
-                                        FilterPath.CATEGORY_ARTIST,
-                                        artist.id,
-                                        artist.fullName,
-                                        true // add filter
-                                    )
+                                .offset {
+                                    IntOffset(0, toolbarOffset.floatValue.roundToInt())
                                 }
-                            )
-                            MainTab.HISTORY -> HistoryContent(
-                                modifier = Modifier.fillMaxSize(),
+                                .background(MaterialTheme.colorScheme.background)
+                                .zIndex(6f)
+                        ) {
+                            toolbarBox(
+                                onFilterClick = { viewModel.toggleBottomSheet() },
+                                videoCount = videosToShow.size,
+                                artistCount = artistCount,
+                                historyCount = historyCount,
+                                currentTab = currentTab,
+                                onTabSelected = { viewModel.setCurrentTab(it) },
+                                isPlayerVisible = isPlayerVisible,
+                                onTogglePlayerVisibility = { viewModel.togglePlayerVisibility() }
                             )
                         }
-                    }
 
-                    // ----- PLAYER (draggable mini player) -----
-                    // Add these states at the top of your MainScreen composable (with other states)
-                    val webView = remember { mutableStateOf<WebView?>(null) }
+                        // ----- VIDEO LIST (unchanged) -----
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(
+                                    top = with(LocalDensity.current) {
+                                        (toolbarHeightPx.intValue + toolbarOffset.floatValue)
+                                            .coerceAtLeast(0f)
+                                            .toDp()
+                                    }
+                                )
+                        ) {
+                            //depending of witch tab of the toolbarbox is selected give me the relevant screen
+                            when (currentTab) {
+                                MainTab.VIDEOS -> VideoListContent(
+                                    uiState = uiState,
+                                    filterState = filterState,
+                                    videosToShow = videosToShow,
+                                    onRefresh = { viewModel.safeRefreshDataFromAPI() },
+                                    onActiveCardBoundsChanged = { cardId, rootPosition, size ->
+                                        if (cardId == playerUiState.activeCardId) {
+                                            val relativePos = rootPosition - contentBoxRootPosition
+                                            activeCardRelativePosition = relativePos
+                                            activeCardSize = size
+                                        }
+                                    },
+                                    playerUiState = playerUiState,
+                                    playerViewModel = playerViewModel,
+                                    listState = listState,
+                                    isPlayerVisible = isPlayerVisible,
+                                    cardUiStates = cardUiStates,
+                                    onCardTitleClick = { videoId ->
+                                        viewModel.onCardTitleClick(
+                                            videoId
+                                        )
+                                    }
+                                )
+
+                                MainTab.ARTISTS -> ArtistContent(
+                                    modifier = Modifier.fillMaxSize(),
+                                    artistsShuffled = uiState.availableArtistsDisplay,
+                                    artistsBase = uiState.availableArtists,
+                                    filterPath = filterState.currentFilterPath, // pass filter path
+                                    onRefresh = { viewModel.shuffleArtists() },
+                                    onArtistSelected = { artist ->
+                                        viewModel.handleChipSelection(
+                                            FilterPath.CATEGORY_ARTIST,
+                                            artist.id,
+                                            artist.fullName,
+                                            true // add filter
+                                        )
+                                    }
+                                )
+
+                                MainTab.HISTORY -> HistoryContent(
+                                    modifier = Modifier.fillMaxSize(),
+                                )
+                            }
+                        }
+
+                        // ----- PLAYER (draggable mini player) -----
+                        // Add these states at the top of your MainScreen composable (with other states)
+                        val webView = remember { mutableStateOf<WebView?>(null) }
 
 // Then your player section should look like this:
 
 // ----- PLAYER (draggable mini player) -----
-                    if (playerUiState.isVisible) {
-                        val density = LocalDensity.current
-                        val scope = rememberCoroutineScope()
+                        if (playerUiState.isVisible) {
+                            val density = LocalDensity.current
+                            val scope = rememberCoroutineScope()
 
-                        // Dragging state (only used in mini mode)
-                        val dragOffsetY = remember { Animatable(0f) }
-                        val closeThresholdPx = with(density) { 100.dp.toPx() }
+                            // Dragging state (only used in mini mode)
+                            val dragOffsetY = remember { Animatable(0f) }
+                            val closeThresholdPx = with(density) { 100.dp.toPx() }
 
-                        // Reset offset when entering mini mode
-                        LaunchedEffect(playerUiState.isInMiniMode) {
-                            if (playerUiState.isInMiniMode) {
-                                dragOffsetY.snapTo(0f)
+                            // Reset offset when entering mini mode
+                            LaunchedEffect(playerUiState.isInMiniMode) {
+                                if (playerUiState.isInMiniMode) {
+                                    dragOffsetY.snapTo(0f)
+                                }
                             }
-                        }
 
-                        val baseModifier = if (playerUiState.isInMiniMode) {
-                            // Mini mode: bottom‑end + draggable
-                            Modifier
-                                .size(width = 240.dp, height = 132.dp)
-                                .padding(bottom = 8.dp, end = 6.dp)
-                                .align(Alignment.BottomEnd)
-                                .offset { IntOffset(0, dragOffsetY.value.roundToInt()) }
-                                .pointerInput(Unit) {
-                                    detectDragGestures(
-                                        onDragStart = { scope.launch { dragOffsetY.stop() } },
-                                        onDrag = { change, dragAmount ->
-                                            change.consume()
-                                            scope.launch {
-                                                val newValue = (dragOffsetY.value + dragAmount.y).coerceAtLeast(0f)
-                                                dragOffsetY.snapTo(newValue)
-                                            }
-                                        },
-                                        onDragEnd = {
-                                            scope.launch {
-                                                if (dragOffsetY.value > closeThresholdPx) {
-                                                    playerViewModel.closePlayer()
-                                                } else {
-                                                    dragOffsetY.animateTo(0f)
+                            val baseModifier = if (playerUiState.isInMiniMode) {
+                                // Mini mode: bottom‑end + draggable
+                                Modifier
+                                    .size(width = 240.dp, height = 132.dp)
+                                    .padding(bottom = 8.dp, end = 6.dp)
+                                    .align(Alignment.BottomEnd)
+                                    .offset { IntOffset(0, dragOffsetY.value.roundToInt()) }
+                                    .pointerInput(Unit) {
+                                        detectDragGestures(
+                                            onDragStart = { scope.launch { dragOffsetY.stop() } },
+                                            onDrag = { change, dragAmount ->
+                                                change.consume()
+                                                scope.launch {
+                                                    val newValue =
+                                                        (dragOffsetY.value + dragAmount.y).coerceAtLeast(
+                                                            0f
+                                                        )
+                                                    dragOffsetY.snapTo(newValue)
                                                 }
+                                            },
+                                            onDragEnd = {
+                                                scope.launch {
+                                                    if (dragOffsetY.value > closeThresholdPx) {
+                                                        playerViewModel.closePlayer()
+                                                    } else {
+                                                        dragOffsetY.animateTo(0f)
+                                                    }
+                                                }
+                                            },
+                                            onDragCancel = {
+                                                scope.launch { dragOffsetY.animateTo(0f) }
                                             }
-                                        },
-                                        onDragCancel = {
-                                            scope.launch { dragOffsetY.animateTo(0f) }
-                                        }
+                                        )
+                                    }
+                            } else {
+                                // Full mode: position over the active card
+                                activeCardRelativePosition?.let { pos ->
+                                    activeCardSize?.let { size ->
+                                        Modifier
+                                            .size(
+                                                width = with(density) { size.width.toDp() },
+                                                height = with(density) { size.height.toDp() }
+                                            )
+                                            .graphicsLayer {
+                                                translationX = pos.x.toFloat()
+                                                translationY = pos.y.toFloat()
+                                            }
+                                    }
+                                } ?: Modifier.size(0.dp)
+                            }
+
+                            Box(
+                                modifier = baseModifier
+                                    .zIndex(5f)
+                            ) {
+                                // Use ONLY SmartYoutubePlayerHost (not CustomYoutubePlayer)
+                                SmartYoutubePlayerHost(
+                                    key = playerUiState.playerInstanceId,
+                                    videoId = playerUiState.currentVideoId,
+                                    isMiniMode = playerUiState.isInMiniMode,
+                                    onPlayerReady = { youTubePlayer ->
+                                        playerViewModel.setPlayer(youTubePlayer)
+                                    },
+                                    onWebViewReady = { capturedWebView ->
+                                        webView.value = capturedWebView
+                                    },
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .clip(RoundedCornerShape(8.dp))
+                                )
+
+                                // Only show custom controls in mini mode
+                                if (playerUiState.isInMiniMode) {
+                                    CustomMiniPlayerControls(
+                                        isPlaying = playerUiState.isPlaying,
+                                        currentPosition = playerUiState.playbackPosition,
+                                        duration = playerUiState.videoDuration,
+                                        onSeek = { position -> playerViewModel.seekTo(position) },
+                                        onLeftTap = { playerViewModel.onMiniPlayerLeftTap() },  // Play/Pause
+                                        onRightTap = { playerViewModel.onMiniPlayerRightTap() }, // Back/Scroll
+                                        modifier = Modifier.fillMaxSize()
                                     )
                                 }
-                        } else {
-                            // Full mode: position over the active card
-                            activeCardRelativePosition?.let { pos ->
-                                activeCardSize?.let { size ->
-                                    Modifier
-                                        .size(
-                                            width = with(density) { size.width.toDp() },
-                                            height = with(density) { size.height.toDp() }
-                                        )
-                                        .graphicsLayer {
-                                            translationX = pos.x.toFloat()
-                                            translationY = pos.y.toFloat()
-                                        }
-                                }
-                            } ?: Modifier.size(0.dp)
-                        }
-
-                        Box(
-                            modifier = baseModifier
-                                .zIndex(5f)
-                        ) {
-                            // Use ONLY SmartYoutubePlayerHost (not CustomYoutubePlayer)
-                            SmartYoutubePlayerHost(
-                                key = playerUiState.playerInstanceId,
-                                videoId = playerUiState.currentVideoId,
-                                isMiniMode = playerUiState.isInMiniMode,
-                                onPlayerReady = { youTubePlayer ->
-                                    playerViewModel.setPlayer(youTubePlayer)
-                                },
-                                onWebViewReady = { capturedWebView ->
-                                    webView.value = capturedWebView
-                                },
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .clip(RoundedCornerShape(8.dp))
-                            )
-
-                            // Only show custom controls in mini mode
-                            if (playerUiState.isInMiniMode) {
-                                CustomMiniPlayerControls(
-                                    isPlaying = playerUiState.isPlaying,
-                                    currentPosition = playerUiState.playbackPosition,
-                                    duration = playerUiState.videoDuration,
-                                    onSeek = { position -> playerViewModel.seekTo(position) },
-                                    onLeftTap = { playerViewModel.onMiniPlayerLeftTap() },  // Play/Pause
-                                    onRightTap = { playerViewModel.onMiniPlayerRightTap() }, // Back/Scroll
-                                    modifier = Modifier.fillMaxSize()
-                                )
                             }
                         }
                     }
@@ -1467,6 +1498,7 @@ fun ArtistImage(
         error = fallbackPainter,
     )
 }
+
 @Composable
 fun SingleArtistView(
     artist: Artist,
@@ -1479,128 +1511,119 @@ fun SingleArtistView(
     val hasThumbnail = artist.thumbnailUrl != null
     val imageHeight = if (hasThumbnail) 300.dp else 150.dp
 
-    Box(modifier = modifier.fillMaxSize()) {
-        // Fixed image area at top
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(imageHeight)
-                .align(Alignment.TopCenter)
-        ) {
-            if (hasThumbnail) {
-                // Thumbnail fills width
-                AsyncImage(
-                    model = ImageRequest.Builder(context)
-                        .data(artist.thumbnailUrl)
-                        .crossfade(true)
-                        .build(),
-                    contentDescription = artist.fullName,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(imageHeight)
-                        .clickable { showFullscreenImage = true },
-                    contentScale = ContentScale.Crop,
-                    error = painterResource(id = R.drawable.ic_error)
-                )
-            } else {
-                // Identicon: centered and smaller
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        //.background(MaterialTheme.colorScheme.surfaceVariant) // gray background
-                        .clickable { showFullscreenImage = true },
-                    contentAlignment = Alignment.TopCenter
-                ) {
-                    val fallbackPainter = BitmapPainter(generateIdenticon(artist).asImageBitmap())
-                    Image(
-                        painter = fallbackPainter,
+    LazyColumn(
+        modifier = modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        // 1. Artist image (scrolls away)
+        item {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(imageHeight)
+                    .clickable { showFullscreenImage = true }
+            ) {
+                if (hasThumbnail) {
+                    AsyncImage(
+                        model = ImageRequest.Builder(context)
+                            .data(artist.thumbnailUrl)
+                            .crossfade(true)
+                            .build(),
                         contentDescription = artist.fullName,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop,
+                        error = painterResource(id = R.drawable.ic_error)
+                    )
+                } else {
+                    // Identicon: centered, fixed size
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        val fallbackPainter = BitmapPainter(generateIdenticon(artist).asImageBitmap())
+                        Image(
+                            painter = fallbackPainter,
+                            contentDescription = artist.fullName,
+                            modifier = Modifier.size(150.dp)
+                        )
+                    }
+                }
+
+                // Attribution text (if any) anchored at top‑end
+                if (artist.imageAuthor != null || artist.imageLicense != null) {
+                    Text(
+                        text = buildString {
+                            artist.imageAuthor?.let { append(it) }
+                            if (artist.imageLicense != null) {
+                                if (artist.imageAuthor != null) append(" / ")
+                                append(artist.imageLicense)
+                            }
+                        },
+                        style = MaterialTheme.typography.labelSmall,
+                        fontSize = 10.sp,
+                        color = Color.White.copy(alpha = 0.7f),
                         modifier = Modifier
-                            .size(150.dp)
+                            .align(Alignment.TopEnd)
+                            .padding(8.dp)
                     )
                 }
-            }
-
-            // Attribution text (if any) anchored at top‑end
-            if (artist.imageAuthor != null || artist.imageLicense != null) {
-                Text(
-                    text = buildString {
-                        artist.imageAuthor?.let { append(it) }
-                        if (artist.imageLicense != null) {
-                            if (artist.imageAuthor != null) append(" / ")
-                            append(artist.imageLicense)
-                        }
-                    },
-                    style = MaterialTheme.typography.labelSmall,
-                    fontSize = 10.sp,
-                    color = Color.White.copy(alpha = 0.7f),
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(8.dp)
-                )
             }
         }
 
-        // Scrollable content (starts below the image)
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(top = imageHeight), // ✅ fixed: directly use Dp
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            // Artist name
-            item {
+        // 2. Artist name
+        item {
+            Text(
+                text = artist.fullName,
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
+            )
+        }
+
+        // 3. Wiki info card
+        item {
+            WikiInfoCard(
+                artist = artist,
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+
+        // 4. Albums section header
+        item {
+            Text(
+                text = "Albums",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
+            )
+        }
+
+        // 5. Horizontal albums row placeholder
+        item {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(200.dp)
+                    .padding(horizontal = 16.dp)
+            ) {
                 Text(
-                    text = artist.fullName,
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                    text = "Album cards will be placed here",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-            }
-
-            // Wiki info card
-            item {
-                WikiInfoCard(
-                    artist = artist,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-
-            // Albums section header
-            item {
-                Text(
-                    text = "Albums",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp)
-                )
-            }
-
-            // Horizontal albums row placeholder
-            item {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(200.dp)
-                        .padding(horizontal = 16.dp)
-                ) {
-                    Text(
-                        text = "Album cards will be placed here",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
             }
         }
     }
 
-    // Fullscreen image dialog (unchanged)
+    // Fullscreen image dialog (unchanged, scales to fit)
     if (showFullscreenImage) {
-        Dialog(onDismissRequest = { showFullscreenImage = false }) {
+        Dialog(onDismissRequest = { showFullscreenImage = false },
+            properties = DialogProperties(usePlatformDefaultWidth = false) // occupy all width and height
+        ) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -1643,71 +1666,6 @@ fun SingleArtistView(
     }
 }
 
-data class WikipediaSection(
-    val index: String,
-    val title: String,
-    val content: String
-)
-
-suspend fun fetchSections(pageTitle: String): List<WikipediaSection>? {
-    return withContext(Dispatchers.IO) {
-        try {
-            val encodedTitle = java.net.URLEncoder.encode(pageTitle, "UTF-8")
-            val apiUrl = "https://en.wikipedia.org/w/api.php?action=parse&page=$encodedTitle&prop=sections&format=json"
-            val url = URL(apiUrl)
-            val connection = url.openConnection() as HttpURLConnection
-            connection.requestMethod = "GET"
-            connection.connectTimeout = 5000
-            connection.readTimeout = 5000
-
-            if (connection.responseCode == HttpURLConnection.HTTP_OK) {
-                val content = connection.inputStream.bufferedReader().use { it.readText() }
-                val json = JSONObject(content)
-                val sectionsArray = json.getJSONObject("parse").getJSONArray("sections")
-                val sections = mutableListOf<WikipediaSection>()
-                for (i in 0 until sectionsArray.length()) {
-                    val sectionObj = sectionsArray.getJSONObject(i)
-                    val index = sectionObj.getString("index")
-                    val title = sectionObj.getString("line")
-                    sections.add(WikipediaSection(index, title, ""))
-                }
-                sections
-            } else null
-        } catch (e: Exception) {
-            e.printStackTrace()
-            null
-        }
-    }
-}
-
-suspend fun fetchSectionContent(pageTitle: String, sectionIndex: String): String? {
-    return withContext(Dispatchers.IO) {
-        try {
-            val encodedTitle = java.net.URLEncoder.encode(pageTitle, "UTF-8")
-            val apiUrl = "https://en.wikipedia.org/w/api.php?action=parse&page=$encodedTitle&prop=text&section=$sectionIndex&format=json"
-            val url = URL(apiUrl)
-            val connection = url.openConnection() as HttpURLConnection
-            connection.requestMethod = "GET"
-            connection.connectTimeout = 5000
-            connection.readTimeout = 5000
-
-            if (connection.responseCode == HttpURLConnection.HTTP_OK) {
-                val content = connection.inputStream.bufferedReader().use { it.readText() }
-                val json = JSONObject(content)
-                val parse = json.optJSONObject("parse")
-                val text = parse?.optJSONObject("text")
-                val html = text?.optString("*")
-                if (html != null) {
-                    val plainText = Html.fromHtml(html, Html.FROM_HTML_MODE_LEGACY).toString()
-                    cleanWikipediaText(plainText) // returns null if length < 40
-                } else null
-            } else null
-        } catch (e: Exception) {
-            e.printStackTrace()
-            null
-        }
-    }
-}
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -1720,61 +1678,24 @@ fun WikiInfoCard(
     val maxHeight = screenHeight * 0.4f
     val minHeight = 150.dp
 
-    var isLoading by remember { mutableStateOf(true) }
-    var error by remember { mutableStateOf<String?>(null) }
-    var allPages by remember { mutableStateOf<List<String>>(emptyList()) }
-    var sectionsLoading by remember { mutableStateOf(false) }
+    // Provide the scroll lock state to children (like ScrollableTextPage)
+    val scrollLockState = LocalScrollLock.current
 
-    LaunchedEffect(artist.wikipediaUrl) {
-        isLoading = true
-        error = null
-        sectionsLoading = false
+    // Parse the stored wikipedia data
+    val sections = remember(artist.wikipediaData) { parseWikipediaData(artist.wikipediaData) }
+    val isLoading = sections.isEmpty() && artist.wikipediaData != null
+    val error = if (artist.wikipediaData == null) "No Wikipedia data available" else null
 
-        if (artist.wikipediaUrl == null) {
-            error = "No Wikipedia link available"
-            isLoading = false
-            return@LaunchedEffect
-        }
 
-        val introSummary = fetchWikipediaIntro(artist.wikipediaUrl)
-        if (introSummary == null) {
-            error = "Could not load Wikipedia intro"
-            isLoading = false
-            return@LaunchedEffect
-        }
-
-        // Build intro pages
-        val introParagraphs = introSummary.extract.split("\n\n").filter { it.isNotBlank() }
-        val introPages = if (introParagraphs.isEmpty()) listOf(introSummary.extract) else introParagraphs
-
-        // Fetch sections
-        sectionsLoading = true
-        val sections = fetchSections(introSummary.title)
-        val sectionPages = mutableListOf<String>()
-        if (sections != null) {
-            val keywords = setOf("life", "career", "biography", "music", "death", "artistry", "legacy")
-            val matchingSections = sections.filter { section ->
-                keywords.any { keyword -> section.title.contains(keyword, ignoreCase = true) }
-            }
-            for (section in matchingSections) {
-                val content = fetchSectionContent(introSummary.title, section.index)
-                if (content != null) {
-                    val sectionText = "### ${section.title}\n\n$content"
-                    sectionPages.add(sectionText)
-                }
-            }
-        }
-        sectionsLoading = false
-
+    val allPages = remember(sections) {
+        val contentPages = sections.map { (title, content) -> "### $title\n\n$content" }
         val attributionPage = """
             ℹ️ This information is sourced from Wikipedia.
-            View the full article at: ${artist.wikipediaUrl}
+            View the full article at: ${artist.wikipediaUrl ?: ""}
             
             This content is available under the Creative Commons Attribution-ShareAlike License.
         """.trimIndent()
-
-        allPages = introPages + sectionPages + listOf(attributionPage)
-        isLoading = false
+        contentPages + listOf(attributionPage)
     }
 
     val pagerState = rememberPagerState(
@@ -1783,75 +1704,95 @@ fun WikiInfoCard(
     )
     val coroutineScope = rememberCoroutineScope()
 
+    // Nested scroll connection that consumes all leftover vertical scroll while the lock is active
+    val nestedScrollConnection = remember(scrollLockState) {
+        object : NestedScrollConnection {
+            override fun onPostScroll(
+                consumed: Offset,
+                available: Offset,
+                source: NestedScrollSource
+            ): Offset {
+                return if (scrollLockState.isLocked) {
+                    // Consume any remaining vertical scroll so the parent never gets it
+                    Offset(0f, available.y)
+                } else {
+                    Offset.Zero
+                }
+            }
+        }
+    }
+
     Card(
         modifier = modifier
             .fillMaxWidth()
             .heightIn(min = minHeight, max = maxHeight)
-            .padding(horizontal = 16.dp),
+            .padding(horizontal = 16.dp)
+            .nestedScroll(nestedScrollConnection), // 👈 consume leftover scroll at card level
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceVariant
         )
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(16.dp)
-        ) {
-            when {
-                isLoading -> {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator()
+        // Provide the lock state to all children
+        CompositionLocalProvider(LocalScrollLock provides scrollLockState) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(16.dp)
+            ) {
+                when {
+                    isLoading -> {
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator()
+                        }
                     }
-                }
-                error != null -> {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text(error!!, color = MaterialTheme.colorScheme.error)
+                    error != null -> {
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Text(error, color = MaterialTheme.colorScheme.error)
+                        }
                     }
-                }
-                else -> {
-                    // Pager area takes remaining space
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxWidth()
-                    ) {
-                        HorizontalPager(
-                            state = pagerState,
-                            modifier = Modifier.fillMaxSize()
-                        ) { page ->
-                            ScrollableTextPage(
-                                text = allPages[page],
+                    allPages.isEmpty() -> {
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Text("No Wikipedia data found", color = MaterialTheme.colorScheme.error)
+                        }
+                    }
+                    else -> {
+                        // Pager area takes remaining space
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxWidth()
+                        ) {
+                            HorizontalPager(
+                                state = pagerState,
                                 modifier = Modifier.fillMaxSize()
-                            )
-                        }
-                        if (sectionsLoading && allPages.isNotEmpty()) {
-                            CircularProgressIndicator(
-                                modifier = Modifier
-                                    .size(24.dp)
-                                    .align(Alignment.BottomEnd)
-                                    .padding(8.dp)
-                            )
-                        }
-                    }
-                    // Dots row below the pager
-                    DotsRow(
-                        pageCount = allPages.size,
-                        currentPage = pagerState.currentPage,
-                        onPageSelected = { pageIndex ->
-                            coroutineScope.launch {
-                                pagerState.animateScrollToPage(pageIndex)
+                            ) { page ->
+                                ScrollableTextPage(
+                                    text = allPages[page],
+                                    modifier = Modifier.fillMaxSize()
+                                )
                             }
-                        },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 12.dp)
-                    )
+                        }
+                        // Dots row below the pager
+                        DotsRow(
+                            pageCount = allPages.size,
+                            currentPage = pagerState.currentPage,
+                            onPageSelected = { pageIndex ->
+                                coroutineScope.launch {
+                                    pagerState.animateScrollToPage(pageIndex)
+                                }
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 12.dp)
+                        )
+                    }
                 }
             }
         }
     }
 }
+
 
 @Composable
 private fun ScrollableTextPage(
@@ -1860,9 +1801,30 @@ private fun ScrollableTextPage(
 ) {
     val context = LocalContext.current
     val lines = text.lines()
+    val scrollState = rememberScrollState()
+    val scrollLockState = LocalScrollLock.current
+
     Column(
         modifier = modifier
-            .verticalScroll(rememberScrollState())
+            .verticalScroll(scrollState)
+            .pointerInput(Unit) {
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    // Lock the scroll while finger is down
+                    scrollLockState.isLocked = true
+                    try {
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            if (event.type == PointerEventType.Release ||
+                                event.type == PointerEventType.Exit) {
+                                break
+                            }
+                        }
+                    } finally {
+                        scrollLockState.isLocked = false
+                    }
+                }
+            }
     ) {
         for (line in lines) {
             if (line.startsWith("### ")) {
@@ -1975,39 +1937,6 @@ data class WikipediaSummary(
     val thumbnail: String? = null
 )
 
-suspend fun fetchWikipediaIntro(wikipediaUrl: String): WikipediaSummary? {
-    return withContext(Dispatchers.IO) {
-        try {
-            val title = wikipediaUrl
-                .substringAfterLast("/")
-                .takeWhile { it != '?' && it != '#' }
-                .replace('_', ' ')
-            val apiUrl = "https://en.wikipedia.org/w/api.php?action=query&prop=extracts&exintro=true&explaintext=true&titles=${java.net.URLEncoder.encode(title, "UTF-8")}&format=json"
-            val url = URL(apiUrl)
-            val connection = url.openConnection() as HttpURLConnection
-            connection.requestMethod = "GET"
-            connection.connectTimeout = 5000
-            connection.readTimeout = 5000
-
-            if (connection.responseCode == HttpURLConnection.HTTP_OK) {
-                val content = connection.inputStream.bufferedReader().use { it.readText() }
-                val json = JSONObject(content)
-                val pages = json.getJSONObject("query").getJSONObject("pages")
-                val firstPage = pages.keys().asSequence().firstOrNull()?.let { pages.getJSONObject(it) }
-                val extract = firstPage?.optString("extract", "No extract found.") ?: "No extract found."
-                val cleanedExtract = cleanWikipediaText(extract)
-                if (cleanedExtract != null) {
-                    val pageTitle = firstPage?.optString("title", title) ?: title
-                    WikipediaSummary(pageTitle, cleanedExtract, null)
-                } else null
-            } else null
-        } catch (e: Exception) {
-            e.printStackTrace()
-            null
-        }
-    }
-}
-
 fun cleanWikipediaText(rawText: String): String? {
     val lines = rawText.lines().toMutableList()
 
@@ -2044,4 +1973,22 @@ fun cleanWikipediaText(rawText: String): String? {
 
     val result = cleanedLines.joinToString("\n")
     return if (result.length >= 40) result else null
+}
+
+private fun parseWikipediaData(jsonString: String?): List<Pair<String, String>> {
+    if (jsonString.isNullOrBlank()) return emptyList()
+    return try {
+        val json = JSONObject(jsonString)
+        val keys = json.keys()
+        val list = mutableListOf<Pair<String, String>>()
+        while (keys.hasNext()) {
+            val key = keys.next()
+            val value = json.getString(key)
+            list.add(key to value)
+        }
+        list
+    } catch (e: Exception) {
+        e.printStackTrace()
+        emptyList()
+    }
 }
