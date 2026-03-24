@@ -179,6 +179,7 @@ fun MainScreen(
 
     val scrollLockState = remember { ScrollLockState() }   // That is for the singleartistvie's wikidatacard scrolling, it locks the scrolling in order for items to consume the whole scrolling gesture
 
+
     // Monitor tab changes and minimize player when leaving Videos tab
     LaunchedEffect(currentTab) {
         if (playerUiState.isVisible && !playerUiState.isInMiniMode) {
@@ -267,6 +268,7 @@ fun MainScreen(
                         viewModel.shuffleVideoList()
                         viewModel.shuffleArtists()
                         //todo// album list
+
                     },
                     modifier = Modifier
                         .fillMaxSize()
@@ -531,6 +533,8 @@ fun MainScreen(
     }
 }
 
+
+
 // Updated LoadingScreen (simpler)
 @Composable
 fun LoadingScreen() {
@@ -598,7 +602,7 @@ fun ActiveFilterChipsRow(
     ) {
         // Clickable Logo Text
         Text(
-            text = "JazzLib",
+            text = "Jazzli",
             style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
             color = MaterialTheme.colorScheme.primary,
             modifier = Modifier
