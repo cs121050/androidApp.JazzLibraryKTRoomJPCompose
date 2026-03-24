@@ -436,6 +436,7 @@ class MainViewModel @Inject constructor(
             _isRefreshing.value = true
             refreshTrigger.value += 1  // this is your existing trigger
             // Simulate a tiny delay to make the spinner visible
+            // i dont need sufling, it just fetches new presufled set from db, each set is suffled by default
             delay(300)
             _isRefreshing.value = false
         }
