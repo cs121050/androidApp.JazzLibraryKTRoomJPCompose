@@ -49,10 +49,7 @@ import com.example.jazzlibraryktroomjpcompose.domain.models.Video
 import com.example.jazzlibraryktroomjpcompose.ui.theme.Dimens
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material.icons.filled.Menu
 import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
@@ -61,25 +58,21 @@ import androidx.compose.ui.unit.IntOffset
 import com.example.jazzlibraryktroomjpcompose.domain.models.FilterPath
 import kotlin.math.roundToInt
 import android.os.Build
-import android.text.Html
 import android.webkit.WebView
 import androidx.activity.ComponentActivity
 import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.lazy.LazyListState
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
-
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
@@ -91,7 +84,6 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.zIndex
 import com.example.jazzlibraryktroomjpcompose.presentation.player.PlayerViewModel
 import kotlinx.coroutines.launch
-import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.material.icons.filled.BrokenImage
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.ui.input.pointer.pointerInput
@@ -99,16 +91,11 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
-import androidx.compose.ui.res.painterResource
-import coil.ImageLoader
 import com.example.jazzlibraryktroomjpcompose.R
 import com.example.jazzlibraryktroomjpcompose.presentation.player.PlayerUiState
-import com.example.jazzlibraryktroomjpcompose.ui.main.player.CustomMiniPlayerControls
 import com.example.jazzlibraryktroomjpcompose.ui.main.player.SmartYoutubePlayerHost
-import com.example.jazzlibraryktroomjpcompose.ui.main.util.ScrollingSlowFlingBehavior
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
-import coil.compose.AsyncImage
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.platform.LocalConfiguration
@@ -118,9 +105,7 @@ import com.example.jazzlibraryktroomjpcompose.ui.main.util.generateIdenticon
 import androidx.compose.runtime.key
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.input.pointer.PointerEventType
-import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.window.Dialog
-import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.compositionLocalOf
@@ -128,16 +113,8 @@ import androidx.compose.ui.window.DialogProperties
 import android.content.res.Configuration
 import android.util.Log
 import android.view.View
-import android.view.ViewGroup
-import android.view.WindowInsetsController
-import androidx.compose.ui.platform.LocalConfiguration
-
 import com.google.accompanist.systemuicontroller.rememberSystemUiController
-import androidx.compose.ui.input.pointer.pointerInput
-
 import androidx.compose.ui.platform.LocalView
-
-import android.view.WindowInsets
 
 class ScrollLockState {
     var isLocked by mutableStateOf(false)
@@ -172,8 +149,6 @@ fun MainScreen(
     val isRefreshing by viewModel.isRefreshing.collectAsState()
 
     val playerUiState by playerViewModel.uiState.collectAsState()
-    var activeCardBounds by remember { mutableStateOf<LayoutCoordinates?>(null) }
-    val coroutineScope = rememberCoroutineScope()
     var activeCardRelativePosition by remember { mutableStateOf<IntOffset?>(null) }
     var activeCardSize by remember { mutableStateOf<IntSize?>(null) }
     var contentBoxRootPosition by remember { mutableStateOf(IntOffset.Zero) }
@@ -461,9 +436,6 @@ fun MainScreen(
                         }
 
                         // ----- PLAYER (draggable mini player) -----
-                        // Add these states at the top of your MainScreen composable (with other states)
-                        val webView = remember { mutableStateOf<WebView?>(null) }
-
                         if (playerUiState.isVisible) {
                             val density = LocalDensity.current
                             val scope = rememberCoroutineScope()
@@ -570,19 +542,6 @@ fun MainScreen(
                                     },
                                     modifier = Modifier.fillMaxSize()
                                 )
-
-                                // Custom controls only when mini mode and NOT fullscreen
-                                if (playerUiState.isInMiniMode && !isFullscreen) {
-                                    CustomMiniPlayerControls(
-                                        isPlaying = playerUiState.isPlaying,
-                                        currentPosition = playerUiState.playbackPosition,
-                                        duration = playerUiState.videoDuration,
-                                        onSeek = { position -> playerViewModel.seekTo(position) },
-                                        onLeftTap = { playerViewModel.onMiniPlayerLeftTap() },   // Play/Pause
-                                        onRightTap = { playerViewModel.onMiniPlayerRightTap() },  // Back/Scroll
-                                        modifier = Modifier.fillMaxSize()
-                                    )
-                                }
                             }
                         }
                     }
@@ -1149,63 +1108,6 @@ fun VideoCard(
                     modifier = Modifier.padding(top = 8.dp)
                 )
             }
-//            // --- YouTube Player (collapsible) ---
-//            AnimatedVisibility(
-//                visible = isPlayerVisible || expanded,
-//                enter = fadeIn() + expandVertically(expandFrom = Alignment.Top, animationSpec = tween(300)),
-//                exit  = fadeOut() + shrinkVertically(shrinkTowards = Alignment.Top, animationSpec = tween(300))
-//            ) {
-//                Column {
-//                    Spacer(modifier = Modifier.height(12.dp))
-//
-//                    Box(
-//                        modifier = Modifier
-//                            .fillMaxWidth()
-//                            .height(200.dp)
-//                            .clip(RoundedCornerShape(8.dp))
-//                            .background(MaterialTheme.colorScheme.surfaceVariant)
-//                    ) {
-//                        if (videoId != null) {
-//                            YoutubeVideoPlayer(
-//                                videoId = videoId,
-//                                modifier = Modifier.fillMaxSize()
-//                            )
-//                        } else {
-//                            Box(
-//                                modifier = Modifier.fillMaxSize(),
-//                                contentAlignment = Alignment.Center
-//                            ) {
-//                                Text(
-//                                    text = "Invalid video URL",
-//                                    color = MaterialTheme.colorScheme.error
-//                                )
-//                            }
-//                        }
-//
-//                        // --- Fullscreen button (opens YouTube app) ---
-//                        IconButton(
-//                            onClick = {
-//                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(video.path))
-//                                context.startActivity(intent)
-//                            },
-//                            modifier = Modifier
-//                                .align(Alignment.BottomEnd)
-//                                .padding(8.dp)
-//                                .size(48.dp)
-//                                .background(
-//                                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.7f),
-//                                    shape = RoundedCornerShape(24.dp)
-//                                )
-//                        ) {
-//                            Icon(
-//                                Icons.Default.Fullscreen,
-//                                contentDescription = "Open in YouTube app",
-//                                tint = Color.White
-//                            )
-//                        }
-//                    }
-//                }
-//            }
         }
     }
 }
