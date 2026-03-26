@@ -113,8 +113,10 @@ import androidx.compose.ui.window.DialogProperties
 import android.content.res.Configuration
 import android.util.Log
 import android.view.View
+import android.widget.Toast
 import com.google.accompanist.systemuicontroller.rememberSystemUiController
 import androidx.compose.ui.platform.LocalView
+import kotlin.math.abs
 
 class ScrollLockState {
     var isLocked by mutableStateOf(false)
@@ -439,18 +441,39 @@ fun MainScreen(
                         if (playerUiState.isVisible) {
                             val density = LocalDensity.current
                             val scope = rememberCoroutineScope()
+                            val configuration = LocalConfiguration.current
+                            val context = LocalContext.current
 
                             // Dragging state (only used in mini mode)
+                            val dragOffsetX = remember { Animatable(0f) }
                             val dragOffsetY = remember { Animatable(0f) }
                             val closeThresholdPx = with(density) { 100.dp.toPx() }
+                            val xThresholdPx = with(density) { 100.dp.toPx() }
 
-
+                            // Player size for boundary calculations
+                            var playerSize by remember { mutableStateOf(IntSize.Zero) }
+                            val screenWidthPx = with(density) { configuration.screenWidthDp.dp.toPx() }
+                            val screenHeightPx = with(density) { configuration.screenHeightDp.dp.toPx() }
+                            val marginPx = with(density) { 6.dp.toPx() }
 
                             // Reset offset when entering mini mode
                             LaunchedEffect(playerUiState.isInMiniMode) {
                                 if (playerUiState.isInMiniMode) {
                                     dragOffsetY.snapTo(0f)
+                                    dragOffsetY.snapTo(0f)
                                 }
+                            }
+
+                            // Compute max offsets based on actual player size
+                            val maxLeftOffset = remember(playerSize, screenWidthPx) {
+                                if (playerSize.width > 0) {
+                                    -(screenWidthPx - playerSize.width - marginPx)
+                                } else -Float.MAX_VALUE
+                            }
+                            val maxUpOffset = remember(playerSize, screenHeightPx) {
+                                if (playerSize.height > 0) {
+                                    -(screenHeightPx - playerSize.height - marginPx)
+                                } else -Float.MAX_VALUE
                             }
 
                             // --- Compute modifier based on fullscreen, mini, or attached ---
@@ -469,30 +492,56 @@ fun MainScreen(
                                     }
 
                                 playerUiState.isInMiniMode -> Modifier
-                                    .size(width = 240.dp, height = 132.dp)
+                                    .size(width = 235.dp, height = 135.dp)  // IMPORTANT : change this to 205 to 205 to comply with youtube rules!
                                     .padding(bottom = 6.dp, end = 6.dp)
                                     .align(Alignment.BottomEnd)
-                                    .offset { IntOffset(0, dragOffsetY.value.roundToInt()) }
+                                    .offset { IntOffset(dragOffsetX.value.roundToInt(), dragOffsetY.value.roundToInt()) }
                                     .pointerInput(Unit) {
                                         detectDragGestures(
-                                            onDragStart = { scope.launch { dragOffsetY.stop() } },
+                                            onDragStart = {
+                                                scope.launch {
+                                                    dragOffsetX.stop()
+                                                    dragOffsetY.stop()
+                                                }
+                                            },
                                             onDrag = { change, dragAmount ->
                                                 change.consume()
                                                 scope.launch {
-                                                    val newValue = (dragOffsetY.value + dragAmount.y).coerceAtLeast(0f)
-                                                    dragOffsetY.snapTo(newValue)
+                                                    var newX = (dragOffsetX.value + dragAmount.x).coerceIn(maxLeftOffset, 0f)
+                                                    var newY = (dragOffsetY.value + dragAmount.y).coerceIn(maxUpOffset, 0f)
+                                                    dragOffsetX.snapTo(newX)
+                                                    dragOffsetY.snapTo(newY)
                                                 }
                                             },
                                             onDragEnd = {
                                                 scope.launch {
-                                                    if (dragOffsetY.value > closeThresholdPx) {
+                                                    val dx = dragOffsetX.value
+                                                    val dy = dragOffsetY.value
+
+                                                    // Horizontal drag exceeds threshold AND is dominant direction
+                                                    if (abs(dx) > xThresholdPx && abs(dx) > abs(dy)) {
+                                                        Toast.makeText(context, "TODO: return feature triggered", Toast.LENGTH_SHORT).show()
+                                                        // Animate back
+                                                        dragOffsetX.animateTo(0f)
+                                                        dragOffsetY.animateTo(0f)
+                                                    }
+                                                    // Vertical drag exceeds close threshold
+                                                    else if (abs(dy) > closeThresholdPx) {
                                                         playerViewModel.closePlayer()
-                                                    } else {
+                                                    }
+                                                    // Otherwise snap back
+                                                    else {
+                                                        dragOffsetX.animateTo(0f)
                                                         dragOffsetY.animateTo(0f)
                                                     }
                                                 }
                                             },
-                                            onDragCancel = { scope.launch { dragOffsetY.animateTo(0f) } }
+                                            onDragCancel = {
+                                                scope.launch {
+                                                    dragOffsetX.animateTo(0f)
+                                                    dragOffsetY.animateTo(0f)
+                                                }
+                                            }
                                         )
                                     }
                                     .zIndex(5f)
