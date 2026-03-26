@@ -126,7 +126,7 @@ fun CustomMiniPlayerControls(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 4.dp, vertical = 0.dp)
+                .padding(horizontal = 4.dp, vertical = 4.dp)
                 .alpha(alpha),
             horizontalArrangement = Arrangement.SpaceBetween
         ) {

@@ -116,7 +116,7 @@ dependencies {
     debugImplementation(libs.androidx.ui.tooling)            // Compose tooling for debug builds
     debugImplementation(libs.androidx.ui.test.manifest)      // Test manifest for Compose UI tests in debug
 
-
+    implementation(libs.accompanist.systemuicontroller)
 
 }
 
