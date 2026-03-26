@@ -1,38 +1,57 @@
 package com.example.jazzlibraryktroomjpcompose.ui.main.player
 
-
+import android.util.Log
+import android.view.View
+import android.view.ViewGroup
+import android.webkit.ConsoleMessage
+import android.webkit.WebChromeClient
 import android.webkit.WebView
+import android.widget.FrameLayout
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.viewinterop.AndroidView
-import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.PlayerConstants
 import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.YouTubePlayer
 import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.listeners.AbstractYouTubePlayerListener
-import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.options.IFramePlayerOptions
 import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.views.YouTubePlayerView
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 
 @Composable
 fun SmartYoutubePlayerHost(
     key: Any,
     videoId: String?,
-    isMiniMode: Boolean,
+    isFullscreen: Boolean = false,
+    isMiniMode: Boolean = false,
     onPlayerReady: (YouTubePlayer) -> Unit,
-    onWebViewReady: (WebView) -> Unit,      // 👈 new callback
+    onWebViewReady: (WebView) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
-    val coroutineScope = rememberCoroutineScope()
 
     val youTubePlayerView = remember(key) { YouTubePlayerView(context) }
     val currentPlayer = remember { mutableStateOf<YouTubePlayer?>(null) }
     val webView = remember { mutableStateOf<WebView?>(null) }
+    var webViewCaptured by remember { mutableStateOf(false) }
 
-    // Attach lifecycle
+    // Log mode changes
+    LaunchedEffect(isFullscreen, isMiniMode) {
+        Log.d("SmartPlayer", "Mode changed: isFullscreen=$isFullscreen, isMiniMode=$isMiniMode")
+    }
+
+    // Reapply UI mode when mode changes or webView becomes available
+    LaunchedEffect(isFullscreen, isMiniMode, webView.value) {
+        val view = webView.value
+        if (view != null) {
+            Log.d("SmartPlayer", "Applying UI mode after mode change (delay 100ms)")
+            delay(100)
+            applyUIMode(view, isFullscreen, isMiniMode)
+        } else {
+            Log.d("SmartPlayer", "WebView not yet available for mode change")
+        }
+    }
+
     DisposableEffect(lifecycleOwner, youTubePlayerView) {
         lifecycleOwner.lifecycle.addObserver(youTubePlayerView)
         onDispose {
@@ -41,210 +60,246 @@ fun SmartYoutubePlayerHost(
         }
     }
 
-    // Initialize player and capture WebView
     DisposableEffect(youTubePlayerView) {
         val listener = object : AbstractYouTubePlayerListener() {
             override fun onReady(youTubePlayer: YouTubePlayer) {
+                Log.d("SmartPlayer", "onReady called")
                 currentPlayer.value = youTubePlayer
                 onPlayerReady(youTubePlayer)
 
-                // Capture WebView
-                try {
-                    val webViewField = youTubePlayerView.javaClass.getDeclaredField("webView")
-                    webViewField.isAccessible = true
-                    val capturedWebView = webViewField.get(youTubePlayerView) as? WebView
-                    webView.value = capturedWebView
-                    capturedWebView?.let { onWebViewReady(it) }
-                } catch (e: Exception) {
-                    e.printStackTrace()
+                // Capture WebView only once
+                if (!webViewCaptured) {
+                    findWebView(youTubePlayerView) { capturedWebView ->
+                        capturedWebView?.let {
+                            it.settings.javaScriptEnabled = true
+                            it.webChromeClient = object : WebChromeClient() {
+                                override fun onConsoleMessage(consoleMessage: ConsoleMessage): Boolean {
+                                    Log.d("WebViewConsole", "${consoleMessage.message()} (${consoleMessage.sourceId()}:${consoleMessage.lineNumber()})")
+                                    return true
+                                }
+                            }
+
+                            webView.value = it
+                            webViewCaptured = true
+                            onWebViewReady(it)
+                            Log.d("SmartPlayer", "WebView found and configured: $it")
+
+                            // Apply initial UI mode
+                            applyUIMode(it, isFullscreen, isMiniMode)
+                        } ?: Log.e("SmartPlayer", "WebView not found in hierarchy")
+                    }
                 }
 
                 videoId?.let {
+                    Log.d("SmartPlayer", "Loading video: $it")
                     youTubePlayer.loadVideo(it, 0f)
-                }
-
-                // Apply initial UI mode
-                coroutineScope.launch {
-                    delay(500)
-                    webView.value?.let { applyUIMode(it, isMiniMode) }
                 }
             }
         }
         youTubePlayerView.addYouTubePlayerListener(listener)
-        onDispose {
-            youTubePlayerView.removeYouTubePlayerListener(listener)
-        }
+        onDispose { youTubePlayerView.removeYouTubePlayerListener(listener) }
     }
 
-    // Handle video ID changes
     LaunchedEffect(videoId, currentPlayer.value) {
         val player = currentPlayer.value
         if (player != null && videoId != null) {
+            Log.d("SmartPlayer", "Reloading video due to videoId change: $videoId")
             player.loadVideo(videoId, 0f)
         }
     }
 
-    // Handle mode changes
-    LaunchedEffect(isMiniMode, webView.value) {
-        val view = webView.value
-        if (view != null) {
-            delay(100)
-            applyUIMode(view, isMiniMode)
-        }
-    }
-
     AndroidView(
-        factory = { youTubePlayerView },
+        factory = {
+            FrameLayout(context).apply {
+                layoutParams = ViewGroup.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT
+                )
+                addView(youTubePlayerView, ViewGroup.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT
+                ))
+            }
+        },
         modifier = modifier
     )
 }
 
-private fun applyUIMode(webView: WebView, isMiniMode: Boolean) {
-    webView.post {
-        val script = if (isMiniMode) {
+private fun findWebView(view: View, onFound: (WebView?) -> Unit) {
+    if (view is WebView) {
+        onFound(view)
+        return
+    }
+    if (view is ViewGroup) {
+        for (i in 0 until view.childCount) {
+            findWebView(view.getChildAt(i), onFound)
+        }
+    }
+}
+private fun applyUIMode(webView: WebView, isFullscreen: Boolean, isMiniMode: Boolean) {
+    Log.d("SmartPlayer", "applyUIMode called: isFullscreen=$isFullscreen, isMiniMode=$isMiniMode")
+
+    val script = when {
+        isFullscreen -> {
+            Log.d("SmartPlayer", "Applying fullscreen style")
             """
-            javascript:(function() {
-                // Clean up any previous instance
-                if (window.__ytCleanup) {
-                    window.__ytCleanup();
-                }
-
-                // ---------- Hide Function (always uses current video) ----------
-                function hideControls() {
-                    var controls = document.querySelectorAll('[class*="ytp-"]:not(video):not(.html5-video-container)');
-                    for (var i = 0; i < controls.length; i++) {
-                        var el = controls[i];
-                        el.style.setProperty('display', 'none', 'important');
-                        el.style.setProperty('opacity', '0', 'important');
-                        el.style.setProperty('visibility', 'hidden', 'important');
-                        el.style.setProperty('pointer-events', 'none', 'important');
-                    }
-                }
-
-                // ---------- Burst Mode: run hideControls frequently for a short period ----------
-                var burstTimer = null;
-                var burstCount = 0;
-                function startBurstMode() {
-                    if (burstTimer) clearInterval(burstTimer);
-                    burstCount = 0;
-                    burstTimer = setInterval(function() {
-                        hideControls();
-                        burstCount++;
-                        // Run for about 500ms (50 times at 10ms interval)
-                        if (burstCount >= 50) {
-                            clearInterval(burstTimer);
-                            burstTimer = null;
-                        }
-                    }, 10);
-                }
-
-                // ---------- 1. CSS (always active, zero CPU) ----------
+            (function() {
+                console.log('[Fullscreen] Applying fullscreen style');
+                var styleId = '__ytFullscreenStyle';
+                var existing = document.getElementById(styleId);
+                if (existing) existing.remove();
                 var style = document.createElement('style');
-                style.id = '__ytMiniStyle';
+                style.id = styleId;
                 style.innerHTML = `
-                    [class*="ytp-"]:not(video):not(.html5-video-container) {
-                        display: none !important;
-                        opacity: 0 !important;
-                        visibility: hidden !important;
-                        pointer-events: none !important;
-                    }
-                    video, .html5-main-video, .html5-video-container {
+                    html, body {
+                        margin: 0 !important;
+                        padding: 0 !important;
                         width: 100% !important;
                         height: 100% !important;
-                        object-fit: cover !important;
+                        overflow: hidden !important;
+                    }
+                    .html5-video-container, #player, .ytp-player-content {
+                        width: 100% !important;
+                        height: 100% !important;
+                        overflow: hidden !important;
+                    }
+                    video, .html5-main-video {
+                        width: 100% !important;
+                        height: 100% !important;
+                        object-fit: fill !important;
                     }
                 `;
                 document.head.appendChild(style);
-
-                // ---------- 2. MutationObserver (catches new DOM nodes) ----------
-                var observer = new MutationObserver(function(mutations) {
-                    var needsHide = false;
-                    for (var i = 0; i < mutations.length; i++) {
-                        if (mutations[i].addedNodes.length > 0) {
-                            needsHide = true;
-                            break;
-                        }
-                    }
-                    if (needsHide) {
-                        hideControls();
-                        // Also trigger burst mode because new nodes might appear in rapid succession
-                        startBurstMode();
-                    }
-                });
-                observer.observe(document.body, { childList: true, subtree: true });
-
-                // ---------- 3. Video event listeners (play, pause, seek, etc.) ----------
-                var video = document.querySelector('video');
-                if (video) {
-                    var events = ['play', 'pause', 'seeked', 'playing', 'waiting', 'canplay', 'loadeddata'];
-                    for (var i = 0; i < events.length; i++) {
-                        video.addEventListener(events[i], function() {
-                            hideControls();           // immediate hide
-                            startBurstMode();         // then burst to catch any delayed UI
-                        });
-                    }
-                }
-
-                // ---------- 4. Touch events on the whole document (catch any interaction) ----------
-                document.addEventListener('touchstart', function() {
-                    startBurstMode();
-                }, { passive: true });
-                document.addEventListener('touchend', function() {
-                    startBurstMode();
-                }, { passive: true });
-                document.addEventListener('click', function() {
-                    startBurstMode();
-                });
-
-                // ---------- 5. Initial hide (multiple passes to be safe) ----------
-                hideControls();
-                setTimeout(hideControls, 50);
-                setTimeout(hideControls, 100);
-                setTimeout(hideControls, 200);
-
-                // ---------- 6. Cleanup function ----------
-                window.__ytCleanup = function() {
-                    if (burstTimer) clearInterval(burstTimer);
-                    if (observer) observer.disconnect();
-                    var style = document.getElementById('__ytMiniStyle');
-                    if (style) style.remove();
-
-                    // Remove event listeners (optional, but good practice)
-                    if (video) {
-                        var events = ['play', 'pause', 'seeked', 'playing', 'waiting', 'canplay', 'loadeddata'];
-                        for (var i = 0; i < events.length; i++) {
-                            video.removeEventListener(events[i], hideControls);
-                        }
-                    }
-
-                    // Restore visibility for full mode
-                    var controls = document.querySelectorAll('[class*="ytp-"]');
-                    for (var i = 0; i < controls.length; i++) {
-                        var el = controls[i];
-                        el.style.display = '';
-                        el.style.opacity = '';
-                        el.style.visibility = '';
-                        el.style.pointerEvents = '';
-                    }
-
-                    window.__ytCleanup = null;
+                document.body.style.overflow = 'hidden';
+                window.__ytFullscreenCleanup = function() {
+                    var s = document.getElementById(styleId);
+                    if (s) s.remove();
+                    document.body.style.overflow = '';
+                    console.log('[Fullscreen] Cleaned up');
                 };
-
-                console.log('✅ Mini mode activated with burst mode');
-            })()
-            """.trimIndent()
-        } else {
-            // Return to full mode
-            """
-            javascript:(function() {
-                if (window.__ytCleanup) {
-                    window.__ytCleanup();
-                }
-                console.log('✅ Full mode restored');
-            })()
+                console.log('[Fullscreen] Style applied');
+            })();
             """.trimIndent()
         }
+        isMiniMode -> {
+            Log.d("SmartPlayer", "Applying mini mode style with improved cleanup")
+            """
+            (function() {
+                console.log('[Mini] Starting mini mode');
+                var styleId = '__ytMiniStyle';
+                var observer = window.__ytMiniObserver;
+                
+                // Disconnect any existing observer
+                if (observer) {
+                    observer.disconnect();
+                    console.log('[Mini] Disconnected previous observer');
+                }
+                
+                // Set active flag
+                window.__ytMiniActive = true;
+                console.log('[Mini] Active flag = true');
+                
+                function applyMiniStyles() {
+                    if (!window.__ytMiniActive) {
+                        console.log('[Mini] Skipping style application – inactive');
+                        return;
+                    }
+                    if (window.__ytMiniStylesApplied) {
+                        console.log('[Mini] Styles already applied, skipping');
+                        return;
+                    }
+                    console.log('[Mini] Applying CSS styles now');
+                    var existing = document.getElementById(styleId);
+                    if (existing) existing.remove();
+                    var style = document.createElement('style');
+                    style.id = styleId;
+                    style.innerHTML = `
+                        /* Scale top and bottom bars */
+                        .ytp-chrome-top, .ytp-chrome-bottom {
+                            transform: scale(0.65) !important;
+                            transform-origin: top center !important;
+                        }
+                        /* Do not scale video */
+                        video, .html5-main-video {
+                            transform: none !important;
+                        }
+                        /* Progress bar scaling */
+                        .ytp-progress-bar-container {
+                            transform: scaleY(0.7) !important;
+                            transform-origin: bottom !important;
+                        }
+                        /* Make title red for debugging, and smaller */
+                        .ytp-title-text {
+                            color: red !important;
+                            font-size: 12px !important;
+                        }
+                    `;
+                    document.head.appendChild(style);
+                    window.__ytMiniStylesApplied = true;
+                    console.log('[Mini] Style element added – title should be red');
+                }
+            
+                // If the elements already exist, apply now
+                if (document.querySelector('.ytp-chrome-top')) {
+                    applyMiniStyles();
+                } else {
+                    // Wait for them using MutationObserver
+                    observer = new MutationObserver(function(mutations, obs) {
+                        console.log('[Mini] MutationObserver triggered, checking for .ytp-chrome-top');
+                        if (document.querySelector('.ytp-chrome-top')) {
+                            console.log('[Mini] .ytp-chrome-top found, active flag = ' + window.__ytMiniActive);
+                            applyMiniStyles();
+                            obs.disconnect();
+                            console.log('[Mini] Observer disconnected after applying styles');
+                        }
+                    });
+                    observer.observe(document.body, { childList: true, subtree: true });
+                    window.__ytMiniObserver = observer;
+                    console.log('[Mini] Waiting for .ytp-chrome-top...');
+                }
+                
+                window.__ytMiniCleanup = function() {
+                    console.log('[Mini] Cleaning up');
+                    // Deactivate first to prevent any pending observer callbacks from applying
+                    window.__ytMiniActive = false;
+                    console.log('[Mini] Active flag = false');
+                    if (window.__ytMiniObserver) {
+                        window.__ytMiniObserver.disconnect();
+                        delete window.__ytMiniObserver;
+                        console.log('[Mini] Observer disconnected');
+                    }
+                    var s = document.getElementById('__ytMiniStyle');
+                    if (s) {
+                        s.remove();
+                        console.log('[Mini] Style element removed');
+                    }
+                    // Explicitly reset title font size in case something went wrong
+                    var title = document.querySelector('.ytp-title-text');
+                    if (title) {
+                        title.style.fontSize = '';
+                        title.style.color = '';
+                        console.log('[Mini] Reset title font size and color');
+                    }
+                    delete window.__ytMiniStylesApplied;
+                    console.log('[Mini] Cleanup complete');
+                };
+            })();
+            """.trimIndent()
+        }
+        else -> {
+            Log.d("SmartPlayer", "Cleaning up styles (normal mode)")
+            """
+            (function() {
+                console.log('[Cleanup] Cleaning up styles');
+                if (window.__ytFullscreenCleanup) window.__ytFullscreenCleanup();
+                if (window.__ytMiniCleanup) window.__ytMiniCleanup();
+                console.log('[Cleanup] Done');
+            })();
+            """.trimIndent()
+        }
+    }
 
-        webView.loadUrl(script)
+    webView.evaluateJavascript(script) { result ->
+        Log.d("SmartPlayer", "JavaScript execution result: $result")
     }
 }

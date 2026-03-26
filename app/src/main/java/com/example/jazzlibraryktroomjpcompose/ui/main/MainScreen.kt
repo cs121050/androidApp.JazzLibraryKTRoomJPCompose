@@ -125,7 +125,19 @@ import org.json.JSONObject
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.window.DialogProperties
+import android.content.res.Configuration
+import android.util.Log
+import android.view.View
+import android.view.ViewGroup
+import android.view.WindowInsetsController
+import androidx.compose.ui.platform.LocalConfiguration
 
+import com.google.accompanist.systemuicontroller.rememberSystemUiController
+import androidx.compose.ui.input.pointer.pointerInput
+
+import androidx.compose.ui.platform.LocalView
+
+import android.view.WindowInsets
 
 class ScrollLockState {
     var isLocked by mutableStateOf(false)
@@ -179,6 +191,67 @@ fun MainScreen(
 
     val scrollLockState = remember { ScrollLockState() }   // That is for the singleartistvie's wikidatacard scrolling, it locks the scrolling in order for items to consume the whole scrolling gesture
 
+    //orientation detection
+    val configuration = LocalConfiguration.current
+    val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+    val isFullscreen = isLandscape && playerUiState.isVisible
+
+    // --- System UI control for fullscreen ---
+    val systemUiController = rememberSystemUiController()
+    var showBars by remember { mutableStateOf(false) }
+
+    val density = LocalDensity.current
+    val topTapThresholdPx = remember { with(density) { 80.dp.toPx() } }
+
+    val view = LocalView.current
+
+    //DEBUGLOG
+    LaunchedEffect(isFullscreen) {
+        Log.d("Fullscreen", "isFullscreen: $isFullscreen, isLandscape: $isLandscape, playerVisible: ${playerUiState.isVisible}")
+    }
+
+    // Auto‑hide bars after 3 seconds when they become visible
+    LaunchedEffect(showBars, isFullscreen) {
+        if (isFullscreen && showBars) {
+            delay(3000)
+            showBars = false
+        }
+    }
+
+    // Apply system UI visibility and colors based on fullscreen state
+    // Then replace the system UI control LaunchedEffect with this:
+    LaunchedEffect(isFullscreen, showBars) {
+        Log.d("Fullscreen", "System UI effect: isFullscreen=$isFullscreen, showBars=$showBars")
+        if (isFullscreen) {
+            // Immersive sticky flags prevent swipe from revealing bars
+            view.systemUiVisibility = (
+                    View.SYSTEM_UI_FLAG_LAYOUT_STABLE or
+                            View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION or
+                            View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN or
+                            View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or
+                            View.SYSTEM_UI_FLAG_FULLSCREEN or
+                            View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                    )
+            // Control visibility via Accompanist (only shows bars when showBars=true)
+            systemUiController.isStatusBarVisible = showBars
+            systemUiController.isNavigationBarVisible = showBars
+        } else {
+            // Restore normal UI
+            systemUiController.isStatusBarVisible = true
+            systemUiController.isNavigationBarVisible = true
+            view.systemUiVisibility = View.SYSTEM_UI_FLAG_VISIBLE
+        }
+    }
+
+// Auto‑hide timer (unchanged)
+    LaunchedEffect(showBars, isFullscreen) {
+        if (isFullscreen && showBars) {
+            Log.d("Fullscreen", "Bars visible, starting auto-hide timer")
+            delay(3000)
+            Log.d("Fullscreen", "Auto-hiding bars")
+            showBars = false
+        }
+    }
 
     // Monitor tab changes and minimize player when leaving Videos tab
     LaunchedEffect(currentTab) {
@@ -239,29 +312,41 @@ fun MainScreen(
             val listState = rememberLazyListState()
 
             // ----- CHIPS ROW (fixed) -----
-            ActiveFilterChipsRow(
-                filterPath = filterState.currentFilterPath,
-                onMenuClick = { viewModel.toggleLeftDrawer() },
-                onChipClick = { categoryId, entityId, entityName ->
-                    viewModel.handleChipSelection(categoryId, entityId, entityName, false)
-                },
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .fillMaxWidth()
-                    .onGloballyPositioned { coordinates ->
-                        chipsHeightPx.intValue = coordinates.size.height
-                    }
-                    .background(MaterialTheme.colorScheme.background)
-                    .zIndex(7f)
-            )
+            if (!isFullscreen) {
+                ActiveFilterChipsRow(
+                    filterPath = filterState.currentFilterPath,
+                    onMenuClick = { viewModel.toggleLeftDrawer() },
+                    onChipClick = { categoryId, entityId, entityName ->
+                        viewModel.handleChipSelection(categoryId, entityId, entityName, false)
+                    },
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .fillMaxWidth()
+                        .onGloballyPositioned { coordinates ->
+                            chipsHeightPx.intValue = coordinates.size.height
+                        }
+                        .background(MaterialTheme.colorScheme.background)
+                        .zIndex(7f)
+                )
+            }
 
 
 
 
+            // LOCK all the scrolling gestures to ensure that a nested item consume all of it
+            CompositionLocalProvider(LocalScrollLock provides scrollLockState) {
 
-            CompositionLocalProvider(LocalScrollLock provides scrollLockState) { // LOCK all the scrolling gestures to ensure that a nested item consume all of it
+
 
                 // ----- PULL TO REFRESH + CONTENT -----
+
+                //for hiding the top bar when on fullscreen
+                val topPadding = if (isFullscreen) {
+                    0.dp
+                } else {
+                    with(LocalDensity.current) { chipsHeightPx.intValue.toDp() }
+                }
+
                 PullToRefreshBox(
                     isRefreshing = isRefreshing,
                     onRefresh = {
@@ -272,11 +357,7 @@ fun MainScreen(
                     },
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(
-                            top = with(LocalDensity.current) {
-                                chipsHeightPx.intValue.toDp()
-                            }
-                        )
+                        .padding(top = topPadding)
                 ) {
                     // This Box contains toolbar, list, and player
                     Box(
@@ -284,6 +365,7 @@ fun MainScreen(
                             .fillMaxSize()
                             .nestedScroll(nestedScrollConnection)
                             .onGloballyPositioned { coordinates ->
+                                Log.d("Fullscreen", "Parent box size: ${coordinates.size}")
                                 contentBoxRootPosition = IntOffset(
                                     x = coordinates.positionInRoot().x.roundToInt(),
                                     y = coordinates.positionInRoot().y.roundToInt()
@@ -328,51 +410,53 @@ fun MainScreen(
                                     }
                                 )
                         ) {
-                            //depending of witch tab of the toolbarbox is selected give me the relevant screen
-                            when (currentTab) {
-                                MainTab.VIDEOS -> VideoListContent(
-                                    uiState = uiState,
-                                    filterState = filterState,
-                                    videosToShow = videosToShow,
-                                    onRefresh = { viewModel.safeRefreshDataFromAPI() },
-                                    onActiveCardBoundsChanged = { cardId, rootPosition, size ->
-                                        if (cardId == playerUiState.activeCardId) {
-                                            val relativePos = rootPosition - contentBoxRootPosition
-                                            activeCardRelativePosition = relativePos
-                                            activeCardSize = size
+                            if (!isFullscreen) {
+                                //depending of witch tab of the toolbarbox is selected give me the relevant screen
+                                when (currentTab) {
+                                    MainTab.VIDEOS -> VideoListContent(
+                                        uiState = uiState,
+                                        filterState = filterState,
+                                        videosToShow = videosToShow,
+                                        onRefresh = { viewModel.safeRefreshDataFromAPI() },
+                                        onActiveCardBoundsChanged = { cardId, rootPosition, size ->
+                                            if (cardId == playerUiState.activeCardId) {
+                                                val relativePos = rootPosition - contentBoxRootPosition
+                                                activeCardRelativePosition = relativePos
+                                                activeCardSize = size
+                                            }
+                                        },
+                                        playerUiState = playerUiState,
+                                        playerViewModel = playerViewModel,
+                                        listState = listState,
+                                        isPlayerVisible = isPlayerVisible,
+                                        cardUiStates = cardUiStates,
+                                        onCardTitleClick = { videoId ->
+                                            viewModel.onCardTitleClick(
+                                                videoId
+                                            )
                                         }
-                                    },
-                                    playerUiState = playerUiState,
-                                    playerViewModel = playerViewModel,
-                                    listState = listState,
-                                    isPlayerVisible = isPlayerVisible,
-                                    cardUiStates = cardUiStates,
-                                    onCardTitleClick = { videoId ->
-                                        viewModel.onCardTitleClick(
-                                            videoId
-                                        )
-                                    }
-                                )
+                                    )
 
-                                MainTab.ARTISTS -> ArtistContent(
-                                    modifier = Modifier.fillMaxSize(),
-                                    artistsShuffled = uiState.availableArtistsDisplay,
-                                    artistsBase = uiState.availableArtists,
-                                    filterPath = filterState.currentFilterPath, // pass filter path
-                                    onRefresh = { viewModel.shuffleArtists() },
-                                    onArtistSelected = { artist ->
-                                        viewModel.handleChipSelection(
-                                            FilterPath.CATEGORY_ARTIST,
-                                            artist.id,
-                                            artist.fullName,
-                                            true // add filter
-                                        )
-                                    }
-                                )
+                                    MainTab.ARTISTS -> ArtistContent(
+                                        modifier = Modifier.fillMaxSize(),
+                                        artistsShuffled = uiState.availableArtistsDisplay,
+                                        artistsBase = uiState.availableArtists,
+                                        filterPath = filterState.currentFilterPath, // pass filter path
+                                        onRefresh = { viewModel.shuffleArtists() },
+                                        onArtistSelected = { artist ->
+                                            viewModel.handleChipSelection(
+                                                FilterPath.CATEGORY_ARTIST,
+                                                artist.id,
+                                                artist.fullName,
+                                                true // add filter
+                                            )
+                                        }
+                                    )
 
-                                MainTab.HISTORY -> HistoryContent(
-                                    modifier = Modifier.fillMaxSize(),
-                                )
+                                    MainTab.HISTORY -> HistoryContent(
+                                        modifier = Modifier.fillMaxSize(),
+                                    )
+                                }
                             }
                         }
 
@@ -380,9 +464,6 @@ fun MainScreen(
                         // Add these states at the top of your MainScreen composable (with other states)
                         val webView = remember { mutableStateOf<WebView?>(null) }
 
-// Then your player section should look like this:
-
-// ----- PLAYER (draggable mini player) -----
                         if (playerUiState.isVisible) {
                             val density = LocalDensity.current
                             val scope = rememberCoroutineScope()
@@ -391,6 +472,8 @@ fun MainScreen(
                             val dragOffsetY = remember { Animatable(0f) }
                             val closeThresholdPx = with(density) { 100.dp.toPx() }
 
+
+
                             // Reset offset when entering mini mode
                             LaunchedEffect(playerUiState.isInMiniMode) {
                                 if (playerUiState.isInMiniMode) {
@@ -398,11 +481,24 @@ fun MainScreen(
                                 }
                             }
 
-                            val baseModifier = if (playerUiState.isInMiniMode) {
-                                // Mini mode: bottom‑end + draggable
-                                Modifier
+                            // --- Compute modifier based on fullscreen, mini, or attached ---
+                            val playerModifier = when {
+                                isFullscreen -> Modifier
+                                    .fillMaxSize()
+                                    .zIndex(10f)
+                                    .graphicsLayer { clip = true }
+                                    .pointerInput(Unit) {
+                                        detectTapGestures { offset ->
+                                            if (offset.y < topTapThresholdPx) {
+                                                Log.d("Fullscreen", "Top edge tap detected, showing bars")
+                                                showBars = true
+                                            }
+                                        }
+                                    }
+
+                                playerUiState.isInMiniMode -> Modifier
                                     .size(width = 240.dp, height = 132.dp)
-                                    .padding(bottom = 8.dp, end = 6.dp)
+                                    .padding(bottom = 6.dp, end = 6.dp)
                                     .align(Alignment.BottomEnd)
                                     .offset { IntOffset(0, dragOffsetY.value.roundToInt()) }
                                     .pointerInput(Unit) {
@@ -411,10 +507,7 @@ fun MainScreen(
                                             onDrag = { change, dragAmount ->
                                                 change.consume()
                                                 scope.launch {
-                                                    val newValue =
-                                                        (dragOffsetY.value + dragAmount.y).coerceAtLeast(
-                                                            0f
-                                                        )
+                                                    val newValue = (dragOffsetY.value + dragAmount.y).coerceAtLeast(0f)
                                                     dragOffsetY.snapTo(newValue)
                                                 }
                                             },
@@ -427,57 +520,66 @@ fun MainScreen(
                                                     }
                                                 }
                                             },
-                                            onDragCancel = {
-                                                scope.launch { dragOffsetY.animateTo(0f) }
-                                            }
+                                            onDragCancel = { scope.launch { dragOffsetY.animateTo(0f) } }
                                         )
                                     }
-                            } else {
-                                // Full mode: position over the active card
-                                activeCardRelativePosition?.let { pos ->
-                                    activeCardSize?.let { size ->
-                                        Modifier
-                                            .size(
-                                                width = with(density) { size.width.toDp() },
-                                                height = with(density) { size.height.toDp() }
-                                            )
-                                            .graphicsLayer {
-                                                translationX = pos.x.toFloat()
-                                                translationY = pos.y.toFloat()
-                                            }
-                                    }
-                                } ?: Modifier.size(0.dp)
+                                    .zIndex(5f)
+
+                                else -> {
+                                    // Attached to active card
+                                    activeCardRelativePosition?.let { pos ->
+                                        activeCardSize?.let { size ->
+                                            Modifier
+                                                .size(
+                                                    width = with(density) { size.width.toDp() },
+                                                    height = with(density) { size.height.toDp() }
+                                                )
+                                                .graphicsLayer {
+                                                    translationX = pos.x.toFloat()
+                                                    translationY = pos.y.toFloat()
+                                                }
+                                                .zIndex(5f)
+                                        }
+                                    } ?: Modifier.size(0.dp)
+                                }
                             }
 
                             Box(
-                                modifier = baseModifier
-                                    .zIndex(5f)
+                                modifier = playerModifier
+                                    .onGloballyPositioned { coordinates ->
+                                        Log.d("Fullscreen", "Player box size: ${coordinates.size}")
+                                    }
                             ) {
-                                // Use ONLY SmartYoutubePlayerHost (not CustomYoutubePlayer)
                                 SmartYoutubePlayerHost(
                                     key = playerUiState.playerInstanceId,
                                     videoId = playerUiState.currentVideoId,
-                                    isMiniMode = playerUiState.isInMiniMode,
-                                    onPlayerReady = { youTubePlayer ->
-                                        playerViewModel.setPlayer(youTubePlayer)
+                                    isFullscreen = isFullscreen,
+                                    isMiniMode = playerUiState.isInMiniMode && !isFullscreen,
+                                    onPlayerReady = { player -> playerViewModel.setPlayer(player) },
+                                    onWebViewReady = { webView ->
+                                        webView.post {
+                                            // Remove any extra space
+                                            webView.setPadding(0, 0, 0, 0)
+                                            // Disable scrolling inside the WebView
+                                            webView.isScrollContainer = false
+                                            webView.isVerticalScrollBarEnabled = false
+                                            webView.isHorizontalScrollBarEnabled = false
+                                            webView.setInitialScale(100)
+                                            webView.requestLayout()
+                                        }
                                     },
-                                    onWebViewReady = { capturedWebView ->
-                                        webView.value = capturedWebView
-                                    },
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .clip(RoundedCornerShape(8.dp))
+                                    modifier = Modifier.fillMaxSize()
                                 )
 
-                                // Only show custom controls in mini mode
-                                if (playerUiState.isInMiniMode) {
+                                // Custom controls only when mini mode and NOT fullscreen
+                                if (playerUiState.isInMiniMode && !isFullscreen) {
                                     CustomMiniPlayerControls(
                                         isPlaying = playerUiState.isPlaying,
                                         currentPosition = playerUiState.playbackPosition,
                                         duration = playerUiState.videoDuration,
                                         onSeek = { position -> playerViewModel.seekTo(position) },
-                                        onLeftTap = { playerViewModel.onMiniPlayerLeftTap() },  // Play/Pause
-                                        onRightTap = { playerViewModel.onMiniPlayerRightTap() }, // Back/Scroll
+                                        onLeftTap = { playerViewModel.onMiniPlayerLeftTap() },   // Play/Pause
+                                        onRightTap = { playerViewModel.onMiniPlayerRightTap() },  // Back/Scroll
                                         modifier = Modifier.fillMaxSize()
                                     )
                                 }
