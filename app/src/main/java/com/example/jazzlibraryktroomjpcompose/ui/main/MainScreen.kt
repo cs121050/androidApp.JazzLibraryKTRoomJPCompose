@@ -113,6 +113,7 @@ import androidx.compose.ui.window.DialogProperties
 import android.content.res.Configuration
 import android.util.Log
 import android.view.View
+import android.view.ViewGroup
 import android.widget.Toast
 import com.google.accompanist.systemuicontroller.rememberSystemUiController
 import androidx.compose.ui.platform.LocalView
@@ -586,6 +587,11 @@ fun MainScreen(
                                             webView.isVerticalScrollBarEnabled = false
                                             webView.isHorizontalScrollBarEnabled = false
                                             webView.setInitialScale(100)
+                                            // Force match parent
+                                            webView.layoutParams = webView.layoutParams.apply { // FIX: eliminates the scroling of the youtube content inside the youtubelpayer after fullscreen
+                                                width = ViewGroup.LayoutParams.MATCH_PARENT
+                                                height = ViewGroup.LayoutParams.MATCH_PARENT
+                                            }
                                             webView.requestLayout()
                                         }
                                     },
