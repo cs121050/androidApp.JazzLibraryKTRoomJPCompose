@@ -115,9 +115,17 @@ import android.util.Log
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Toast
+import androidx.compose.material.icons.filled.SkipNext
+import androidx.compose.material.icons.filled.SkipPrevious
 import com.google.accompanist.systemuicontroller.rememberSystemUiController
 import androidx.compose.ui.platform.LocalView
 import kotlin.math.abs
+
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.windowInsetsBottomHeight
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.ui.unit.Dp
 
 class ScrollLockState {
     var isLocked by mutableStateOf(false)
@@ -174,6 +182,8 @@ fun MainScreen(
     val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
     val isFullscreen = isLandscape && playerUiState.isVisible
 
+    var miniPlayerHeight by remember { mutableStateOf(0.dp) }
+
     // --- System UI control for fullscreen ---
     val systemUiController = rememberSystemUiController()
     var showBars by remember { mutableStateOf(false) }
@@ -182,6 +192,8 @@ fun MainScreen(
     val topTapThresholdPx = remember { with(density) { 80.dp.toPx() } }
 
     val view = LocalView.current
+
+    val navBarHeight = WindowInsets.navigationBars.getBottom(LocalDensity.current).dp
 
     //DEBUGLOG
     LaunchedEffect(isFullscreen) {
@@ -230,6 +242,7 @@ fun MainScreen(
             showBars = false
         }
     }
+
 
     // Monitor tab changes and minimize player when leaving Videos tab
     LaunchedEffect(currentTab) {
@@ -286,6 +299,23 @@ fun MainScreen(
             } else {
                 uiState.filteredVideos
             }
+
+            // Update player playlist when the video list changes
+            LaunchedEffect(videosToShow) {
+                playerViewModel.updatePlaylist(videosToShow)
+            }
+
+            // Keep the player's current index in sync (e.g., after a load via card tap)
+            LaunchedEffect(playerUiState.currentVideoId) {
+                val videoId = playerUiState.currentVideoId
+                if (videoId != null) {
+                    val index = videosToShow.indexOfFirst { extractYouTubeVideoId(it.path) == videoId }
+                    if (index != -1 && playerUiState.currentIndex != index) {
+                        playerViewModel.updateCurrentIndex(index)
+                    }
+                }
+            }
+
 
             val listState = rememberLazyListState()
 
@@ -566,9 +596,11 @@ fun MainScreen(
                                 }
                             }
 
+                            //miniplayer's box
                             Box(
                                 modifier = playerModifier
                                     .onGloballyPositioned { coordinates ->
+                                        miniPlayerHeight = with(density) { coordinates.size.height.toDp() }
                                         Log.d("Fullscreen", "Player box size: ${coordinates.size}")
                                     }
                             ) {
@@ -645,6 +677,21 @@ fun MainScreen(
                     }
                 }
             }
+
+            // youtube Player controls overlay (added)
+            PlayerControlsOverlay(
+                isVisible = playerUiState.isVisible,
+                isFullscreen = isFullscreen,
+                isMiniMode = playerUiState.isInMiniMode,
+                miniPlayerHeight = miniPlayerHeight,
+                onPrevious = { playerViewModel.previousVideo() },
+                onNext = { playerViewModel.nextVideo() },
+                onClose = { playerViewModel.closePlayer() },
+                modifier = Modifier.fillMaxSize()
+            )
+
+
+
         }
     }
 }
@@ -2064,5 +2111,77 @@ private fun parseWikipediaData(jsonString: String?): List<Pair<String, String>> 
     } catch (e: Exception) {
         e.printStackTrace()
         emptyList()
+    }
+}
+
+@Composable
+fun PlayerControlsOverlay(
+    isVisible: Boolean,
+    isFullscreen: Boolean,
+    isMiniMode: Boolean,
+    miniPlayerHeight: Dp,
+    onPrevious: () -> Unit,
+    onNext: () -> Unit,
+    onClose: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    if (!isVisible) return
+
+    val density = LocalDensity.current
+    val navbarHeight = WindowInsets.navigationBars.getBottom(density).dp
+    val hasNavBar = navbarHeight > 0.dp
+
+    // Determine the bottom padding (for horizontal mode)
+    val bottomPadding = when {
+        isFullscreen -> 0.dp          // vertical mode uses no bottom padding
+        isMiniMode && miniPlayerHeight > 0.dp -> miniPlayerHeight + 6.dp
+        else -> if (hasNavBar) navbarHeight else 48.dp  // fallback when no navbar
+    }
+
+    // Icon color – use a light, semi‑transparent color to match system style
+    val iconColor = Color.White.copy(alpha = 0.8f)
+
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .zIndex(10f)          // ensures it stays on top
+    ) {
+        if (isFullscreen) {
+            // Vertical buttons on the right side, centered
+            Column(
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .padding(end = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                IconButton(onClick = onClose) {
+                    Icon(Icons.Default.Close, contentDescription = "Close", tint = iconColor)
+                }
+                IconButton(onClick = onPrevious) {
+                    Icon(Icons.Default.SkipPrevious, contentDescription = "Previous", tint = iconColor)
+                }
+                IconButton(onClick = onNext) {
+                    Icon(Icons.Default.SkipNext, contentDescription = "Next", tint = iconColor)
+                }
+            }
+        } else {
+            // Horizontal row at bottom‑right, with bottom padding
+            Row(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(bottom = bottomPadding, end = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                IconButton(onClick = onClose) {
+                    Icon(Icons.Default.Close, contentDescription = "Close", tint = iconColor)
+                }
+                IconButton(onClick = onPrevious) {
+                    Icon(Icons.Default.SkipPrevious, contentDescription = "Previous", tint = iconColor)
+                }
+                IconButton(onClick = onNext) {
+                    Icon(Icons.Default.SkipNext, contentDescription = "Next", tint = iconColor)
+                }
+            }
+        }
     }
 }
