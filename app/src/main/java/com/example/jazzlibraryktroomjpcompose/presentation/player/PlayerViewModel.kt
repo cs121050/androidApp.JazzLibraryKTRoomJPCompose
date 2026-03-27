@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.jazzlibraryktroomjpcompose.data.player.YouTubePlayerControllerImpl
 import com.example.jazzlibraryktroomjpcompose.domain.models.FilterPath
+import com.example.jazzlibraryktroomjpcompose.domain.models.Video
 import com.example.jazzlibraryktroomjpcompose.domain.player.VideoPlayerController
 import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.YouTubePlayer
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -52,6 +53,13 @@ class PlayerViewModel @Inject constructor(
      * @param currentFilterPath The filter path active at the moment of loading.
      */
     fun loadVideo(videoId: String, cardId: String?, currentFilterPath: List<FilterPath>?) {
+        // After loading, try to set current index
+        val videos = _uiState.value.availableVideos ?: return
+        val index = videos.indexOfFirst { extractYouTubeVideoId(it.path) == videoId }
+        if (index != -1) {
+            _uiState.update { it.copy(currentIndex = index) }
+        }
+
         _uiState.update {
             it.copy(
                 isVisible = true,
@@ -188,5 +196,56 @@ class PlayerViewModel @Inject constructor(
         val newPosition = (_uiState.value.playbackPosition + 10000)
             .coerceAtMost(_uiState.value.videoDuration)
         playerController.seekTo(newPosition)
+    }
+
+    private fun extractYouTubeVideoId(url: String): String? {
+        val pattern = "(?:youtube\\.com\\/watch\\?v=|youtu\\.be\\/|youtube\\.com\\/embed\\/)([a-zA-Z0-9_-]{11})"
+        val regex = Regex(pattern)
+        return regex.find(url)?.groupValues?.get(1)
+    }
+
+    // Keep track of the playlist (called from MainScreen)
+    fun updatePlaylist(videos: List<Video>) {
+        _uiState.update { it.copy(availableVideos = videos) }
+        // Update current index based on the currently loaded video
+        val currentId = _uiState.value.currentVideoId
+        val newIndex = videos.indexOfFirst { extractYouTubeVideoId(it.path) == currentId }
+        if (newIndex != -1) {
+            _uiState.update { it.copy(currentIndex = newIndex) }
+        } else {
+            _uiState.update { it.copy(currentIndex = null) }
+        }
+    }
+
+    fun updateCurrentIndex(index: Int) {
+        _uiState.update { it.copy(currentIndex = index) }
+    }
+
+    fun nextVideo() {
+        val state = _uiState.value
+        val videos = state.availableVideos ?: return
+        val currentIdx = state.currentIndex ?: return
+        if (currentIdx + 1 < videos.size) {
+            val nextVideo = videos[currentIdx + 1]
+            val nextVideoId = extractYouTubeVideoId(nextVideo.path)
+            if (nextVideoId != null) {
+                loadVideo(nextVideoId, nextVideo.locationId, state.filterPathAtLoad)
+                _uiState.update { it.copy(currentIndex = currentIdx + 1) }
+            }
+        }
+    }
+
+    fun previousVideo() {
+        val state = _uiState.value
+        val videos = state.availableVideos ?: return
+        val currentIdx = state.currentIndex ?: return
+        if (currentIdx - 1 >= 0) {
+            val prevVideo = videos[currentIdx - 1]
+            val prevVideoId = extractYouTubeVideoId(prevVideo.path)
+            if (prevVideoId != null) {
+                loadVideo(prevVideoId, prevVideo.locationId, state.filterPathAtLoad)
+                _uiState.update { it.copy(currentIndex = currentIdx - 1) }
+            }
+        }
     }
 }
