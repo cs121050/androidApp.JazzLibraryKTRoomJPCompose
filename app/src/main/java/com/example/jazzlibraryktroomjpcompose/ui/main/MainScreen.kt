@@ -492,7 +492,7 @@ fun MainScreen(
                                     }
 
                                 playerUiState.isInMiniMode -> Modifier
-                                    .size(width = 235.dp, height = 135.dp)  // IMPORTANT : change this to 205 to 205 to comply with youtube rules!
+                                    .size(width = 235.dp, height = 200.dp)  // IMPORTANT : change this to 205 to 205 to comply with youtube rules!
                                     .padding(bottom = 6.dp, end = 6.dp)
                                     .align(Alignment.BottomEnd)
                                     .offset { IntOffset(dragOffsetX.value.roundToInt(), dragOffsetY.value.roundToInt()) }
