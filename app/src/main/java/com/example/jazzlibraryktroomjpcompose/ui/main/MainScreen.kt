@@ -168,6 +168,7 @@ fun MainScreen(
 
     //i have made the isPlayerVisible global (placed it in the viewmodel) so to access it independently
     val isPlayerVisible by viewModel.isPlayerVisible.collectAsState()
+
     val cardUiStates by viewModel.cardUiStates.collectAsState()
     //witch tab is the main tab
     val currentTab by viewModel.currentTab.collectAsState()
@@ -194,6 +195,8 @@ fun MainScreen(
     val view = LocalView.current
 
     val navBarHeight = WindowInsets.navigationBars.getBottom(LocalDensity.current).dp
+
+    val listState = rememberLazyListState()
 
     //DEBUGLOG
     LaunchedEffect(isFullscreen) {
@@ -316,9 +319,6 @@ fun MainScreen(
                 }
             }
 
-
-            val listState = rememberLazyListState()
-
             // ----- CHIPS ROW (fixed) -----
             if (!isFullscreen) {
                 ActiveFilterChipsRow(
@@ -402,6 +402,13 @@ fun MainScreen(
                                 currentTab = currentTab,
                                 onTabSelected = { viewModel.setCurrentTab(it) },
                                 isPlayerVisible = isPlayerVisible,
+                                onPrevious = { playerViewModel.previousVideo() },
+                                onNext = { playerViewModel.nextVideo() },
+                                onClose = { playerViewModel.closePlayer()},
+                                playerViewModel = playerViewModel,
+                                videos = videosToShow,
+                                listState = listState,
+                                currentFilterPath = filterState.currentFilterPath,
                                 onTogglePlayerVisibility = { viewModel.togglePlayerVisibility() }
                             )
                         }
@@ -689,9 +696,6 @@ fun MainScreen(
                 onClose = { playerViewModel.closePlayer() },
                 modifier = Modifier.fillMaxSize()
             )
-
-
-
         }
     }
 }
@@ -730,6 +734,13 @@ fun toolbarBox(
     currentTab: MainTab,
     onTabSelected: (MainTab) -> Unit,
     isPlayerVisible: Boolean,
+    onPrevious: () -> Unit,
+    onNext: () -> Unit,
+    onClose: () -> Unit,
+    playerViewModel: PlayerViewModel,
+    videos: List<Video>,
+    currentFilterPath: List<FilterPath>,
+    listState: LazyListState,
     onTogglePlayerVisibility: () -> Unit
 ) {
     SearchBar(
@@ -747,6 +758,13 @@ fun toolbarBox(
         onTabSelected = onTabSelected,
         isPlayerVisible = isPlayerVisible,
         onTogglePlayerVisibility = onTogglePlayerVisibility,
+        onNext = onNext,
+        onClose = onClose,
+        onPrevious = onPrevious,
+        playerViewModel = playerViewModel,
+        videos = videos,
+        listState = listState,
+        currentFilterPath = currentFilterPath,
         modifier = Modifier.fillMaxWidth()
     )
 }
@@ -801,20 +819,140 @@ fun VideoStatsRow(
     videoCount: Int,
     artistCount: Int,
     historyCount: Int,
-    currentTab: MainTab,
+    currentTab: MainTab,                         // already there
     onTabSelected: (MainTab) -> Unit,
     isPlayerVisible: Boolean,
     onTogglePlayerVisibility: () -> Unit,
+    onPrevious: () -> Unit,
+    onNext: () -> Unit,
+    onClose: () -> Unit,
+    playerViewModel: PlayerViewModel,
+    videos: List<Video>,
+    listState: LazyListState,
+    currentFilterPath: List<FilterPath>,
     modifier: Modifier = Modifier
 ) {
+    val playerUiState by playerViewModel.uiState.collectAsState()
+    val isVideoPlaying = playerUiState.isVisible && playerUiState.currentVideoId != null
+    val controlsAccessible = isPlayerVisible && isVideoPlaying
+
+    val pagerState = rememberPagerState(
+        initialPage = if (controlsAccessible) 0 else 1,
+        pageCount = { 2 }
+    )
+    val coroutineScope = rememberCoroutineScope()
+
+
+
+
+    // Keep pager on minimise page when controls become inaccessible
+    LaunchedEffect(controlsAccessible) {
+        if (!controlsAccessible && pagerState.currentPage != 1) {
+            pagerState.animateScrollToPage(1)
+        }
+    }
+
+    LaunchedEffect(isVideoPlaying) {
+        if (controlsAccessible && pagerState.currentPage != 0) {
+            pagerState.animateScrollToPage(0)
+        }
+        Log.d("VIDEOSTATROW", "controlsAccessible: $controlsAccessible")
+    }
+
+    fun isVideoIndexVisible(index: Int): Boolean {
+        return if (index in 0 until videos.size) {
+            val visibleIndices = listState.layoutInfo.visibleItemsInfo.map { it.index }
+            index in visibleIndices
+        } else false
+    }
+
+    val loadFirstVideo: () -> Unit = {
+        if (videos.isNotEmpty()) {
+            val firstVideo = videos.first()
+            val videoId = extractYouTubeVideoId(firstVideo.path)
+            if (videoId != null) {
+                val startInMiniMode = when {
+                    currentTab != MainTab.VIDEOS -> true
+                    else -> !isVideoIndexVisible(0)   // first video's index is 0
+                }
+                playerViewModel.loadVideo(
+                    videoId = videoId,
+                    cardId = firstVideo.locationId,
+                    currentFilterPath = currentFilterPath,
+                    startInMiniMode = startInMiniMode
+                )
+            }
+        }
+    }
+
+// In LaunchedEffect that triggers when pagerState.currentPage == 0
+    LaunchedEffect(pagerState.currentPage) {
+        if (pagerState.currentPage == 0 && !playerUiState.isVisible) {
+            loadFirstVideo()
+        }
+    }
+
+
+    val onNextClick: () -> Unit = {
+        val currentVideoId = playerUiState.currentVideoId
+        val currentIndex = playerUiState.currentIndex ?: -1
+        val targetIndex = currentIndex + 1
+
+        // Determine if we should start in mini mode
+        val startInMiniMode = when {
+            currentTab != MainTab.VIDEOS -> true                    // non-video tabs always mini
+            targetIndex !in 0 until videos.size -> false            // fallback (shouldn't happen)
+            else -> !isVideoIndexVisible(targetIndex)               // mini if card not visible
+        }
+
+        if (targetIndex in 0 until videos.size) {
+            val targetVideo = videos[targetIndex]
+            val videoId = extractYouTubeVideoId(targetVideo.path)
+            if (videoId != null) {
+                playerViewModel.loadVideo(
+                    videoId = videoId,
+                    cardId = targetVideo.locationId,
+                    currentFilterPath = currentFilterPath,
+                    startInMiniMode = startInMiniMode
+                )
+            }
+        } else {
+            // No next video – you might want to wrap around or do nothing
+        }
+    }
+
+    val onPreviousClick: () -> Unit = {
+        val currentIndex = playerUiState.currentIndex ?: -1
+        val targetIndex = currentIndex - 1
+
+        val startInMiniMode = when {
+            currentTab != MainTab.VIDEOS -> true
+            targetIndex !in 0 until videos.size -> false
+            else -> !isVideoIndexVisible(targetIndex)
+        }
+
+        if (targetIndex in 0 until videos.size) {
+            val targetVideo = videos[targetIndex]
+            val videoId = extractYouTubeVideoId(targetVideo.path)
+            if (videoId != null) {
+                playerViewModel.loadVideo(
+                    videoId = videoId,
+                    cardId = targetVideo.locationId,
+                    currentFilterPath = currentFilterPath,
+                    startInMiniMode = startInMiniMode
+                )
+            }
+        }
+    }
+
     Row(
         modifier = modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Tab row
+        // Tab row (unchanged)
         Row(
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             TabText(
                 text = "Videos ($videoCount)",
@@ -827,22 +965,57 @@ fun VideoStatsRow(
                 onClick = { onTabSelected(MainTab.ARTISTS) }
             )
             TabText(
-                text = "History ($historyCount)",
+                text = "History",
                 selected = currentTab == MainTab.HISTORY,
                 onClick = { onTabSelected(MainTab.HISTORY) }
             )
         }
 
-        // Player visibility toggle (unchanged)
-        IconToggleButton(
-            checked = isPlayerVisible,
-            onCheckedChange = { onTogglePlayerVisibility() }
-        ) {
-            Icon(
-                imageVector = if (isPlayerVisible) Icons.Default.ViewList else Icons.Default.ViewModule,
-                contentDescription = if (isPlayerVisible) "Hide players" else "Show players",
-                tint = if (isPlayerVisible) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-            )
+        // Pager area (controls / minimise)
+        HorizontalPager(
+            state = pagerState,
+            userScrollEnabled = true,
+            modifier = Modifier.wrapContentWidth()
+        ) { page ->
+            when (page) {
+                0 -> {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(0.dp)
+                    ) {
+                        IconButton(onClick = onPreviousClick) {   // use custom previous
+                            Icon(Icons.Default.SkipPrevious, contentDescription = "Previous")
+                        }
+                        IconButton(onClick = onNextClick) {
+                            Icon(Icons.Default.SkipNext, contentDescription = "Next")
+                        }
+                        IconButton(onClick = {
+                            coroutineScope.launch {
+                                onClose()
+                                pagerState.animateScrollToPage(1)
+                            }
+                        }) {
+                            Icon(Icons.Default.Close, contentDescription = "Close")
+                        }
+                    }
+                }
+                1 -> {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End
+                    ) {
+                        IconToggleButton(
+                            checked = isPlayerVisible,
+                            onCheckedChange = { onTogglePlayerVisibility() }
+                        ) {
+                            Icon(
+                                imageVector = if (isPlayerVisible) Icons.Default.ViewList else Icons.Default.ViewModule,
+                                contentDescription = if (isPlayerVisible) "Hide players" else "Show players",
+                                tint = if (isPlayerVisible) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
         }
     }
 }
@@ -2158,30 +2331,17 @@ fun PlayerControlsOverlay(
                     Icon(Icons.Default.Close, contentDescription = "Close", tint = iconColor)
                 }
                 IconButton(onClick = onPrevious) {
-                    Icon(Icons.Default.SkipPrevious, contentDescription = "Previous", tint = iconColor)
+                    Icon(
+                        Icons.Default.SkipPrevious,
+                        contentDescription = "Previous",
+                        tint = iconColor
+                    )
                 }
                 IconButton(onClick = onNext) {
                     Icon(Icons.Default.SkipNext, contentDescription = "Next", tint = iconColor)
                 }
             }
-        } else {
-            // Horizontal row at bottom‑right, with bottom padding
-            Row(
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(bottom = bottomPadding, end = 16.dp),
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                IconButton(onClick = onClose) {
-                    Icon(Icons.Default.Close, contentDescription = "Close", tint = iconColor)
-                }
-                IconButton(onClick = onPrevious) {
-                    Icon(Icons.Default.SkipPrevious, contentDescription = "Previous", tint = iconColor)
-                }
-                IconButton(onClick = onNext) {
-                    Icon(Icons.Default.SkipNext, contentDescription = "Next", tint = iconColor)
-                }
-            }
+
         }
     }
 }

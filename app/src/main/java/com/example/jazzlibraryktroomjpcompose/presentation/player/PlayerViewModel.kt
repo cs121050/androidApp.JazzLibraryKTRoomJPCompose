@@ -1,6 +1,7 @@
 // PlayerViewModel.kt
 package com.example.jazzlibraryktroomjpcompose.presentation.player
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.jazzlibraryktroomjpcompose.data.player.YouTubePlayerControllerImpl
@@ -52,7 +53,12 @@ class PlayerViewModel @Inject constructor(
      * @param cardId The ID of the card that should host the player (if any).
      * @param currentFilterPath The filter path active at the moment of loading.
      */
-    fun loadVideo(videoId: String, cardId: String?, currentFilterPath: List<FilterPath>?) {
+    fun loadVideo(videoId: String,
+                  cardId: String?,
+                  currentFilterPath:
+                  List<FilterPath>?,
+                  startInMiniMode: Boolean = false
+    ) {
         // After loading, try to set current index
         val videos = _uiState.value.availableVideos ?: return
         val index = videos.indexOfFirst { extractYouTubeVideoId(it.path) == videoId }
@@ -63,12 +69,13 @@ class PlayerViewModel @Inject constructor(
         _uiState.update {
             it.copy(
                 isVisible = true,
-                isInMiniMode = false,          // Initially attached to card if cardId is provided
+                isInMiniMode = startInMiniMode,   // use the flag
                 activeCardId = cardId,
                 filterPathAtLoad = currentFilterPath
             )
         }
         playerController.loadVideo(videoId, autoPlay = true)
+        Log.d("PlayerViewModel", "loadVideo: startInMiniMode=$startInMiniMode, videoId=$videoId")
     }
 
     /**
@@ -221,7 +228,7 @@ class PlayerViewModel @Inject constructor(
         _uiState.update { it.copy(currentIndex = index) }
     }
 
-    fun nextVideo() {
+    fun nextVideo(startInMiniMode: Boolean = false) {
         val state = _uiState.value
         val videos = state.availableVideos ?: return
         val currentIdx = state.currentIndex ?: return
@@ -229,13 +236,14 @@ class PlayerViewModel @Inject constructor(
             val nextVideo = videos[currentIdx + 1]
             val nextVideoId = extractYouTubeVideoId(nextVideo.path)
             if (nextVideoId != null) {
-                loadVideo(nextVideoId, nextVideo.locationId, state.filterPathAtLoad)
+                loadVideo(nextVideoId, nextVideo.locationId, state.filterPathAtLoad, startInMiniMode)
                 _uiState.update { it.copy(currentIndex = currentIdx + 1) }
             }
         }
+        Log.d("PlayerViewModel", "nextVideo: startInMiniMode=$startInMiniMode")
     }
 
-    fun previousVideo() {
+    fun previousVideo(startInMiniMode: Boolean = false) {
         val state = _uiState.value
         val videos = state.availableVideos ?: return
         val currentIdx = state.currentIndex ?: return
@@ -243,7 +251,7 @@ class PlayerViewModel @Inject constructor(
             val prevVideo = videos[currentIdx - 1]
             val prevVideoId = extractYouTubeVideoId(prevVideo.path)
             if (prevVideoId != null) {
-                loadVideo(prevVideoId, prevVideo.locationId, state.filterPathAtLoad)
+                loadVideo(prevVideoId, prevVideo.locationId, state.filterPathAtLoad, startInMiniMode)
                 _uiState.update { it.copy(currentIndex = currentIdx - 1) }
             }
         }
