@@ -203,13 +203,6 @@ fun MainScreen(
         Log.d("Fullscreen", "isFullscreen: $isFullscreen, isLandscape: $isLandscape, playerVisible: ${playerUiState.isVisible}")
     }
 
-    // When in Artist tab, force the player to mini mode if it's visible
-    LaunchedEffect(currentTab, playerUiState.isVisible, playerUiState.isInMiniMode) {
-        if (currentTab == MainTab.ARTISTS && playerUiState.isVisible && !playerUiState.isInMiniMode) {
-            playerViewModel.minimizePlayer()
-        }
-    }
-
     // Auto‑hide bars after 3 seconds when they become visible
     LaunchedEffect(showBars, isFullscreen) {
         if (isFullscreen && showBars) {
