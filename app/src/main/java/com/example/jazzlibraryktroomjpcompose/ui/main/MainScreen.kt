@@ -634,6 +634,7 @@ fun MainScreen(
                                             webView.requestLayout()
                                         }
                                     },
+                                    onVideoEnded = { playerViewModel.nextVideo() },
                                     modifier = Modifier.fillMaxSize()
                                 )
                             }

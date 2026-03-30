@@ -12,6 +12,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.viewinterop.AndroidView
+import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.PlayerConstants
 import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.YouTubePlayer
 import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.listeners.AbstractYouTubePlayerListener
 import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.views.YouTubePlayerView
@@ -25,7 +26,8 @@ fun SmartYoutubePlayerHost(
     isMiniMode: Boolean = false,
     onPlayerReady: (YouTubePlayer) -> Unit,
     onWebViewReady: (WebView) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onVideoEnded: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -50,6 +52,29 @@ fun SmartYoutubePlayerHost(
                 Log.d("SmartPlayer", "WebView captured and configured (useWideViewPort=${it.settings.useWideViewPort})")
             } ?: Log.e("SmartPlayer", "WebView not found in hierarchy")
         }
+    }
+
+    DisposableEffect(youTubePlayerView) {
+        val listener = object : AbstractYouTubePlayerListener() {
+            override fun onReady(youTubePlayer: YouTubePlayer) {
+                Log.d("SmartPlayer", "onReady called")
+                currentPlayer.value = youTubePlayer
+                onPlayerReady(youTubePlayer)
+                videoId?.let {
+                    Log.d("SmartPlayer", "Loading video: $it")
+                    youTubePlayer.loadVideo(it, 0f)
+                }
+            }
+
+            override fun onStateChange(youTubePlayer: YouTubePlayer, state: PlayerConstants.PlayerState) {
+                if (state == PlayerConstants.PlayerState.ENDED) {
+                    Log.d("SmartPlayer", "Video ended, calling next")
+                    onVideoEnded()
+                }
+            }
+        }
+        youTubePlayerView.addYouTubePlayerListener(listener)
+        onDispose { youTubePlayerView.removeYouTubePlayerListener(listener) }
     }
 
     DisposableEffect(lifecycleOwner, youTubePlayerView) {
