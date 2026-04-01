@@ -254,6 +254,7 @@ fun MainScreen(
         }
     }
 
+
     // BackHandler (unchanged)
     BackHandler(
         enabled = true,
@@ -262,6 +263,11 @@ fun MainScreen(
                 viewModel.setBottomSheetState(BottomSheetState.HIDDEN)
                 return@BackHandler
             }
+            if (viewModel.hasPreviousHistory()) {
+                viewModel.goBack()
+                return@BackHandler
+            }
+            // Otherwise, handle app exit
             val currentTime = System.currentTimeMillis()
             if (currentTime - backPressTime > 500) {
                 backPressTime = currentTime

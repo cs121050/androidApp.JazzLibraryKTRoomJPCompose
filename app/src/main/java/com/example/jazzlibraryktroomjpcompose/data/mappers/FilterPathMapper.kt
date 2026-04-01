@@ -5,44 +5,6 @@ import com.example.jazzlibraryktroomjpcompose.domain.models.FilterPath
 
 object FilterPathMapper {
 
-    // Local Entity → Domain
-    fun toDomain(entity: FilterPathRoomEntity): FilterPath {
-        return FilterPath(
-            autoIncrementId = entity.autoIncrementId,
-            categoryId = entity.categoryId,
-            entityId = entity.entityId,
-            entityName = entity.entityName
-        )
-    }
-
-    // Domain → Local Entity
-    fun toEntity(domain: FilterPath): FilterPathRoomEntity {
-        return FilterPathRoomEntity(
-            autoIncrementId = domain.autoIncrementId,
-            categoryId = domain.categoryId,
-            entityId = domain.entityId,
-            entityName = domain.entityName
-        )
-    }
-
-    // List conversion helpers
-    fun toDomainList(entities: List<FilterPathRoomEntity>): List<FilterPath> {
-        return entities.map { toDomain(it) }
-    }
-
-    fun toEntityList(domains: List<FilterPath>): List<FilterPathRoomEntity> {
-        return domains.map { toEntity(it) }
-    }
-
-    // Conversion with null safety
-    fun toDomainOrNull(entity: FilterPathRoomEntity?): FilterPath? {
-        return entity?.let { toDomain(it) }
-    }
-
-    fun toEntityOrNull(domain: FilterPath?): FilterPathRoomEntity? {
-        return domain?.let { toEntity(it) }
-    }
-
     // For debugging/display purposes
     fun toDisplayString(filterPath: FilterPath): String {
         val category = when (filterPath.categoryId) {
@@ -64,4 +26,69 @@ object FilterPathMapper {
             else -> "Unknown"
         }
     }
+
+    // Serialize filter list to a string
+    fun serialize(filterPath: List<FilterPath>): String {
+        val sorted = filterPath.sortedBy { it.categoryId }
+        return sorted.joinToString("") { filter ->
+            val categoryChar = when (filter.categoryId) {
+                FilterPath.CATEGORY_INSTRUMENT -> "I"
+                FilterPath.CATEGORY_ARTIST -> "A"
+                FilterPath.CATEGORY_DURATION -> "D"
+                FilterPath.CATEGORY_TYPE -> "T"
+                // Add future categories:
+                // FilterPath.CATEGORY_GENRE      -> "G"
+                // FilterPath.CATEGORY_STYLE      -> "S"
+                else -> "?"
+            }
+            "$categoryChar${filter.entityId}"
+        }
+    }
+
+    // Deserialize a string back to a list of FilterPath
+    fun deserialize(serialNumber: String, timestamp: Long? = null): List<FilterPath> {
+        val regex = Regex("([IADTGSU]?)(\\d+)")
+        return regex.findAll(serialNumber).map { match ->
+            val (categoryChar, idStr) = match.destructured
+            val categoryId = when (categoryChar) {
+                "I" -> FilterPath.CATEGORY_INSTRUMENT
+                "A" -> FilterPath.CATEGORY_ARTIST
+                "D" -> FilterPath.CATEGORY_DURATION
+                "T" -> FilterPath.CATEGORY_TYPE
+                // Add future mappings:
+                // "G" -> FilterPath.CATEGORY_GENRE
+                // "S" -> FilterPath.CATEGORY_STYLE
+                else -> 0
+            }
+            val entityId = idStr.toIntOrNull() ?: 0
+            FilterPath(
+                autoIncrementId = 0,
+                categoryId = categoryId,
+                entityId = entityId,
+                entityName = ""     // Will be resolved later
+            )
+        }.toList()
+    }
+
+
+    // Local Entity → Domain
+    fun toEntity(
+        serialNumber: String,
+        timestamp: Long
+    ): FilterPathRoomEntity {
+        return FilterPathRoomEntity(
+            id = 0,
+            serialNumber = serialNumber,
+            timestamp = timestamp
+        )
+    }
+
+    // Convert entity to domain list (names need to be filled later)
+    fun toDomain(entity: FilterPathRoomEntity): List<FilterPath> {
+        return deserialize(entity.serialNumber, entity.timestamp)
+    }
+
+
 }
+
+

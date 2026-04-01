@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.jazzlibraryktroomjpcompose.domain.FilterManager
 import com.example.jazzlibraryktroomjpcompose.domain.models.FilterPath
 import com.example.jazzlibraryktroomjpcompose.data.local.db.JazzDatabase
+import com.example.jazzlibraryktroomjpcompose.data.local.db.entities.FilterPathRoomEntity
 import com.example.jazzlibraryktroomjpcompose.data.mappers.*
 import com.example.jazzlibraryktroomjpcompose.data.repository.JazzRepositoryImpl
 import com.example.jazzlibraryktroomjpcompose.ui.settings.SettingsRepository
@@ -70,8 +71,60 @@ class MainViewModel @Inject constructor(
     private val _currentTab = MutableStateFlow(MainTab.VIDEOS)
     val currentTab: StateFlow<MainTab> = _currentTab.asStateFlow()
 
+    // Add these variables in MainViewModel
+    private val _historyEntries = MutableStateFlow<List<FilterPathRoomEntity>>(emptyList())
+    val historyEntries: StateFlow<List<FilterPathRoomEntity>> = _historyEntries.asStateFlow()
+
+    // Keep the current filter path as list for easy use
+    private val _currentFilterPath = MutableStateFlow<List<FilterPath>>(emptyList())
+    val currentFilterPath: StateFlow<List<FilterPath>> = _currentFilterPath.asStateFlow()
+
+    // Also keep the timestamp of the current state to allow back navigation
+    private var currentStateTimestamp: Long = 0L
+
+
     init {
         checkAndLoadData()
+    }
+
+    fun hasPreviousHistory(): Boolean {
+        val entries = _historyEntries.value
+        val currentIndex = entries.indexOfFirst { it.timestamp == currentStateTimestamp }
+        return currentIndex != -1 && currentIndex < entries.size - 1
+    }
+
+    fun goBack() {
+        viewModelScope.launch {
+            val entries = _historyEntries.value
+            val currentIndex = entries.indexOfFirst { it.timestamp == currentStateTimestamp }
+            if (currentIndex != -1 && currentIndex < entries.size - 1) {
+                val previous = entries[currentIndex + 1] // list is descending
+                restoreHistoryState(previous)
+            }
+        }
+    }
+
+    private suspend fun enrichFilterPathNames(filters: List<FilterPath>): List<FilterPath> {
+        return filters.map { filter ->
+            if (filter.entityName.isNotEmpty()) return@map filter
+            val name = when (filter.categoryId) {
+                FilterPath.CATEGORY_INSTRUMENT -> {
+                    database.instrumentDao().getInstrumentById(filter.entityId).firstOrNull()?.name ?: ""
+                }
+                FilterPath.CATEGORY_ARTIST -> {
+                    val artist = database.artistDao().getArtistById(filter.entityId).firstOrNull()
+                    if (artist != null) "${artist.name} ${artist.surname}" else ""
+                }
+                FilterPath.CATEGORY_DURATION -> {
+                    database.durationDao().getDurationById(filter.entityId).firstOrNull()?.name ?: ""
+                }
+                FilterPath.CATEGORY_TYPE -> {
+                    database.typeDao().getTypeById(filter.entityId).firstOrNull()?.name ?: ""
+                }
+                else -> ""
+            }
+            filter.copy(entityName = name)
+        }
     }
 
     // NEW: Check if database has data, load from API only if empty
@@ -272,21 +325,23 @@ class MainViewModel @Inject constructor(
 
     private fun loadFilterPath() {
         viewModelScope.launch {
-            database.filterPathDao().getAllFilterPaths()
-                .map { entities -> entities.map { FilterPathMapper.toDomain(it) } }
-                .collect { filterPaths ->
-                    _filterState.update { it.copy(currentFilterPath = filterPaths) }
-                    println("DEBUG: Loaded ${filterPaths.size} filter paths")
-
-                    if (filterPaths.isNotEmpty()) {
-                        applyFiltersFromPath(filterPaths)
-                    }
-//                    else{
-//                        // FIX: If path is empty, explicitly clear the filtered UI state
-//                        _uiState.update { it.copy(filteredVideos = it.videos) }
-//                        _filterState.update { it.copy(isFiltering = false) }
-//                    }
-                }
+            val latest = database.filterPathDao().getLatestFilterPath()
+            if (latest != null) {
+                val filters = FilterPathMapper.toDomain(latest)
+                val enriched = enrichFilterPathNames(filters)
+                _currentFilterPath.value = enriched
+                currentStateTimestamp = latest.timestamp
+                applyFiltersFromPath(enriched)
+            } else {
+                // No history, start with empty filters
+                _currentFilterPath.value = emptyList()
+                currentStateTimestamp = 0L
+                applyFiltersFromPath(emptyList())
+            }
+            // Load all history for the History tab
+            database.filterPathDao().getAllFilterPaths().collect { entries ->
+                _historyEntries.value = entries
+            }
         }
     }
 
@@ -335,7 +390,8 @@ class MainViewModel @Inject constructor(
         isSelected: Boolean
     ) {
         viewModelScope.launch {
-            val currentFilterPath = _filterState.value.currentFilterPath
+            // Use the current filter path from the state we are on
+            val currentFilterPath = _currentFilterPath.value
 
             val newFilterPath = if (isSelected) {
                 filterManager.handleChipSelection(
@@ -352,40 +408,46 @@ class MainViewModel @Inject constructor(
                 )
             }
 
-            saveFilterPath(newFilterPath)
+            // No change? Exit.
+            if (newFilterPath == currentFilterPath) return@launch
 
-            if (newFilterPath.isNotEmpty()) {
-                applyFiltersFromPath(newFilterPath)
-            } else {
-                clearFilters()
+            val serial = FilterPathMapper.serialize(newFilterPath)
+            val timestamp = System.currentTimeMillis()
+
+            // Delete any forward history (entries newer than the current state)
+            if (currentStateTimestamp > 0L) {
+                database.filterPathDao().deleteAllNewerThan(currentStateTimestamp)
             }
+
+            // Insert the new entry
+            val newEntry = FilterPathMapper.toEntity(serial, timestamp)
+            database.filterPathDao().insertFilterPath(newEntry)
+
+            // Update local state
+            _currentFilterPath.value = newFilterPath
+            currentStateTimestamp = timestamp
+            applyFiltersFromPath(newFilterPath)
+            _filterState.update { it.copy(currentFilterPath = newFilterPath) }
         }
     }
 
-    private suspend fun saveFilterPath(filterPaths: List<FilterPath>) {
-        database.filterPathDao().deleteAllFilterPaths()
-
-        if (filterPaths.isNotEmpty()) {
-            val entities = filterPaths.map { FilterPathMapper.toEntity(it) }
-            database.filterPathDao().insertAllFilterPaths(entities)
-        }
-
-        _filterState.update { it.copy(currentFilterPath = filterPaths) }
-    }
 
     private fun clearFilters() {
         viewModelScope.launch {
-            // 1. Clear the Database
-            database.filterPathDao().deleteAllFilterPaths()
-            // 2. Stop any active filtering job immediately
-            filterJob?.cancel()
-            // 3. Reset the Filter State in memory
-            _filterState.update {
-                it.copy(
-                    currentFilterPath = emptyList(),
-                    isFiltering = false
-                )
+            // Delete any forward history (entries newer than the current state)
+            if (currentStateTimestamp > 0L) {
+                database.filterPathDao().deleteAllNewerThan(currentStateTimestamp)
             }
+
+            val serial = ""
+            val timestamp = System.currentTimeMillis()
+            val newEntry = FilterPathMapper.toEntity(serial, timestamp)
+            database.filterPathDao().insertFilterPath(newEntry)
+
+            _currentFilterPath.value = emptyList()
+            currentStateTimestamp = timestamp
+            applyFiltersFromPath(emptyList())
+            _filterState.update { it.copy(currentFilterPath = emptyList()) }
             loadInitialData()
         }
     }
@@ -488,6 +550,20 @@ class MainViewModel @Inject constructor(
     fun setCurrentTab(tab: MainTab) {
         _currentTab.value = tab
     } //(Later you can trigger data loading for the selected tab here)
+
+
+
+    private fun restoreHistoryState(entry: FilterPathRoomEntity) {
+        viewModelScope.launch {
+            val filterList = FilterPathMapper.toDomain(entry)
+            val enrichedList = enrichFilterPathNames(filterList)
+            _currentFilterPath.value = enrichedList
+            currentStateTimestamp = entry.timestamp
+
+            applyFiltersFromPath(enrichedList)
+            _filterState.update { it.copy(currentFilterPath = enrichedList) }
+        }
+    }
 }
 
 // UI State classes (unchanged)
