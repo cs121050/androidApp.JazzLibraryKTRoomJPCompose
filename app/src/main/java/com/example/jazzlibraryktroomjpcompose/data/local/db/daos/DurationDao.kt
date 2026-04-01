@@ -16,6 +16,7 @@ interface DurationDao {
     SELECT d.*, COUNT(DISTINCT v.video_id) as video_count 
     FROM durations d
     LEFT JOIN videos v ON d.duration_id = v.duration_id
+    WHERE v.video_availability = '1'
     GROUP BY d.duration_id, d.duration_name, d.duration_description
     ORDER BY d.duration_name ASC
 """)
@@ -135,7 +136,8 @@ interface DurationDao {
     INNER JOIN videos v ON d.duration_id = v.duration_id
     INNER JOIN video_contains_artist vca ON v.video_id = vca.video_id
     INNER JOIN artists a ON vca.artist_id = a.artist_id
-    WHERE (:instrumentId = 0 OR a.instrument_id = :instrumentId)
+    WHERE v.video_availability = '1' 
+      AND (:instrumentId = 0 OR a.instrument_id = :instrumentId)
       AND (:typeId = 0 OR v.type_id = :typeId)
       AND (:artistId = 0 OR a.artist_id = :artistId)
     ORDER BY d.duration_name
@@ -152,7 +154,8 @@ FROM durations d
 INNER JOIN videos v ON d.duration_id = v.duration_id
 INNER JOIN video_contains_artist vca ON v.video_id = vca.video_id
 INNER JOIN artists a ON vca.artist_id = a.artist_id
-WHERE (:instrumentId = 0 OR a.instrument_id = :instrumentId)
+WHERE v.video_availability = '1' 
+  AND (:instrumentId = 0 OR a.instrument_id = :instrumentId)
   AND (:typeId = 0 OR v.type_id = :typeId)
   AND (:artistId = 0 OR a.artist_id = :artistId)
 GROUP BY d.duration_id, d.duration_name, d.duration_description

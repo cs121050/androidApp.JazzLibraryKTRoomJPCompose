@@ -747,7 +747,7 @@ private fun EnhancedFlowLayout(
                         is com.example.jazzlibraryktroomjpcompose.domain.models.Duration -> {
                             val isSelected = selectedItemIds.contains(item.id)
                             ChipContent(
-                                text = item.description,
+                                text = item.name,
                                 isSelected = isSelected,
                                 onClick = { onChipSelected(categoryId, item.id, item.name, !isSelected) },
                                 itemId = item.id,
