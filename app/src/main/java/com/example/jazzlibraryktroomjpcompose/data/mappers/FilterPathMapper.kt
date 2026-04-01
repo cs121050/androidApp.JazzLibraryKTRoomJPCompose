@@ -5,63 +5,68 @@ import com.example.jazzlibraryktroomjpcompose.domain.models.FilterPath
 
 object FilterPathMapper {
 
-    // Local Entity → Domain
-    fun toDomain(entity: FilterPathRoomEntity): FilterPath {
-        return FilterPath(
-            autoIncrementId = entity.autoIncrementId,
-            categoryId = entity.categoryId,
-            entityId = entity.entityId,
-            entityName = entity.entityName
-        )
+    // Serialize filter list to a string
+    fun serialize(filterPath: List<FilterPath>): String {
+        val sorted = filterPath.sortedBy { it.categoryId }
+        return sorted.joinToString("") { filter ->
+            val categoryChar = when (filter.categoryId) {
+                FilterPath.CATEGORY_INSTRUMENT -> "I"
+                FilterPath.CATEGORY_ARTIST      -> "A"
+                FilterPath.CATEGORY_DURATION    -> "D"
+                FilterPath.CATEGORY_TYPE        -> "T"
+                // Add future categories:
+                // FilterPath.CATEGORY_GENRE      -> "G"
+                // FilterPath.CATEGORY_STYLE      -> "S"
+                else -> "?"
+            }
+            "$categoryChar${filter.entityId}"
+        }
     }
 
-    // Domain → Local Entity
-    fun toEntity(domain: FilterPath): FilterPathRoomEntity {
+    // Deserialize a string back to a list of FilterPath
+    fun deserialize(serialNumber: String, timestamp: Long? = null): List<FilterPath> {
+        val regex = Regex("([IADTGSU]?)(\\d+)")
+        return regex.findAll(serialNumber).map { match ->
+            val (categoryChar, idStr) = match.destructured
+            val categoryId = when (categoryChar) {
+                "I" -> FilterPath.CATEGORY_INSTRUMENT
+                "A" -> FilterPath.CATEGORY_ARTIST
+                "D" -> FilterPath.CATEGORY_DURATION
+                "T" -> FilterPath.CATEGORY_TYPE
+                // Add future mappings:
+                // "G" -> FilterPath.CATEGORY_GENRE
+                // "S" -> FilterPath.CATEGORY_STYLE
+                else -> 0
+            }
+            val entityId = idStr.toIntOrNull() ?: 0
+            FilterPath(
+                autoIncrementId = 0,
+                categoryId = categoryId,
+                entityId = entityId,
+                entityName = ""     // Will be resolved later
+            )
+        }.toList()
+    }
+
+    // Convert domain list to entity for insertion
+    fun toEntity(
+        serialNumber: String,
+        videoId: Int? = null,
+        timestamp: Long
+    ): FilterPathRoomEntity {
         return FilterPathRoomEntity(
-            autoIncrementId = domain.autoIncrementId,
-            categoryId = domain.categoryId,
-            entityId = domain.entityId,
-            entityName = domain.entityName
+            autoIncrementId = 0,
+            serialNumber = serialNumber,
+            videoId = videoId,
+            timestamp = timestamp
         )
     }
 
-    // List conversion helpers
-    fun toDomainList(entities: List<FilterPathRoomEntity>): List<FilterPath> {
-        return entities.map { toDomain(it) }
+    // Convert entity to domain list (names need to be filled later)
+    fun toDomain(entity: FilterPathRoomEntity): List<FilterPath> {
+        return deserialize(entity.serialNumber, entity.timestamp)
     }
 
-    fun toEntityList(domains: List<FilterPath>): List<FilterPathRoomEntity> {
-        return domains.map { toEntity(it) }
-    }
-
-    // Conversion with null safety
-    fun toDomainOrNull(entity: FilterPathRoomEntity?): FilterPath? {
-        return entity?.let { toDomain(it) }
-    }
-
-    fun toEntityOrNull(domain: FilterPath?): FilterPathRoomEntity? {
-        return domain?.let { toEntity(it) }
-    }
-
-    // For debugging/display purposes
-    fun toDisplayString(filterPath: FilterPath): String {
-        val category = when (filterPath.categoryId) {
-            1 -> "Instrument"
-            2 -> "Artist"
-            3 -> "Duration"
-            4 -> "Type"
-            else -> "Unknown"
-        }
-        return "$category: ${filterPath.entityName} (ID: ${filterPath.entityId})"
-    }
-
-    fun getCategoryName(categoryId: Int): String {
-        return when (categoryId) {
-            1 -> "Instrument"
-            2 -> "Artist"
-            3 -> "Duration"
-            4 -> "Type"
-            else -> "Unknown"
-        }
-    }
+    // Extract videoId from entity
+    fun getVideoId(entity: FilterPathRoomEntity): Int? = entity.videoId
 }

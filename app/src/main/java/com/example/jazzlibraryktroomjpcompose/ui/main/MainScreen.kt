@@ -126,6 +126,9 @@ import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.windowInsetsBottomHeight
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.ui.unit.Dp
+import com.example.jazzlibraryktroomjpcompose.data.local.db.entities.FilterPathRoomEntity
+
+import androidx.compose.runtime.rememberCoroutineScope
 
 class ScrollLockState {
     var isLocked by mutableStateOf(false)
@@ -164,7 +167,7 @@ fun MainScreen(
     var activeCardSize by remember { mutableStateOf<IntSize?>(null) }
     var contentBoxRootPosition by remember { mutableStateOf(IntOffset.Zero) }
 
-
+    val currentFilterPath by viewModel.currentFilterPath.collectAsState()
 
     //i have made the isPlayerVisible global (placed it in the viewmodel) so to access it independently
     val isPlayerVisible by viewModel.isPlayerVisible.collectAsState()
@@ -172,7 +175,7 @@ fun MainScreen(
     val cardUiStates by viewModel.cardUiStates.collectAsState()
     //witch tab is the main tab
     val currentTab by viewModel.currentTab.collectAsState()
-    val hasArtistFilter = filterState.currentFilterPath.any { it.categoryId == 2 }
+    val hasArtistFilter = currentFilterPath.any { it.categoryId == 2 }
     val artistCount = if (hasArtistFilter) 1 else uiState.availableArtists.size
     val historyCount = 0 // Placeholder – you can later replace with a real count
 
@@ -197,6 +200,24 @@ fun MainScreen(
     val navBarHeight = WindowInsets.navigationBars.getBottom(LocalDensity.current).dp
 
     val listState = rememberLazyListState()
+
+    val coroutineScope = rememberCoroutineScope()
+
+
+    LaunchedEffect(playerUiState.currentVideoDatabaseId) {
+        val newId = playerUiState.currentVideoDatabaseId
+        viewModel.setCurrentVideoId(newId)
+        viewModel.onVideoIdChanged(newId)
+    }
+
+    LaunchedEffect(Unit) {
+        viewModel.restoreHistoryEvent.collect { event ->
+            event.videoId?.let { videoId ->
+                // Find the video object or pass the ID
+                playerViewModel.loadVideoById(videoId, event.filterPath)
+            } ?: playerViewModel.closePlayer()
+        }
+    }
 
     //DEBUGLOG
     LaunchedEffect(isFullscreen) {
@@ -254,13 +275,14 @@ fun MainScreen(
         }
     }
 
-    // BackHandler (unchanged)
-    BackHandler(
-        enabled = true,
-        onBack = {
-            if (bottomSheetState != BottomSheetState.HIDDEN) {
-                viewModel.setBottomSheetState(BottomSheetState.HIDDEN)
-                return@BackHandler
+    BackHandler(enabled = true) {
+        if (bottomSheetState != BottomSheetState.HIDDEN) {
+            viewModel.setBottomSheetState(BottomSheetState.HIDDEN)
+            return@BackHandler
+        }
+        coroutineScope.launch {
+            if (viewModel.goBack()) {
+                return@launch
             }
             val currentTime = System.currentTimeMillis()
             if (currentTime - backPressTime > 500) {
@@ -269,7 +291,7 @@ fun MainScreen(
                 (context as? android.app.Activity)?.finish()
             }
         }
-    )
+    }
 
     if (loadingState == LoadingState.LOADING && uiState.videos.isEmpty()) {
         LoadingScreen()
@@ -297,7 +319,7 @@ fun MainScreen(
                 }
             }
 
-            val videosToShow = if (filterState.currentFilterPath.isEmpty()) {
+            val videosToShow = if (currentFilterPath.isEmpty()) {
                 uiState.videos
             } else {
                 uiState.filteredVideos
@@ -322,7 +344,7 @@ fun MainScreen(
             // ----- CHIPS ROW (fixed) -----
             if (!isFullscreen) {
                 ActiveFilterChipsRow(
-                    filterPath = filterState.currentFilterPath,
+                    filterPath = currentFilterPath,
                     onMenuClick = { viewModel.toggleLeftDrawer() },
                     onChipClick = { categoryId, entityId, entityName ->
                         viewModel.handleChipSelection(categoryId, entityId, entityName, false)
@@ -408,7 +430,7 @@ fun MainScreen(
                                 playerViewModel = playerViewModel,
                                 videos = videosToShow,
                                 listState = listState,
-                                currentFilterPath = filterState.currentFilterPath,
+                                currentFilterPath = currentFilterPath,
                                 onTogglePlayerVisibility = { viewModel.togglePlayerVisibility() }
                             )
                         }
@@ -445,6 +467,7 @@ fun MainScreen(
                                         listState = listState,
                                         isPlayerVisible = isPlayerVisible,
                                         cardUiStates = cardUiStates,
+                                        currentFilterPath = currentFilterPath,
                                         onCardTitleClick = { videoId ->
                                             viewModel.onCardTitleClick(
                                                 videoId
@@ -456,7 +479,7 @@ fun MainScreen(
                                         modifier = Modifier.fillMaxSize(),
                                         artistsShuffled = uiState.availableArtistsDisplay,
                                         artistsBase = uiState.availableArtists,
-                                        filterPath = filterState.currentFilterPath, // pass filter path
+                                        filterPath = currentFilterPath, // pass filter path
                                         onRefresh = { viewModel.shuffleArtists() },
                                         onArtistSelected = { artist ->
                                             viewModel.handleChipSelection(
@@ -888,7 +911,7 @@ fun VideoStatsRow(
 
 // In LaunchedEffect that triggers when pagerState.currentPage == 0
     LaunchedEffect(pagerState.currentPage) {
-        if (pagerState.currentPage == 0 && !playerUiState.isVisible) {
+        if (pagerState.currentPage == 0 && !playerUiState.isVisible  && videoCount > 0) {
             loadFirstVideo()
         }
     }
@@ -975,7 +998,7 @@ fun VideoStatsRow(
         // Pager area (controls / minimise)
         HorizontalPager(
             state = pagerState,
-            userScrollEnabled = true,
+            userScrollEnabled = videoCount > 0,
             modifier = Modifier.wrapContentWidth()
         ) { page ->
             when (page) {
@@ -1080,6 +1103,7 @@ private fun VideoListContent(
     onActiveCardBoundsChanged: (String, IntOffset, IntSize) -> Unit,
     modifier: Modifier = Modifier,
     cardUiStates: Map<String, CardUiState>,
+    currentFilterPath: List<FilterPath>,
     onCardTitleClick: (String) -> Unit
 ) {
 // Find the index of the currently active video card
@@ -1233,7 +1257,7 @@ private fun VideoListContent(
                                 playerViewModel.loadVideo(
                                     videoId = videoId,
                                     cardId = video.locationId,
-                                    currentFilterPath = filterState.currentFilterPath
+                                    currentFilterPath = currentFilterPath
                                 )
                             }
                         },
@@ -2346,3 +2370,4 @@ fun PlayerControlsOverlay(
         }
     }
 }
+

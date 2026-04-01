@@ -21,4 +21,5 @@ data class Video(
         val videoId = YouTubeUtils.extractVideoId(path)
         return videoId?.let { YouTubeUtils.buildThumbnailUrl(it, quality) }
     }
+
 }

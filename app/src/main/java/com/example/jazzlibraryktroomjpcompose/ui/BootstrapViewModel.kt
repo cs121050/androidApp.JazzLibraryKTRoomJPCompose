@@ -17,7 +17,7 @@ import javax.inject.Inject
 class BootstrapViewModel @Inject constructor(
     private val database: JazzDatabase,
     private val filterManager: FilterManager,
-    private val jazzRepository: JazzRepositoryImpl  // Add this
+    private val jazzRepository: JazzRepositoryImpl
 ) : ViewModel() {
 
     // Original StateFlows
@@ -42,8 +42,22 @@ class BootstrapViewModel @Inject constructor(
     private val _videoArtists = MutableStateFlow<List<VideoContainsArtist>>(emptyList())
     val videoArtists: StateFlow<List<VideoContainsArtist>> = _videoArtists
 
-    // Add these state flows for API loading
-    private val _loadingState = MutableStateFlow<LoadingState>(LoadingState.Idle)
+    // New state for filter history
+    private val _currentFilterPath = MutableStateFlow<List<FilterPath>>(emptyList())
+    val currentFilterPath: StateFlow<List<FilterPath>> = _currentFilterPath.asStateFlow()
+
+    // Timestamp of the currently active history entry
+    private var currentStateTimestamp: Long = 0L
+
+    // Current video ID (to store in history)
+    private var currentVideoId: Int? = null
+
+    // Filtered data (from FilterManager)
+    private val _filteredData = MutableStateFlow<FilterManager.FilteredData?>(null)
+    val filteredData: StateFlow<FilterManager.FilteredData?> = _filteredData
+
+    // Loading states
+    private val _loadingState = MutableStateFlow(LoadingState.Idle)
     val loadingState: StateFlow<LoadingState> = _loadingState
 
     private val _errorMessage = MutableStateFlow<String?>(null)
@@ -51,18 +65,6 @@ class BootstrapViewModel @Inject constructor(
 
     private val _statusMessage = MutableStateFlow("Click buttons to test database")
     val statusMessage: StateFlow<String> = _statusMessage
-
-    private val _filteredData = MutableStateFlow<FilterManager.FilteredData?>(
-        FilterManager.FilteredData(
-            videos = emptyList(),
-            artists = emptyList(),
-            instruments = emptyList(),
-            durations = emptyList(),
-            types = emptyList(),
-            filterPath = emptyList()
-        )
-    )
-    val filteredData: StateFlow<FilterManager.FilteredData?> = _filteredData
 
     private val _filteringState = MutableStateFlow(FilteringState.IDLE)
     val filteringState: StateFlow<FilteringState> = _filteringState
@@ -86,7 +88,10 @@ class BootstrapViewModel @Inject constructor(
         loadFilterPath()
     }
 
-    // NEW FUNCTION: Load data from API
+    // ------------------------------------------------------------------------
+    // API data loading (unchanged)
+    // ------------------------------------------------------------------------
+
     fun loadDataFromApi() {
         viewModelScope.launch {
             _loadingState.value = LoadingState.Loading
@@ -99,10 +104,7 @@ class BootstrapViewModel @Inject constructor(
                 _statusMessage.value = "Data loaded successfully from API!"
                 _errorMessage.value = null
 
-                // Refresh the UI with new data
                 refreshFromDb()
-
-                // Clear any existing filters since we have new data
                 clearAllFilters()
             } else {
                 _loadingState.value = LoadingState.Error
@@ -113,23 +115,48 @@ class BootstrapViewModel @Inject constructor(
         }
     }
 
-    // Load filter path from database on app start
-    fun loadFilterPath() {
+    // ------------------------------------------------------------------------
+    // Filter history management (updated for serialized strings)
+    // ------------------------------------------------------------------------
+
+    private fun loadFilterPath() {
         viewModelScope.launch {
             _filteringState.value = FilteringState.LOADING_FILTERS
 
-            database.filterPathDao().getAllFilterPaths()
-                .map { entities -> entities.map { FilterPathMapper.toDomain(it) } }
-                .collect { filterPaths ->
-                    _filterPath.value = filterPaths
+            val latest = database.filterPathDao().getLatestFilterPath()
+            if (latest != null) {
+                val filters = FilterPathMapper.toDomain(latest)
+                val enriched = enrichFilterPathNames(filters)
+                _currentFilterPath.value = enriched
+                currentStateTimestamp = latest.timestamp
+                applyFiltersFromPath(enriched)
+            } else {
+                _currentFilterPath.value = emptyList()
+                currentStateTimestamp = 0L
+                applyFiltersFromPath(emptyList())
+            }
+        }
+    }
 
-                    // If we have filters, apply them
-                    if (filterPaths.isNotEmpty()) {
-                        applyFiltersFromPath(filterPaths)
-                    } else {
-                        _filteringState.value = FilteringState.IDLE
-                    }
+    private suspend fun enrichFilterPathNames(filters: List<FilterPath>): List<FilterPath> {
+        return filters.map { filter ->
+            if (filter.entityName.isNotEmpty()) return@map filter
+            val name = when (filter.categoryId) {
+                FilterPath.CATEGORY_INSTRUMENT -> {
+                    database.instrumentDao().getInstrumentById(filter.entityId).firstOrNull()?.name ?: ""
                 }
+                FilterPath.CATEGORY_ARTIST -> {
+                    database.artistDao().getArtistById(filter.entityId).firstOrNull()?.name ?: ""
+                }
+                FilterPath.CATEGORY_DURATION -> {
+                    database.durationDao().getDurationById(filter.entityId).firstOrNull()?.name ?: ""
+                }
+                FilterPath.CATEGORY_TYPE -> {
+                    database.typeDao().getTypeById(filter.entityId).firstOrNull()?.name ?: ""
+                }
+                else -> ""
+            }
+            filter.copy(entityName = name)
         }
     }
 
@@ -141,7 +168,6 @@ class BootstrapViewModel @Inject constructor(
                 .collect { filteredData ->
                     _filteredData.value = filteredData
 
-                    // Print video names as requested
                     println("=== Filtered Videos (${filteredData.videos.size}) ===")
                     filteredData.videos.forEach { video ->
                         println("- ${video.name}")
@@ -153,7 +179,6 @@ class BootstrapViewModel @Inject constructor(
         }
     }
 
-    // Handle chip selection/deselection
     fun handleChipAction(
         categoryId: Int,
         entityId: Int,
@@ -161,68 +186,65 @@ class BootstrapViewModel @Inject constructor(
         isSelected: Boolean
     ) {
         viewModelScope.launch {
-            val currentFilterPath = _filterPath.value
-
+            val current = _currentFilterPath.value
             val newFilterPath = if (isSelected) {
-                // Chip is being selected
-                filterManager.handleChipSelection(currentFilterPath, categoryId, entityId, entityName)
+                filterManager.handleChipSelection(current, categoryId, entityId, entityName)
             } else {
-                // Chip is being deselected
-                filterManager.handleChipDeselection(currentFilterPath, categoryId, entityId)
+                filterManager.handleChipDeselection(current, categoryId, entityId)
             }
 
-            // Save to database
-            saveFilterPath(newFilterPath)
+            if (newFilterPath == current) return@launch
 
-            // Apply filters with new path
-            if (newFilterPath.isNotEmpty()) {
-                applyFiltersFromPath(newFilterPath)
-            } else {
-                // If no filters, show all data
-                _filteredData.value = FilterManager.FilteredData(
-                    videos = _videos.value,
-                    artists = _artists.value,
-                    instruments = _instruments.value,
-                    durations = _durations.value,
-                    types = _types.value,
-                    filterPath = emptyList()
-                )
-                _filteringState.value = FilteringState.IDLE
-            }
+            val serial = FilterPathMapper.serialize(newFilterPath)
+            val timestamp = System.currentTimeMillis()
+            val newEntry = FilterPathMapper.toEntity(serial, currentVideoId, timestamp)
+            database.filterPathDao().insertFilterPath(newEntry)
+            database.filterPathDao().deleteAllNewerThan(timestamp)
+
+            _currentFilterPath.value = newFilterPath
+            currentStateTimestamp = timestamp
+            applyFiltersFromPath(newFilterPath)
         }
     }
 
-    // Save filter path to database
+    // Save filter path to database (creates a new history entry)
     private suspend fun saveFilterPath(filterPaths: List<FilterPath>) {
-        database.filterPathDao().deleteAllFilterPaths()
+        val serial = FilterPathMapper.serialize(filterPaths)
+        val timestamp = System.currentTimeMillis()
+        val newEntry = FilterPathMapper.toEntity(serial, currentVideoId, timestamp)
+        database.filterPathDao().insertFilterPath(newEntry)
+        database.filterPathDao().deleteAllNewerThan(timestamp)
 
-        if (filterPaths.isNotEmpty()) {
-            val entities = filterPaths.map { FilterPathMapper.toEntity(it) }
-            database.filterPathDao().insertAllFilterPaths(entities)
-        }
-
-        _filterPath.value = filterPaths
+        _currentFilterPath.value = filterPaths
+        currentStateTimestamp = timestamp
+        applyFiltersFromPath(filterPaths)
     }
 
-    // Clear all filters
+    // Clear all filters (create a new empty history entry)
     fun clearAllFilters() {
         viewModelScope.launch {
-            database.filterPathDao().deleteAllFilterPaths()
-            _filterPath.value = emptyList()
-            _filteredData.value = FilterManager.FilteredData(
-                videos = _videos.value,
-                artists = _artists.value,
-                instruments = _instruments.value,
-                durations = _durations.value,
-                types = _types.value,
-                filterPath = emptyList()
-            )
-            _filteringState.value = FilteringState.IDLE
+            val serial = ""
+            val timestamp = System.currentTimeMillis()
+            val newEntry = FilterPathMapper.toEntity(serial, currentVideoId, timestamp)
+            database.filterPathDao().insertFilterPath(newEntry)
+            database.filterPathDao().deleteAllNewerThan(timestamp)
+
+            _currentFilterPath.value = emptyList()
+            currentStateTimestamp = timestamp
+            applyFiltersFromPath(emptyList())
             _statusMessage.value = "All filters cleared"
         }
     }
 
-    // Keep this for testing without API
+    // Set the current video ID (to store in history)
+    fun setCurrentVideoId(videoId: Int?) {
+        currentVideoId = videoId
+    }
+
+    // ------------------------------------------------------------------------
+    // Test data insertion and refresh (unchanged)
+    // ------------------------------------------------------------------------
+
     fun insertTestData() {
         viewModelScope.launch {
             _statusMessage.value = "Inserting test data..."
@@ -235,6 +257,8 @@ class BootstrapViewModel @Inject constructor(
             database.instrumentDao().deleteAllInstruments()
             database.typeDao().deleteAllTypes()
             database.durationDao().deleteAllDurations()
+            // Also clear filter history (optional)
+            database.filterPathDao().deleteAllFilterPaths()
 
             // Insert test types
             val testTypes = listOf(
@@ -269,14 +293,14 @@ class BootstrapViewModel @Inject constructor(
 
             // Insert test artists
             val testArtists = listOf(
-                ArtistRoomEntity(1, "Miles", "Davis", 1, 100, "","",1),
-                ArtistRoomEntity(2, "John", "Coltrane", 2, 95, "","",1),
-                ArtistRoomEntity(3, "Bill", "Evans", 3, 90, "","",1),
-                ArtistRoomEntity(4, "Charlie", "Parker", 2, 98, "","",1),
-                ArtistRoomEntity(5, "Duke", "Ellington", 3, 92, "","",1),
-                ArtistRoomEntity(6, "Wes", "Montgomery", 6, 85, "","",1),
-                ArtistRoomEntity(7, "Charles", "Mingus", 4, 88, "","",1),
-                ArtistRoomEntity(8, "Art", "Blakey", 5, 86, "","",1)
+                ArtistRoomEntity(1, "Miles", "Davis", 1, 100, "", "", 1),
+                ArtistRoomEntity(2, "John", "Coltrane", 2, 95, "", "", 1),
+                ArtistRoomEntity(3, "Bill", "Evans", 3, 90, "", "", 1),
+                ArtistRoomEntity(4, "Charlie", "Parker", 2, 98, "", "", 1),
+                ArtistRoomEntity(5, "Duke", "Ellington", 3, 92, "", "", 1),
+                ArtistRoomEntity(6, "Wes", "Montgomery", 6, 85, "", "", 1),
+                ArtistRoomEntity(7, "Charles", "Mingus", 4, 88, "", "", 1),
+                ArtistRoomEntity(8, "Art", "Blakey", 5, 86, "", "", 1)
             )
             database.artistDao().insertAllArtists(testArtists)
 
@@ -309,11 +333,11 @@ class BootstrapViewModel @Inject constructor(
             val testVideoArtists = listOf(
                 VideoContainsArtistRoomEntity(1, 1),  // Miles Davis in So What
                 VideoContainsArtistRoomEntity(2, 2),  // Coltrane in Giant Steps
-                VideoContainsArtistRoomEntity(3, 2),  // Bill Evans in Giant Steps
-                VideoContainsArtistRoomEntity(4, 3),  // Charlie Parker interview
-                VideoContainsArtistRoomEntity(6, 4),  // Wes Montgomery solo
-                VideoContainsArtistRoomEntity(7, 5),  // Mingus in documentary
-                VideoContainsArtistRoomEntity(8, 5)   // Blakey in documentary
+                VideoContainsArtistRoomEntity(2, 3),  // Bill Evans in Giant Steps
+                VideoContainsArtistRoomEntity(3, 4),  // Charlie Parker interview
+                VideoContainsArtistRoomEntity(4, 6),  // Wes Montgomery solo
+                VideoContainsArtistRoomEntity(5, 7),  // Mingus in documentary
+                VideoContainsArtistRoomEntity(5, 8)   // Blakey in documentary
             )
             database.videoContainsArtistDao().insertAllVideoContainsArtists(testVideoArtists)
 
@@ -345,6 +369,7 @@ class BootstrapViewModel @Inject constructor(
             database.instrumentDao().deleteAllInstruments()
             database.typeDao().deleteAllTypes()
             database.durationDao().deleteAllDurations()
+            database.filterPathDao().deleteAllFilterPaths()
 
             _statusMessage.value = "All data cleared!"
             refreshFromDb()
@@ -355,7 +380,6 @@ class BootstrapViewModel @Inject constructor(
         viewModelScope.launch {
             _statusMessage.value = "Refreshing data from database..."
 
-            // Collect all data in parallel
             val jobs = listOf(
                 launch {
                     database.artistDao().getAllArtists()
@@ -399,18 +423,20 @@ class BootstrapViewModel @Inject constructor(
         }
     }
 
+    // ------------------------------------------------------------------------
+    // Test methods (updated to work with new filter system)
+    // ------------------------------------------------------------------------
+
     fun testAllFilteringQueries() {
         viewModelScope.launch {
             _statusMessage.value = "Testing all filtering queries..."
 
             println("=== Testing All Filtering Queries ===")
 
-            // Make sure we have test data
             if (_artists.value.isEmpty()) {
                 insertTestData()
             }
 
-            // Clear any existing filters
             clearAllFilters()
 
             // Test 1: Single Instrument Filter (Saxophone)
@@ -500,52 +526,47 @@ class BootstrapViewModel @Inject constructor(
 
             println("=== Testing Filter Path Operations ===")
 
-            // Clear existing filter paths
-            database.filterPathDao().deleteAllFilterPaths()
+            clearAllFilters()
 
-            // Test 1: Add Instrument filter
+            // Test 1: Add Instrument filter (creates history entry)
             println("\n1. Adding Instrument filter: Saxophone")
-            database.filterPathDao().insertFilterPath(
-                FilterPathRoomEntity(
-                    categoryId = FilterPath.CATEGORY_INSTRUMENT,
-                    entityId = 2,
-                    entityName = "Saxophone"
-                )
+            handleChipAction(
+                categoryId = FilterPath.CATEGORY_INSTRUMENT,
+                entityId = 2,
+                entityName = "Saxophone",
+                isSelected = true
             )
+            delayForTest(300)
 
-            // Test 2: Add Type filter
+            // Test 2: Add Type filter (creates another entry)
             println("2. Adding Type filter: Interview")
-            database.filterPathDao().insertFilterPath(
-                FilterPathRoomEntity(
-                    categoryId = FilterPath.CATEGORY_TYPE,
-                    entityId = 3,
-                    entityName = "Interview"
-                )
+            handleChipAction(
+                categoryId = FilterPath.CATEGORY_TYPE,
+                entityId = 3,
+                entityName = "Interview",
+                isSelected = true
             )
+            delayForTest(300)
 
-            // Test 3: Retrieve all filter paths
-            val allFilters = database.filterPathDao().getAllFilterPaths().first()
-            println("\n3. All filter paths: ${allFilters.size}")
-            allFilters.forEach {
-                println("  - ${FilterPathMapper.getCategoryName(it.categoryId)}: ${it.entityName}")
+            // Test 3: Retrieve all filter path history
+            val allHistory = database.filterPathDao().getAllFilterPaths().first()
+            println("\n3. All filter path history (${allHistory.size} entries):")
+            allHistory.forEach { entry ->
+                println("  - ${entry.serialNumber} (timestamp: ${entry.timestamp})")
             }
 
-            // Test 4: Get filters by category
-            val instrumentFilters = database.filterPathDao().getFilterPathByCategory(1).first()
-            println("\n4. Instrument filters: ${instrumentFilters.size}")
+            // Test 4: Clear all filters
+            println("\n4. Clearing all filters")
+            clearAllFilters()
 
-            // Test 5: Delete by category
-            println("\n5. Deleting Type filter")
-            database.filterPathDao().deleteByCategory(FilterPath.CATEGORY_TYPE)
-
-            val remainingFilters = database.filterPathDao().getAllFilterPaths().first()
-            println("Remaining filters: ${remainingFilters.size}")
-
-            // Test 6: Clear all filters
-            println("\n6. Clearing all filters")
-            database.filterPathDao().deleteAllFilterPaths()
-            val emptyFilters = database.filterPathDao().getAllFilterPaths().first()
-            println("Filters after clear: ${emptyFilters.size}")
+            // Test 5: Verify we have a new entry
+            val latest = database.filterPathDao().getLatestFilterPath()
+            println("\n5. Latest filter path after clear:")
+            if (latest != null) {
+                println("  - Serial: ${latest.serialNumber}")
+            } else {
+                println("  - None")
+            }
 
             println("\n=== Filter Path Tests Completed ===")
             _statusMessage.value = "Filter path operations test completed!"
@@ -558,38 +579,36 @@ class BootstrapViewModel @Inject constructor(
 
             println("=== Testing Complete Filtering Scenario ===")
 
-            // Make sure we have test data
             if (_artists.value.isEmpty()) {
                 insertTestData()
             }
 
-            // Clear any existing filters
-            database.filterPathDao().deleteAllFilterPaths()
+            clearAllFilters()
 
-            // Scenario: User selects Saxophone and Interview
+            // Scenario: User selects Saxophone (Instrument) and Interview (Type)
             println("\nScenario: User selects Saxophone (Instrument) and Interview (Type)")
 
-            // Add filters to filter path
-            database.filterPathDao().insertAllFilterPaths(
-                listOf(
-                    FilterPathRoomEntity(
-                        categoryId = FilterPath.CATEGORY_INSTRUMENT,
-                        entityId = 2, // Saxophone
-                        entityName = "Saxophone"
-                    ),
-                    FilterPathRoomEntity(
-                        categoryId = FilterPath.CATEGORY_TYPE,
-                        entityId = 3, // Interview
-                        entityName = "Interview"
-                    )
-                )
+            // Add filters
+            handleChipAction(
+                categoryId = FilterPath.CATEGORY_INSTRUMENT,
+                entityId = 2,
+                entityName = "Saxophone",
+                isSelected = true
             )
+            delayForTest(300)
+
+            handleChipAction(
+                categoryId = FilterPath.CATEGORY_TYPE,
+                entityId = 3,
+                entityName = "Interview",
+                isSelected = true
+            )
+            delayForTest(500)
 
             // Retrieve current filter path
-            val currentFilters = database.filterPathDao().getAllFilterPaths().first()
             println("\nCurrent filter path:")
-            currentFilters.forEach {
-                println("  - ${FilterPathMapper.toDisplayString(FilterPathMapper.toDomain(it))}")
+            _currentFilterPath.value.forEach {
+                println("  - ${it.displayInfo}")
             }
 
             // Apply filtering based on current filter path
@@ -611,53 +630,20 @@ class BootstrapViewModel @Inject constructor(
                 println("  - ${it.artist.name} ${it.artist.surname} (${it.videoCount} videos)")
             }
 
-            // Get filtered instruments (should just show saxophone)
-            val filteredInstruments = database.instrumentDao()
-                .getInstrumentsByTypeWithVideoCount(3).first()
-                .filter { it.instrument.id == 2 } // Only saxophone
-
-            println("\nFiltered Instruments (${filteredInstruments.size}):")
-            filteredInstruments.forEach {
-                println("  - ${it.instrument.name} (${it.videoCount} videos)")
-            }
-
-            // Get filtered types (should just show interview)
-            val filteredTypes = database.typeDao()
-                .getTypesByInstrumentWithVideoCount(2).first()
-                .filter { it.type.id == 3 } // Only interview
-
-            println("\nFiltered Types (${filteredTypes.size}):")
-            filteredTypes.forEach {
-                println("  - ${it.type.name} (${it.videoCount} videos)")
-            }
-
-            // Get filtered durations for this combination
-            val filteredDurations = database.durationDao()
-                .getDurationsByInstrumentAndTypeWithVideoCount(2, 3).first()
-
-            println("\nFiltered Durations (${filteredDurations.size}):")
-            filteredDurations.forEach {
-                println("  - ${it.duration.name} (${it.videoCount} videos)")
-            }
-
             // Test removing a filter
             println("\n--- Removing Type filter ---")
-            database.filterPathDao().deleteByCategory(FilterPath.CATEGORY_TYPE)
+            handleChipAction(
+                categoryId = FilterPath.CATEGORY_TYPE,
+                entityId = 3,
+                entityName = "Interview",
+                isSelected = false
+            )
+            delayForTest(500)
 
-            val afterRemoval = database.filterPathDao().getAllFilterPaths().first()
+            val afterRemoval = _currentFilterPath.value
             println("Filters after removal: ${afterRemoval.size}")
 
-            // Now only instrument filter remains
-            if (afterRemoval.isNotEmpty()) {
-                println("Applying remaining filter (Instrument only)...")
-                val saxophoneOnlyVideos = database.videoDao().getVideosByInstrument(2).first()
-                println("Videos with Saxophone: ${saxophoneOnlyVideos.size}")
-            }
-
-            // Clear all filters
-            database.filterPathDao().deleteAllFilterPaths()
-            println("\nAll filters cleared")
-
+            clearAllFilters()
             println("\n=== Complete Filtering Scenario Test Completed ===")
             _statusMessage.value = "Complete filtering scenario test completed!"
         }
@@ -669,7 +655,6 @@ class BootstrapViewModel @Inject constructor(
 
             println("=== Testing All Combined Filter Queries ===")
 
-            // Make sure we have test data
             if (_artists.value.isEmpty()) {
                 insertTestData()
             }
@@ -698,7 +683,6 @@ class BootstrapViewModel @Inject constructor(
 
             println("\n--- Testing Double Filter Combinations ---")
 
-            // Test all double filter combinations for videos
             val doubleCombinations = listOf(
                 Pair("Instrument+Artist", database.videoDao().getVideosByInstrumentAndArtist(2, 2).first()),
                 Pair("Instrument+Type", database.videoDao().getVideosByInstrumentAndType(2, 3).first()),
@@ -714,7 +698,6 @@ class BootstrapViewModel @Inject constructor(
 
             println("\n--- Testing Video Count Queries ---")
 
-            // Test video count queries for different entities
             println("\nArtists by Instrument (Saxophone) with video count:")
             val artistsWithCount = database.artistDao().getArtistsByInstrumentWithVideoCount(2).first()
             artistsWithCount.forEach {
@@ -732,25 +715,6 @@ class BootstrapViewModel @Inject constructor(
         }
     }
 
-    // Add these state flows for filtered data (add them with the other state flows at the top)
-    private val _filteredArtists = MutableStateFlow<List<ArtistWithVideoCount>>(emptyList())
-    val filteredArtists: StateFlow<List<ArtistWithVideoCount>> = _filteredArtists
-
-    private val _filteredInstruments = MutableStateFlow<List<InstrumentWithVideoCount>>(emptyList())
-    val filteredInstruments: StateFlow<List<InstrumentWithVideoCount>> = _filteredInstruments
-
-    private val _filteredTypes = MutableStateFlow<List<TypeWithVideoCount>>(emptyList())
-    val filteredTypes: StateFlow<List<TypeWithVideoCount>> = _filteredTypes
-
-    private val _filteredDurations = MutableStateFlow<List<DurationWithVideoCount>>(emptyList())
-    val filteredDurations: StateFlow<List<DurationWithVideoCount>> = _filteredDurations
-
-    private val _filteredVideos = MutableStateFlow<List<VideoRoomEntity>>(emptyList())
-    val filteredVideos: StateFlow<List<VideoRoomEntity>> = _filteredVideos
-
-    private val _filterPath = MutableStateFlow<List<FilterPath>>(emptyList())
-    val filterPath: StateFlow<List<FilterPath>> = _filterPath
-
     fun testAmbiguousColumnFix() {
         viewModelScope.launch {
             _statusMessage.value = "Testing ambiguous column fix..."
@@ -758,12 +722,10 @@ class BootstrapViewModel @Inject constructor(
             println("=== Testing Ambiguous Column Fix ===")
 
             try {
-                // Make sure we have data
                 if (_artists.value.isEmpty()) {
                     insertTestData()
                 }
 
-                // Test a simple query
                 println("\n1. Testing Artists by Instrument (Saxophone):")
                 val artists = database.artistDao()
                     .getArtistsByInstrumentWithVideoCount(2).first()
@@ -772,7 +734,6 @@ class BootstrapViewModel @Inject constructor(
                     println("   - ${it.artist.name} ${it.artist.surname} (${it.videoCount} videos)")
                 }
 
-                // Test another query
                 println("\n2. Testing Types by Instrument (Saxophone):")
                 val types = database.typeDao()
                     .getTypesByInstrumentWithVideoCount(2).first()
@@ -781,13 +742,11 @@ class BootstrapViewModel @Inject constructor(
                     println("   - ${it.type.name} (${it.videoCount} videos)")
                 }
 
-                // Test the problematic query
                 println("\n3. Testing Artists by Type and Duration (Interview + Medium):")
                 val artistsByTypeDuration = database.artistDao()
                     .getArtistsByTypeAndDurationWithVideoCount(3, 2).first()
                 println("✓ Artists by type and duration query works: ${artistsByTypeDuration.size} results")
 
-                // Test videos by instrument and type
                 println("\n4. Testing Videos by Instrument and Type (Saxophone + Interview):")
                 val videos = database.videoDao()
                     .getVideosByInstrumentAndType(2, 3).first()
@@ -814,13 +773,10 @@ class BootstrapViewModel @Inject constructor(
             println("=== Testing Composition Classes ===")
 
             try {
-
-                // Test the actual query
                 val artists = database.artistDao()
                     .getArtistsByInstrumentWithVideoCount(2).first()
                 println("Artists with video count: ${artists.size}")
                 _statusMessage.value = "Composition classes test completed!"
-
             } catch (e: Exception) {
                 println("Error: ${e.message}")
                 e.printStackTrace()
@@ -829,60 +785,50 @@ class BootstrapViewModel @Inject constructor(
         }
     }
 
-
-    // Add new test methods for filtering scenarios
     fun testFilterPathScenarios() {
         viewModelScope.launch {
             _statusMessage.value = "Testing filter path scenarios..."
 
             println("\n=== Testing Filter Path Scenarios ===\n")
 
-            // Make sure we have test data
             if (_artists.value.isEmpty()) {
                 insertTestData()
             }
 
-            // Clear any existing filters
             clearAllFilters()
 
             // Scenario 1: Select an instrument chip
             println("Scenario 1: Selecting Saxophone instrument")
             handleChipAction(
                 categoryId = FilterPath.CATEGORY_INSTRUMENT,
-                entityId = 2, // Saxophone
+                entityId = 2,
                 entityName = "Saxophone",
                 isSelected = true
             )
-
-            // Wait a bit for filters to apply
-            kotlinx.coroutines.delay(500)
+            delayForTest(500)
 
             // Scenario 2: Add a type filter
             println("\nScenario 2: Adding Interview type filter")
             handleChipAction(
                 categoryId = FilterPath.CATEGORY_TYPE,
-                entityId = 3, // Interview
+                entityId = 3,
                 entityName = "Interview",
                 isSelected = true
             )
-
-            kotlinx.coroutines.delay(500)
+            delayForTest(500)
 
             // Scenario 3: Select an artist (should auto-select instrument)
             println("\nScenario 3: Selecting John Coltrane artist (should auto-select Saxophone)")
             handleChipAction(
                 categoryId = FilterPath.CATEGORY_ARTIST,
-                entityId = 2, // John Coltrane
+                entityId = 2,
                 entityName = "John Coltrane",
                 isSelected = true
             )
+            delayForTest(500)
 
-            kotlinx.coroutines.delay(500)
-
-            // Check current filter path
-            val currentFilters = _filterPath.value
             println("\nCurrent filter path:")
-            currentFilters.forEach {
+            _currentFilterPath.value.forEach {
                 println("  - ${it.displayInfo}")
             }
 
@@ -894,43 +840,38 @@ class BootstrapViewModel @Inject constructor(
                 entityName = "Saxophone",
                 isSelected = false
             )
-
-            kotlinx.coroutines.delay(500)
+            delayForTest(500)
 
             println("\nFilter path after deselection:")
-            _filterPath.value.forEach {
+            _currentFilterPath.value.forEach {
                 println("  - ${it.displayInfo}")
             }
 
             // Scenario 5: Test multiple filters
             println("\nScenario 5: Testing multiple simultaneous filters")
 
-            // Clear first
             clearAllFilters()
 
-            // Set up multiple filters
             val testFilters = listOf(
                 FilterPath(
                     categoryId = FilterPath.CATEGORY_INSTRUMENT,
-                    entityId = 2, // Saxophone
+                    entityId = 2,
                     entityName = "Saxophone"
                 ),
                 FilterPath(
                     categoryId = FilterPath.CATEGORY_TYPE,
-                    entityId = 2, // Studio Recording
+                    entityId = 2,
                     entityName = "Studio Recording"
                 ),
                 FilterPath(
                     categoryId = FilterPath.CATEGORY_DURATION,
-                    entityId = 2, // Medium
+                    entityId = 2,
                     entityName = "Medium"
                 )
             )
 
             saveFilterPath(testFilters)
-            applyFiltersFromPath(testFilters)
-
-            kotlinx.coroutines.delay(1000)
+            delayForTest(1000)
 
             val filteredData = _filteredData.value
             println("\nResults with 3 filters (Instrument: Saxophone, Type: Studio Recording, Duration: Medium):")
@@ -939,13 +880,11 @@ class BootstrapViewModel @Inject constructor(
 
             // Scenario 6: Test filter persistence
             println("\nScenario 6: Testing filter persistence")
-            println("Current filters saved to database:")
             val savedFilters = database.filterPathDao().getAllFilterPaths().first()
             savedFilters.forEach {
-                println("  - ${FilterPathMapper.toDisplayString(FilterPathMapper.toDomain(it))}")
+                println("  - ${it.serialNumber} (${it.timestamp})")
             }
 
-            // Clear for next test
             clearAllFilters()
 
             println("\n=== All Filter Path Scenarios Tested ===")
@@ -959,7 +898,6 @@ class BootstrapViewModel @Inject constructor(
 
             println("\n=== Testing Chip Group Logic ===\n")
 
-            // Make sure we have test data
             if (_artists.value.isEmpty()) {
                 insertTestData()
             }
@@ -969,15 +907,13 @@ class BootstrapViewModel @Inject constructor(
             // Test 1: Only one chip per category can be selected
             println("Test 1: One chip per category rule")
 
-            // Select Piano
             handleChipAction(
                 categoryId = FilterPath.CATEGORY_INSTRUMENT,
                 entityId = 3,
                 entityName = "Piano",
                 isSelected = true
             )
-
-            kotlinx.coroutines.delay(300)
+            delayForTest(300)
 
             // Try to select Trumpet - should replace Piano
             handleChipAction(
@@ -986,11 +922,10 @@ class BootstrapViewModel @Inject constructor(
                 entityName = "Trumpet",
                 isSelected = true
             )
-
-            kotlinx.coroutines.delay(500)
+            delayForTest(500)
 
             println("Instrument filter should show Trumpet, not Piano:")
-            _filterPath.value.forEach {
+            _currentFilterPath.value.forEach {
                 if (it.categoryId == FilterPath.CATEGORY_INSTRUMENT) {
                     println("  - ${it.displayInfo}")
                 }
@@ -1008,11 +943,10 @@ class BootstrapViewModel @Inject constructor(
                 entityName = "Bill Evans",
                 isSelected = true
             )
-
-            kotlinx.coroutines.delay(500)
+            delayForTest(500)
 
             println("Filter path after selecting Bill Evans:")
-            _filterPath.value.forEach {
+            _currentFilterPath.value.forEach {
                 println("  - ${it.displayInfo}")
             }
             println("Should have both Artist: Bill Evans and Instrument: Piano")
@@ -1027,14 +961,13 @@ class BootstrapViewModel @Inject constructor(
                 entityName = "Piano",
                 isSelected = false
             )
-
-            kotlinx.coroutines.delay(500)
+            delayForTest(500)
 
             println("Filter path after deselecting Piano:")
-            if (_filterPath.value.isEmpty()) {
+            if (_currentFilterPath.value.isEmpty()) {
                 println("  (empty - Bill Evans should also be removed)")
             } else {
-                _filterPath.value.forEach {
+                _currentFilterPath.value.forEach {
                     println("  - ${it.displayInfo}")
                 }
             }
@@ -1044,7 +977,6 @@ class BootstrapViewModel @Inject constructor(
 
             clearAllFilters()
 
-            // Select multiple filters from different categories
             val testActions = listOf(
                 Triple(FilterPath.CATEGORY_INSTRUMENT, 6, "Guitar"),
                 Triple(FilterPath.CATEGORY_TYPE, 4, "Documentary"),
@@ -1053,13 +985,12 @@ class BootstrapViewModel @Inject constructor(
 
             testActions.forEach { (categoryId, entityId, entityName) ->
                 handleChipAction(categoryId, entityId, entityName, true)
-                kotlinx.coroutines.delay(200)
+                delayForTest(200)
             }
-
-            kotlinx.coroutines.delay(1000)
+            delayForTest(1000)
 
             println("Final filter path with 3 different categories:")
-            _filterPath.value.forEach {
+            _currentFilterPath.value.forEach {
                 println("  - ${it.displayInfo}")
             }
 
@@ -1086,36 +1017,31 @@ class BootstrapViewModel @Inject constructor(
 
             println("\n=== Testing Filtered Data Population ===\n")
 
-            // Make sure we have test data
             if (_artists.value.isEmpty()) {
                 insertTestData()
             }
 
             clearAllFilters()
 
-            // Set up a filter scenario
             val testFilters = listOf(
                 FilterPath(
                     categoryId = FilterPath.CATEGORY_INSTRUMENT,
-                    entityId = 2, // Saxophone
+                    entityId = 2,
                     entityName = "Saxophone"
                 ),
                 FilterPath(
                     categoryId = FilterPath.CATEGORY_TYPE,
-                    entityId = 1, // Live Performance
+                    entityId = 1,
                     entityName = "Live Performance"
                 )
             )
 
             saveFilterPath(testFilters)
-            applyFiltersFromPath(testFilters)
-
-            kotlinx.coroutines.delay(1000)
+            delayForTest(1000)
 
             val data = _filteredData.value
             println("Testing filtered data with Saxophone + Live Performance:\n")
 
-            // Check if all entities are properly filtered
             println("1. Filtered Artists (should only be saxophonists in live videos):")
             data?.artists?.forEach { artist ->
                 val instrumentName = _instruments.value.find { it.id == artist.instrumentId }?.name ?: "Unknown"
@@ -1143,7 +1069,6 @@ class BootstrapViewModel @Inject constructor(
                 println("  - ${video.name} (Type: $typeName)")
             }
 
-            // Test that non-matching data is excluded
             println("\n6. Verification of excluded data:")
             val totalArtists = _artists.value.size
             val filteredArtists = data?.artists?.size ?: 0
@@ -1167,12 +1092,10 @@ class BootstrapViewModel @Inject constructor(
 
             println("\n=== Testing App Startup with Existing Filters ===\n")
 
-            // Make sure we have test data
             if (_artists.value.isEmpty()) {
                 insertTestData()
             }
 
-            // Clear and set up test filters
             clearAllFilters()
 
             val startupFilters = listOf(
@@ -1188,36 +1111,26 @@ class BootstrapViewModel @Inject constructor(
                 )
             )
 
-            // Save filters to database (simulating app close with filters active)
             saveFilterPath(startupFilters)
-
             println("Filters saved to database (simulating app close):")
             startupFilters.forEach { println("  - ${it.displayInfo}") }
 
             // Simulate app restart by clearing memory and reloading
             println("\nSimulating app restart...")
-            _filterPath.value = emptyList()
+            _currentFilterPath.value = emptyList()
             _filteredData.value = null
 
             // Load filters from database (what happens on app start)
             loadFilterPath()
-
-            kotlinx.coroutines.delay(1000)
+            delayForTest(1000)
 
             println("\nFilters loaded after restart:")
-            _filterPath.value.forEach { println("  - ${it.displayInfo}") }
+            _currentFilterPath.value.forEach { println("  - ${it.displayInfo}") }
 
             println("\nFiltered data after restart:")
             val filteredVideos = _filteredData.value?.videos ?: emptyList()
             println("Videos found: ${filteredVideos.size}")
             filteredVideos.forEach { println("  - ${it.name}") }
-
-            // Verify chip groups would be populated correctly
-            println("\nExpected chip group population:")
-            println("Instrument chips: Should show Saxophone (selected)")
-            println("Artist chips: Should show saxophonists in interviews")
-            println("Type chips: Should show Interview (selected)")
-            println("Duration chips: Should show durations from saxophone interview videos")
 
             clearAllFilters()
 
@@ -1225,22 +1138,6 @@ class BootstrapViewModel @Inject constructor(
             _statusMessage.value = "App startup filter test completed!"
         }
     }
-
-    // Helper method to get all entities for chip display
-    suspend fun getAllEntitiesForChipDisplay(): Map<Int, List<Any>> {
-        val allArtists = database.artistDao().getAllArtists().first()
-        val allInstruments = database.instrumentDao().getAllInstruments().first()
-        val allDurations = database.durationDao().getAllDurations().first()
-        val allTypes = database.typeDao().getAllTypes().first()
-
-        return mapOf(
-            FilterPath.CATEGORY_ARTIST to allArtists,
-            FilterPath.CATEGORY_INSTRUMENT to allInstruments,
-            FilterPath.CATEGORY_DURATION to allDurations,
-            FilterPath.CATEGORY_TYPE to allTypes
-        )
-    }
-
 
     fun runAllFilterTests() {
         viewModelScope.launch {
@@ -1250,20 +1147,18 @@ class BootstrapViewModel @Inject constructor(
             println("║     RUNNING COMPLETE FILTER TESTS       ║")
             println("╚══════════════════════════════════════════╝")
 
-            // Make sure we have test data
             if (_artists.value.isEmpty()) {
                 insertTestData()
             }
 
-            // Run all filter tests
             testFilterPathScenarios()
-            kotlinx.coroutines.delay(1000)
+            delayForTest(1000)
 
             testChipGroupLogic()
-            kotlinx.coroutines.delay(1000)
+            delayForTest(1000)
 
             testFilteredDataPopulation()
-            kotlinx.coroutines.delay(1000)
+            delayForTest(1000)
 
             testAppStartupWithExistingFilters()
 
@@ -1292,7 +1187,7 @@ class BootstrapViewModel @Inject constructor(
                 entityName = "Non-existent Instrument",
                 isSelected = true
             )
-            kotlinx.coroutines.delay(500)
+            delayForTest(500)
 
             // Edge case 2: Rapid sequential selections
             println("\nEdge Case 2: Rapid sequential selections")
@@ -1305,12 +1200,11 @@ class BootstrapViewModel @Inject constructor(
 
             rapidSelections.forEach { (categoryId, entityId, entityName) ->
                 handleChipAction(categoryId, entityId, entityName, true)
-                kotlinx.coroutines.delay(100)
+                delayForTest(100)
             }
-
-            kotlinx.coroutines.delay(1000)
+            delayForTest(1000)
             println("Final filter after rapid selections:")
-            _filterPath.value.forEach { println("  - ${it.displayInfo}") }
+            _currentFilterPath.value.forEach { println("  - ${it.displayInfo}") }
 
             // Edge case 3: Clear filters while loading
             println("\nEdge Case 3: Clearing filters while loading")
@@ -1323,8 +1217,7 @@ class BootstrapViewModel @Inject constructor(
                 entityName = "Medium",
                 isSelected = true
             )
-
-            kotlinx.coroutines.delay(500)
+            delayForTest(500)
             println("Filter should be: Duration: Medium")
 
             clearAllFilters()
@@ -1333,7 +1226,12 @@ class BootstrapViewModel @Inject constructor(
         }
     }
 
-    // Helper function to get all video-artist associations
+    // Helper to delay in tests
+    private suspend fun delayForTest(timeMs: Long) {
+        kotlinx.coroutines.delay(timeMs)
+    }
+
+    // Helper to get all video-artist associations
     suspend fun getAllVideoArtists(): List<VideoContainsArtistRoomEntity> {
         return database.videoContainsArtistDao().getAllVideoContainsArtists().firstOrNull() ?: emptyList()
     }

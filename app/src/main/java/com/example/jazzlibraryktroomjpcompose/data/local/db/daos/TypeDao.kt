@@ -16,6 +16,7 @@ interface TypeDao {
     SELECT t.*, COUNT(DISTINCT v.video_id) as video_count 
     FROM types t
     LEFT JOIN videos v ON t.type_id = v.type_id
+    WHERE v.video_availability = '1'
     GROUP BY t.type_id, t.type_name
     ORDER BY t.type_name ASC
 """)
@@ -135,7 +136,8 @@ interface TypeDao {
     INNER JOIN videos v ON t.type_id = v.type_id
     INNER JOIN video_contains_artist vca ON v.video_id = vca.video_id
     INNER JOIN artists a ON vca.artist_id = a.artist_id
-    WHERE (:instrumentId = 0 OR a.instrument_id = :instrumentId)
+    WHERE v.video_availability = '1'
+      AND (:instrumentId = 0 OR a.instrument_id = :instrumentId)
       AND (:durationId = 0 OR v.duration_id = :durationId)
       AND (:artistId = 0 OR a.artist_id = :artistId)
     ORDER BY t.type_name
@@ -152,7 +154,8 @@ interface TypeDao {
         INNER JOIN videos v ON t.type_id = v.type_id
         INNER JOIN video_contains_artist vca ON v.video_id = vca.video_id
         INNER JOIN artists a ON vca.artist_id = a.artist_id
-        WHERE (:instrumentId = 0 OR a.instrument_id = :instrumentId)
+        WHERE v.video_availability = '1'
+          AND (:instrumentId = 0 OR a.instrument_id = :instrumentId)
           AND (:durationId = 0 OR v.duration_id = :durationId)
           AND (:artistId = 0 OR a.artist_id = :artistId)
         GROUP BY t.type_id, t.type_name

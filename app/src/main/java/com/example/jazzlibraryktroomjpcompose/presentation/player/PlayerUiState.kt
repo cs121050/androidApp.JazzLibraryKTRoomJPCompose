@@ -15,5 +15,6 @@ data class PlayerUiState(
     val filterPathAtLoad: List<FilterPath>? = null,
     val playerInstanceId: Int = 0,
     val availableVideos: List<Video>? = null,   // NEW
-    val currentIndex: Int? = null               // NEW
+    val currentIndex: Int? = null,               // NEW
+    val currentVideoDatabaseId: Int? = null
 )

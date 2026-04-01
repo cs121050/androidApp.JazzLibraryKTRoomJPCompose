@@ -55,27 +55,52 @@ class PlayerViewModel @Inject constructor(
      */
     fun loadVideo(videoId: String,
                   cardId: String?,
-                  currentFilterPath:
-                  List<FilterPath>?,
+                  currentFilterPath: List<FilterPath>?,
                   startInMiniMode: Boolean = false
     ) {
-        // After loading, try to set current index
         val videos = _uiState.value.availableVideos ?: return
         val index = videos.indexOfFirst { extractYouTubeVideoId(it.path) == videoId }
-        if (index != -1) {
-            _uiState.update { it.copy(currentIndex = index) }
-        }
+        val localId = if (index != -1) videos[index].id else null
 
         _uiState.update {
             it.copy(
                 isVisible = true,
-                isInMiniMode = startInMiniMode,   // use the flag
+                isInMiniMode = startInMiniMode,
                 activeCardId = cardId,
-                filterPathAtLoad = currentFilterPath
+                filterPathAtLoad = currentFilterPath,
+                currentIndex = if (index != -1) index else null,
+                currentVideoDatabaseId = localId
             )
         }
         playerController.loadVideo(videoId, autoPlay = true)
-        Log.d("PlayerViewModel", "loadVideo: startInMiniMode=$startInMiniMode, videoId=$videoId")
+        Log.d("PlayerViewModel", "loadVideo: startInMiniMode=$startInMiniMode, videoId=$videoId, localId=$localId")
+    }
+
+    /**
+     * Load a video by its ID, optionally with a filter path.
+     * Used when restoring a history entry.
+     */
+    fun loadVideoById(
+        videoId: Int,
+        filterPath: List<FilterPath>? = null
+    ) {
+        // Convert videoId (Int) to String if needed; here we assume it's already a string YouTube ID.
+        // In your case, videoId is Int? but in the database it's stored as an ID linking to VideoRoomEntity.
+        // We need to retrieve the actual YouTube video ID from the video table.
+        // For simplicity, we'll assume you have a method to get the YouTube ID from the video ID.
+        // You might need to adjust based on your data model.
+
+        // For now, we'll fetch the video from the database using videoId (if it's the local ID)
+        // and then get its YouTube path.
+        // We'll add a helper method to the ViewModel to retrieve the video by ID.
+        // But to keep it simple, we'll assume videoId is already the YouTube ID string.
+
+    //val videoIdStr =  videoId.toString() // placeholder
+
+        // We need the cardId for animation? When restoring from history, we might not have a card.
+        // We'll pass null and the player will start in mini mode.
+
+    //loadVideo(videoIdStr, cardId = null, currentFilterPath = filterPath, startInMiniMode = true)
     }
 
     /**
@@ -138,10 +163,15 @@ class PlayerViewModel @Inject constructor(
      * Close the player completely (hide it and release resources).
      */
     fun closePlayer() {
-        _uiState.update { it.copy(isVisible = false, activeCardId = null) }
+        _uiState.update {
+            it.copy(
+                isVisible = false,
+                activeCardId = null,
+                currentVideoDatabaseId = null
+            )
+        }
         playerController.release()
     }
-
     /**
      * Called when the player successfully moves back to a card after scrolling.
      * This updates the UI state.
@@ -211,16 +241,25 @@ class PlayerViewModel @Inject constructor(
         return regex.find(url)?.groupValues?.get(1)
     }
 
-    // Keep track of the playlist (called from MainScreen)
     fun updatePlaylist(videos: List<Video>) {
         _uiState.update { it.copy(availableVideos = videos) }
-        // Update current index based on the currently loaded video
         val currentId = _uiState.value.currentVideoId
         val newIndex = videos.indexOfFirst { extractYouTubeVideoId(it.path) == currentId }
         if (newIndex != -1) {
-            _uiState.update { it.copy(currentIndex = newIndex) }
+            val localId = videos[newIndex].id
+            _uiState.update {
+                it.copy(
+                    currentIndex = newIndex,
+                    currentVideoDatabaseId = localId
+                )
+            }
         } else {
-            _uiState.update { it.copy(currentIndex = null) }
+            _uiState.update {
+                it.copy(
+                    currentIndex = null,
+                    currentVideoDatabaseId = null
+                )
+            }
         }
     }
 

@@ -1,4 +1,5 @@
-// MainViewModel.kt - Updated to only fetch API data when database is empty
+// MainViewModel.kt (updated – removed PlayerViewModel injection)
+
 package com.example.jazzlibraryktroomjpcompose.ui.main
 
 import androidx.lifecycle.ViewModel
@@ -6,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.jazzlibraryktroomjpcompose.domain.FilterManager
 import com.example.jazzlibraryktroomjpcompose.domain.models.FilterPath
 import com.example.jazzlibraryktroomjpcompose.data.local.db.JazzDatabase
+import com.example.jazzlibraryktroomjpcompose.data.local.db.entities.FilterPathRoomEntity
 import com.example.jazzlibraryktroomjpcompose.data.mappers.*
 import com.example.jazzlibraryktroomjpcompose.data.repository.JazzRepositoryImpl
 import com.example.jazzlibraryktroomjpcompose.ui.settings.SettingsRepository
@@ -28,17 +30,30 @@ class MainViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(MainUiState())
     val uiState: StateFlow<MainUiState> = _uiState.asStateFlow()
 
-    // Filter state
+    // Filter state (only the filtering flag remains)
     private val _filterState = MutableStateFlow(FilterState())
     val filterState: StateFlow<FilterState> = _filterState.asStateFlow()
 
-    /// Bottom Sheet State Management
+    // Current filter path (single list of active filters)
+    private val _currentFilterPath = MutableStateFlow<List<FilterPath>>(emptyList())
+    val currentFilterPath: StateFlow<List<FilterPath>> = _currentFilterPath.asStateFlow()
+
+    // Timestamp of the currently active history entry
+    private var currentStateTimestamp: Long = 0L
+
+    // History entries (all rows, no consecutive duplicates)
+    private val _historyEntries = MutableStateFlow<List<FilterPathRoomEntity>>(emptyList())
+    val historyEntries: StateFlow<List<FilterPathRoomEntity>> = _historyEntries.asStateFlow()
+
+    // Event to restore video from history
+    private val _restoreHistoryEvent = MutableSharedFlow<RestoreHistoryEvent>()
+    val restoreHistoryEvent: SharedFlow<RestoreHistoryEvent> = _restoreHistoryEvent.asSharedFlow()
+
+    // Bottom sheet state
     private val _bottomSheetState = MutableStateFlow(BottomSheetState.HIDDEN)
     val bottomSheetState: StateFlow<BottomSheetState> = _bottomSheetState.asStateFlow()
 
-    private val _bottomSheetProgress = MutableStateFlow(0f) // 0f = hidden, 0.5f = half, 1f = expanded
-
-    private val _bottomSheetScrollState = MutableStateFlow(0f)
+    private val _bottomSheetProgress = MutableStateFlow(0f)
 
     private val _leftDrawerState = MutableStateFlow(DrawerState.CLOSED)
     val leftDrawerState: StateFlow<DrawerState> = _leftDrawerState.asStateFlow()
@@ -47,20 +62,21 @@ class MainViewModel @Inject constructor(
     private val _loadingState = MutableStateFlow(LoadingState.IDLE)
     val loadingState: StateFlow<LoadingState> = _loadingState.asStateFlow()
 
-    // NEW: Show error as a snackbar/toast, not blocking screen
+    // Error handling
     private val _showError = MutableStateFlow(false)
     val showError: StateFlow<Boolean> = _showError.asStateFlow()
 
     private val _errorMessage = MutableStateFlow<String?>(null)
     val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
 
+    // Refresh
     private val refreshTrigger = MutableStateFlow(0)
-
     private val _isRefreshing = MutableStateFlow(false)
     val isRefreshing: StateFlow<Boolean> = _isRefreshing.asStateFlow()
 
     private var filterJob: Job? = null
 
+    // Player visibility and card states
     private val _isPlayerVisible = MutableStateFlow(true)
     val isPlayerVisible: StateFlow<Boolean> = _isPlayerVisible.asStateFlow()
 
@@ -70,17 +86,47 @@ class MainViewModel @Inject constructor(
     private val _currentTab = MutableStateFlow(MainTab.VIDEOS)
     val currentTab: StateFlow<MainTab> = _currentTab.asStateFlow()
 
+    // Current video ID (to be stored in history entries)
+    private var currentVideoId: Int? = null
+
+    // Last stored video ID (to avoid duplicate entries)
+    private var lastStoredVideoId: Int? = null
+
     init {
         checkAndLoadData()
     }
 
-    // NEW: Check if database has data, load from API only if empty
+    // Called from UI when the player's video ID changes
+    fun onVideoIdChanged(newVideoId: Int?) {
+        viewModelScope.launch {
+            // Ignore if no video or if it's the same as the last stored one
+            if (newVideoId == null || newVideoId == lastStoredVideoId) return@launch
+
+            val currentPath = _currentFilterPath.value
+            val serial = FilterPathMapper.serialize(currentPath)
+            val newTimestamp = System.currentTimeMillis()
+
+            // Delete all entries newer than the current state timestamp
+            database.filterPathDao().deleteAllNewerThan(currentStateTimestamp)
+
+            // Insert new entry with the current filter path and new video ID
+            val newEntry = FilterPathMapper.toEntity(serial, newVideoId, newTimestamp)
+            database.filterPathDao().insertFilterPath(newEntry)
+
+            // Update state variables
+            currentStateTimestamp = newTimestamp
+            lastStoredVideoId = newVideoId
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    // Initial data loading (unchanged)
+    // ------------------------------------------------------------------------
+
     private fun checkAndLoadData() {
         viewModelScope.launch {
             _loadingState.value = LoadingState.LOADING
-
             val hasData = checkIfDatabaseHasData()
-
             if (hasData) {
                 println("DEBUG: Database has data, loading from local storage")
                 _loadingState.value = LoadingState.SUCCESS
@@ -93,28 +139,17 @@ class MainViewModel @Inject constructor(
         }
     }
 
-    // NEW: Check if any of the main tables has data
     private suspend fun checkIfDatabaseHasData(): Boolean {
-        // Check a representative table (videos or instruments)
         val instrumentCount = database.instrumentDao().getInstrumentCount()
-
         println("DEBUG: Database check - Instruments: $instrumentCount")
-
-        // Return true if we have at least some data in either table
         return instrumentCount > 0
     }
-
-    // You'll need to add these DAO methods if they don't exist:
-    // In VideoDao: @Query("SELECT COUNT(*) FROM video") suspend fun getVideoCount(): Int
-    // In InstrumentDao: @Query("SELECT COUNT(*) FROM instrument") suspend fun getInstrumentCount(): Int
 
     private fun loadBootstrapData() {
         viewModelScope.launch {
             val result = jazzRepository.loadBootstrapData()
-
             if (result.isSuccess) {
                 _loadingState.value = LoadingState.SUCCESS
-                // Now load data from database (which now has API data)
                 loadInitialData()
                 loadFilterPath()
                 showSnackbar("Data loaded successfully!")
@@ -122,8 +157,6 @@ class MainViewModel @Inject constructor(
                 _loadingState.value = LoadingState.ERROR
                 val errorMsg = result.exceptionOrNull()?.message ?: "Failed to load data"
                 showSnackbar("$errorMsg. Using local data if available.")
-
-                // Even if API fails, try to load any existing data
                 loadInitialData()
                 loadFilterPath()
             }
@@ -133,22 +166,14 @@ class MainViewModel @Inject constructor(
     fun safeRefreshDataFromAPI() {
         viewModelScope.launch {
             _loadingState.value = LoadingState.LOADING
-
             try {
-                // Check API first
-                val apiAvailable = checkApiAvailability()
-
-                if (!apiAvailable) {
+                if (!checkApiAvailability()) {
                     showSnackbar("API unavailable. Local data preserved.")
                     _loadingState.value = LoadingState.SUCCESS
                     return@launch
                 }
-
-                // Fetch fresh data
                 val result = jazzRepository.loadBootstrapData()
-
                 if (result.isSuccess) {
-                    // Success - update UI
                     loadInitialData()
                     loadFilterPath()
                     showSnackbar("Data refreshed successfully!")
@@ -156,9 +181,8 @@ class MainViewModel @Inject constructor(
                 } else {
                     val errorMsg = result.exceptionOrNull()?.message ?: "Unknown error"
                     showSnackbar("Refresh failed: $errorMsg. Local data preserved.")
-                    _loadingState.value = LoadingState.SUCCESS // Still success since we have local data
+                    _loadingState.value = LoadingState.SUCCESS
                 }
-
             } catch (e: Exception) {
                 showSnackbar("Error: ${e.message}. Local data preserved.")
                 _loadingState.value = LoadingState.SUCCESS
@@ -166,48 +190,41 @@ class MainViewModel @Inject constructor(
         }
     }
 
-    private suspend fun checkApiAvailability(): Boolean {
-        return try {
-            jazzRepository.checkApiConnectivity()
-        } catch (e: Exception) {
-            false
-        }
+    private suspend fun checkApiAvailability(): Boolean = try {
+        jazzRepository.checkApiConnectivity()
+    } catch (e: Exception) {
+        false
     }
 
-    // NEW: Helper to show snackbar messages
     private fun showSnackbar(message: String) {
         viewModelScope.launch {
             _errorMessage.value = message
             _showError.value = true
-
-            // Auto-hide after 4 seconds
-            launch {
-                kotlinx.coroutines.delay(4000)
-                _showError.value = false
-                _errorMessage.value = null
-            }
+            delay(4000)
+            _showError.value = false
+            _errorMessage.value = null
         }
     }
 
-    // NEW: Manual dismiss error
     fun dismissError() {
         _showError.value = false
         _errorMessage.value = null
     }
 
+    // ------------------------------------------------------------------------
+    // Data loading from database (unchanged)
+    // ------------------------------------------------------------------------
+
     private fun loadInitialData() {
         viewModelScope.launch {
-            // Launch separate coroutines for each data type to collect concurrently
             val jobs = listOf(
                 launch {
                     combine(
                         database.videoDao().getAllVideos()
                             .map { entities -> entities.map { VideoMapper.toDomain(it) } },
                         settingsRepository.randomiseVideoList,
-                        refreshTrigger   // <-- new
+                        refreshTrigger
                     ) { videos, shouldRandomise, _ ->
-                        // The third parameter is the trigger – we ignore its value,
-                        // but its emission causes the lambda to run again.
                         if (shouldRandomise) videos.shuffled() else videos
                     }.collect { randomisedVideos ->
                         _uiState.update { it.copy(videos = randomisedVideos) }
@@ -221,7 +238,6 @@ class MainViewModel @Inject constructor(
                                 allInstruments = instruments,
                                 availableInstruments = instruments
                             ) }
-                            println("DEBUG: Loaded ${instruments.size} instruments")
                         }
                 },
                 launch {
@@ -229,82 +245,97 @@ class MainViewModel @Inject constructor(
                         .map { entities -> entities.map { ArtistMapper.toDomainWithCount(it) } }
                         .collect { artists ->
                             _uiState.update {
-                                it.copy(availableArtists = artists,
-                                availableArtistsDisplay = artists)
+                                it.copy(availableArtists = artists, availableArtistsDisplay = artists)
                             }
-                            println("DEBUG: Loaded ${artists.size} artists")
                         }
                 },
                 launch {
                     database.typeDao().getAllTypesWithCount()
                         .map { entities -> entities.map { TypeMapper.toDomainWithCount(it) } }
-                        .collect { types ->
-                            _uiState.update { it.copy(availableTypes = types) }
-                            println("DEBUG: Loaded ${types.size} types")
-                        }
+                        .collect { types -> _uiState.update { it.copy(availableTypes = types) } }
                 },
                 launch {
                     database.durationDao().getAllDurationsWithCount()
                         .map { entities -> entities.map { DurationMapper.toDomainWithCount(it) } }
-                        .collect { durations ->
-                            _uiState.update { it.copy(availableDurations = durations) }
-                            println("DEBUG: Loaded ${durations.size} durations")
-                        }
+                        .collect { durations -> _uiState.update { it.copy(availableDurations = durations) } }
                 },
                 launch {
                     database.videoContainsArtistDao().getAllVideoContainsArtists()
                         .map { entities -> entities.map { VideoContainsArtistMapper.toDomain(it) } }
                         .collect { videoContainsArtists ->
                             _uiState.update { it.copy(availableVideoContainsArtists = videoContainsArtists) }
-                            println("DEBUG: Loaded ${videoContainsArtists.size} video-artist associations")
                         }
                 }
             )
-
-            // Wait for all coroutines to complete their initial collection
             jobs.forEach { it.join() }
-
-            // Update loading state
             _uiState.update { it.copy(isLoading = false) }
-            println("DEBUG: Finished loading all data")
         }
     }
 
+    // ------------------------------------------------------------------------
+    // Filter history management
+    // ------------------------------------------------------------------------
+
     private fun loadFilterPath() {
         viewModelScope.launch {
-            database.filterPathDao().getAllFilterPaths()
-                .map { entities -> entities.map { FilterPathMapper.toDomain(it) } }
-                .collect { filterPaths ->
-                    _filterState.update { it.copy(currentFilterPath = filterPaths) }
-                    println("DEBUG: Loaded ${filterPaths.size} filter paths")
-
-                    if (filterPaths.isNotEmpty()) {
-                        applyFiltersFromPath(filterPaths)
-                    }
-//                    else{
-//                        // FIX: If path is empty, explicitly clear the filtered UI state
-//                        _uiState.update { it.copy(filteredVideos = it.videos) }
-//                        _filterState.update { it.copy(isFiltering = false) }
-//                    }
+            val latest = database.filterPathDao().getLatestFilterPath()
+            if (latest != null) {
+                val filters = FilterPathMapper.toDomain(latest)
+                val enriched = enrichFilterPathNames(filters)
+                _currentFilterPath.value = enriched
+                currentStateTimestamp = latest.timestamp
+                lastStoredVideoId = latest.videoId      // <-- set last stored video ID
+                applyFiltersFromPath(enriched)
+            } else {
+                // No history – start empty
+                _currentFilterPath.value = emptyList()
+                currentStateTimestamp = 0L
+                lastStoredVideoId = null
+                applyFiltersFromPath(emptyList())
+            }
+            // Collect all history for the History tab (without consecutive duplicates)
+            database.filterPathDao().getAllFilterPathsWithoutConsecutiveDuplicates()
+                .collect { entries ->
+                    _historyEntries.value = entries
                 }
         }
     }
 
-    private fun applyFiltersFromPath(filterPaths: List<FilterPath>) {
-        // Cancel previous job to avoid multiple collectors
+    private suspend fun enrichFilterPathNames(filters: List<FilterPath>): List<FilterPath> {
+        return filters.map { filter ->
+            if (filter.entityName.isNotEmpty()) return@map filter
+            val name = when (filter.categoryId) {
+                FilterPath.CATEGORY_INSTRUMENT -> {
+                    database.instrumentDao().getInstrumentById(filter.entityId).firstOrNull()?.name ?: ""
+                }
+                FilterPath.CATEGORY_ARTIST -> {
+                    val artist = database.artistDao().getArtistById(filter.entityId).firstOrNull()
+                    if (artist != null) "${artist.name} ${artist.surname}" else ""
+                }
+                FilterPath.CATEGORY_DURATION -> {
+                    database.durationDao().getDurationById(filter.entityId).firstOrNull()?.name ?: ""
+                }
+                FilterPath.CATEGORY_TYPE -> {
+                    database.typeDao().getTypeById(filter.entityId).firstOrNull()?.name ?: ""
+                }
+                else -> ""
+            }
+            filter.copy(entityName = name)
+        }
+    }
+
+    private fun applyFiltersFromPath(filterPath: List<FilterPath>) {
         filterJob?.cancel()
         filterJob = viewModelScope.launch {
             _filterState.update { it.copy(isFiltering = true) }
-
             combine(
-                filterManager.getFilteredDataFlow(filterPaths),
+                filterManager.getFilteredDataFlow(filterPath),
                 settingsRepository.randomiseVideoList,
                 refreshTrigger
             ) { filteredData, shouldRandomise, _ ->
                 filteredData to shouldRandomise
             }.collect { (filteredData, shouldRandomise) ->
                 val finalVideos = if (shouldRandomise) filteredData.videos.shuffled() else filteredData.videos
-
                 _uiState.update { uiState ->
                     uiState.copy(
                         filteredVideos = finalVideos,
@@ -315,19 +346,12 @@ class MainViewModel @Inject constructor(
                         availableTypes = filteredData.types
                     )
                 }
-
-                _filterState.update { filterState ->
-                    filterState.copy(
-                        currentFilterPath = filteredData.filterPath,
-                        isFiltering = false
-                    )
-                }
-
-                // Optional logging
+                _filterState.update { it.copy(isFiltering = false) }
             }
         }
     }
 
+    // Handle chip selection (non‑suspend – launches coroutine internally)
     fun handleChipSelection(
         categoryId: Int,
         entityId: Int,
@@ -335,62 +359,98 @@ class MainViewModel @Inject constructor(
         isSelected: Boolean
     ) {
         viewModelScope.launch {
-            val currentFilterPath = _filterState.value.currentFilterPath
-
+            val current = _currentFilterPath.value
             val newFilterPath = if (isSelected) {
-                filterManager.handleChipSelection(
-                    currentFilterPath,
-                    categoryId,
-                    entityId,
-                    entityName
-                )
+                filterManager.handleChipSelection(current, categoryId, entityId, entityName)
             } else {
-                filterManager.handleChipDeselection(
-                    currentFilterPath,
-                    categoryId,
-                    entityId
-                )
+                filterManager.handleChipDeselection(current, categoryId, entityId)
             }
 
-            saveFilterPath(newFilterPath)
+            // If the filter path didn't change, stop
+            if (newFilterPath == current) return@launch
 
-            if (newFilterPath.isNotEmpty()) {
-                applyFiltersFromPath(newFilterPath)
-            } else {
-                clearFilters()
-            }
+            val serial = FilterPathMapper.serialize(newFilterPath)
+            val newTimestamp = System.currentTimeMillis()
+
+            // Delete all entries newer than the current state
+            database.filterPathDao().deleteAllNewerThan(currentStateTimestamp)
+
+            // Insert the new entry
+            val newEntry = FilterPathMapper.toEntity(serial, currentVideoId, newTimestamp)
+            database.filterPathDao().insertFilterPath(newEntry)
+
+            // Update state
+            _currentFilterPath.value = newFilterPath
+            currentStateTimestamp = newTimestamp
+            lastStoredVideoId = currentVideoId  // <-- store the current video ID
+            applyFiltersFromPath(newFilterPath)
         }
     }
 
-    private suspend fun saveFilterPath(filterPaths: List<FilterPath>) {
-        database.filterPathDao().deleteAllFilterPaths()
+    private suspend fun clearFilters() {
+        val serial = ""
+        val newTimestamp = System.currentTimeMillis()
 
-        if (filterPaths.isNotEmpty()) {
-            val entities = filterPaths.map { FilterPathMapper.toEntity(it) }
-            database.filterPathDao().insertAllFilterPaths(entities)
-        }
+        // 1. Delete all entries newer than the current state
+        database.filterPathDao().deleteAllNewerThan(currentStateTimestamp)
 
-        _filterState.update { it.copy(currentFilterPath = filterPaths) }
+        // 2. Insert new empty entry
+        val newEntry = FilterPathMapper.toEntity(serial, currentVideoId, newTimestamp)
+        database.filterPathDao().insertFilterPath(newEntry)
+
+        // 3. Update state
+        _currentFilterPath.value = emptyList()
+        currentStateTimestamp = newTimestamp
+        lastStoredVideoId = currentVideoId  // <-- store the current video ID
+        applyFiltersFromPath(emptyList())
+        loadInitialData()
     }
 
-    private fun clearFilters() {
+    fun clearAllFilters() {
+        viewModelScope.launch { clearFilters() }
+    }
+
+    // ------------------------------------------------------------------------
+    // History navigation
+    // ------------------------------------------------------------------------
+
+    fun restoreHistoryState(entry: FilterPathRoomEntity) {
         viewModelScope.launch {
-            // 1. Clear the Database
-            database.filterPathDao().deleteAllFilterPaths()
-            // 2. Stop any active filtering job immediately
-            filterJob?.cancel()
-            // 3. Reset the Filter State in memory
-            _filterState.update {
-                it.copy(
-                    currentFilterPath = emptyList(),
-                    isFiltering = false
-                )
-            }
-            loadInitialData()
+            val filterList = FilterPathMapper.toDomain(entry)
+            val enrichedList = enrichFilterPathNames(filterList)
+            _currentFilterPath.value = enrichedList
+            currentStateTimestamp = entry.timestamp
+            lastStoredVideoId = entry.videoId   // <-- set last stored video ID
+
+            // Emit event to restore the video (if any)
+            _restoreHistoryEvent.emit(RestoreHistoryEvent(entry.videoId, enrichedList))
+
+            applyFiltersFromPath(enrichedList)
         }
     }
 
-    // Toggle sheet with proper state transitions
+    suspend fun goBack(): Boolean {
+        val prevEntry = database.filterPathDao().getPrevFilterPath(currentStateTimestamp)
+        return if (prevEntry != null) {
+            restoreHistoryState(prevEntry)
+            true
+        } else {
+            false
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    // Video ID tracking (called from UI when player state changes)
+    // ------------------------------------------------------------------------
+
+    fun setCurrentVideoId(videoId: Int?) {
+        currentVideoId = videoId
+    }
+
+    // ------------------------------------------------------------------------
+    // UI state helpers (unchanged)
+    // ------------------------------------------------------------------------
+
     fun toggleBottomSheet() {
         val current = _bottomSheetState.value
         _bottomSheetState.value = when (current) {
@@ -425,18 +485,10 @@ class MainViewModel @Inject constructor(
         }
     }
 
-    fun clearAllFilters() {
-        viewModelScope.launch {
-            clearFilters()
-        }
-    }
-
     fun shuffleVideoList() {
         viewModelScope.launch {
             _isRefreshing.value = true
-            refreshTrigger.value += 1  // this is your existing trigger
-            // Simulate a tiny delay to make the spinner visible
-            // i dont need sufling, it just fetches new presufled set from db, each set is suffled by default
+            refreshTrigger.value += 1
             delay(300)
             _isRefreshing.value = false
         }
@@ -444,17 +496,14 @@ class MainViewModel @Inject constructor(
 
     fun shuffleArtists() {
         viewModelScope.launch {
-            // Shuffle the current display list
             val current = _uiState.value.availableArtistsDisplay
-            val shuffled = current.shuffled()
-            _uiState.update { it.copy(availableArtistsDisplay = shuffled) }
+            _uiState.update { it.copy(availableArtistsDisplay = current.shuffled()) }
         }
     }
 
     fun togglePlayerVisibility() {
         val newValue = !_isPlayerVisible.value
         _isPlayerVisible.value = newValue
-        // When hiding players globally, reset all per‑card showVideo flags
         if (!newValue) {
             _cardUiStates.update { map ->
                 map.mapValues { it.value.copy(showVideo = false) }
@@ -466,71 +515,52 @@ class MainViewModel @Inject constructor(
         val currentMap = _cardUiStates.value
         val currentState = currentMap[videoId] ?: CardUiState()
         val isGloballyVisible = _isPlayerVisible.value
-
         val newState = when {
-            // Global toggle ON → clicking toggles only expanded state
             isGloballyVisible -> currentState.copy(expanded = !currentState.expanded)
-            // Global toggle OFF → first click shows video, second click toggles expanded
             else -> {
                 if (!currentState.showVideo) {
-                    // Video hidden → show video (and keep expanded false)
                     CardUiState(showVideo = true, expanded = false)
                 } else {
-                    // Video visible → toggle expanded
                     currentState.copy(expanded = !currentState.expanded)
                 }
             }
         }
-
         _cardUiStates.update { it + (videoId to newState) }
     }
 
     fun setCurrentTab(tab: MainTab) {
         _currentTab.value = tab
-    } //(Later you can trigger data loading for the selected tab here)
+    }
 }
 
-// UI State classes (unchanged)
+// Event for restoring video from history
+data class RestoreHistoryEvent(val videoId: Int?, val filterPath: List<FilterPath>)
+
+// UI state classes (unchanged)
 data class MainUiState(
     val videos: List<com.example.jazzlibraryktroomjpcompose.domain.models.Video> = emptyList(),
     val filteredVideos: List<com.example.jazzlibraryktroomjpcompose.domain.models.Video> = emptyList(),
     val allInstruments: List<com.example.jazzlibraryktroomjpcompose.domain.models.Instrument> = emptyList(),
-    val availableArtists: List<com.example.jazzlibraryktroomjpcompose.domain.models.Artist> = emptyList(), // natural order, used for chips
-    val availableArtistsDisplay: List<com.example.jazzlibraryktroomjpcompose.domain.models.Artist> = emptyList(),   // display order (shuffled or base)
+    val availableArtists: List<com.example.jazzlibraryktroomjpcompose.domain.models.Artist> = emptyList(),
+    val availableArtistsDisplay: List<com.example.jazzlibraryktroomjpcompose.domain.models.Artist> = emptyList(),
     val availableInstruments: List<com.example.jazzlibraryktroomjpcompose.domain.models.Instrument> = emptyList(),
     val availableDurations: List<com.example.jazzlibraryktroomjpcompose.domain.models.Duration> = emptyList(),
     val availableTypes: List<com.example.jazzlibraryktroomjpcompose.domain.models.Type> = emptyList(),
     val availableVideoContainsArtists: List<com.example.jazzlibraryktroomjpcompose.domain.models.VideoContainsArtist> = emptyList(),
-    val isLoading: Boolean = false, // General UI loading (any operation) (USER POINT OF VIEW LOADING)
+    val isLoading: Boolean = false,
     val errorMessage: String? = null
 )
 
 data class CardUiState(
-    val showVideo: Boolean = false,   // whether video section is visible when global toggle is off
-    val expanded: Boolean = false     // whether extra details are shown
+    val showVideo: Boolean = false,
+    val expanded: Boolean = false
 )
 
 data class FilterState(
-    val currentFilterPath: List<FilterPath> = emptyList(),
-    val isFiltering: Boolean = false  // Filter-specific loading (local operation)
+    val isFiltering: Boolean = false
 )
 
-enum class DrawerState {
-    OPEN, CLOSED
-}
-
-enum class LoadingState {
-    IDLE,           // No API operation in progress
-    LOADING,        // API data is being fetched
-    SUCCESS,        // API data fetched successfully
-    ERROR           // API data fetch failed
-}
-
-// Add this enum near DrawerState
-enum class BottomSheetState {
-    HIDDEN,
-    HALF_EXPANDED,
-    EXPANDED
-}
-
+enum class DrawerState { OPEN, CLOSED }
+enum class LoadingState { IDLE, LOADING, SUCCESS, ERROR }
+enum class BottomSheetState { HIDDEN, HALF_EXPANDED, EXPANDED }
 enum class MainTab { VIDEOS, ARTISTS, HISTORY }

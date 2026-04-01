@@ -36,6 +36,9 @@ import com.example.jazzlibraryktroomjpcompose.domain.models.FilterPath
 import com.example.jazzlibraryktroomjpcompose.domain.models.Instrument
 import com.example.jazzlibraryktroomjpcompose.ui.theme.Dimens
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.toSet
 import kotlinx.coroutines.launch
 
 @Composable
@@ -66,6 +69,8 @@ fun YouTubeLikeBottomSheet(
 
     // Separate shadow animation state
     val isShadowVisible = sheetState != BottomSheetState.HIDDEN
+
+    val currentFilterPath by viewModel.currentFilterPath.collectAsState()
 
     // Independent shadow animation - fades in/out
     val shadowAlpha by animateFloatAsState(
@@ -354,6 +359,7 @@ fun YouTubeLikeBottomSheet(
                         viewModel = viewModel,
                         uiState = uiState,
                         filterState = filterState,
+                        currentFilterPath = currentFilterPath,
                         modifier = Modifier
                             .fillMaxSize()
                     )
@@ -368,6 +374,7 @@ private fun YouTubeBottomSheetContent(
     viewModel: MainViewModel,
     uiState: MainUiState,
     filterState: FilterState,
+    currentFilterPath: List<FilterPath>,
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -382,7 +389,7 @@ private fun YouTubeBottomSheetContent(
             title = "Instruments",
             categoryId = FilterPath.CATEGORY_INSTRUMENT,
             items = uiState.availableInstruments,
-            currentFilterPath = filterState.currentFilterPath,
+            currentFilterPath = currentFilterPath,
             onChipSelected = { categoryId, entityId, entityName, isSelected ->
                 viewModel.handleChipSelection(categoryId, entityId, entityName, isSelected)
             },
@@ -393,7 +400,7 @@ private fun YouTubeBottomSheetContent(
         PaginatedArtistChipGroupSection(
             title = "Artists",
             items = uiState.availableArtists,
-            selectedItemIds = filterState.currentFilterPath
+            selectedItemIds = currentFilterPath
                 .filter { it.categoryId == FilterPath.CATEGORY_ARTIST }
                 .map { it.entityId }
                 .toSet(),
@@ -408,7 +415,7 @@ private fun YouTubeBottomSheetContent(
             title = "Durations",
             categoryId = FilterPath.CATEGORY_DURATION,
             items = uiState.availableDurations,
-            currentFilterPath = filterState.currentFilterPath,
+            currentFilterPath = currentFilterPath,
             onChipSelected = { categoryId, entityId, entityName, isSelected ->
                 viewModel.handleChipSelection(categoryId, entityId, entityName, isSelected)
             },
@@ -420,7 +427,7 @@ private fun YouTubeBottomSheetContent(
             title = "Types",
             categoryId = FilterPath.CATEGORY_TYPE,
             items = uiState.availableTypes,
-            currentFilterPath = filterState.currentFilterPath,
+            currentFilterPath = currentFilterPath,
             onChipSelected = { categoryId, entityId, entityName, isSelected ->
                 viewModel.handleChipSelection(categoryId, entityId, entityName, isSelected)
             },
@@ -747,7 +754,7 @@ private fun EnhancedFlowLayout(
                         is com.example.jazzlibraryktroomjpcompose.domain.models.Duration -> {
                             val isSelected = selectedItemIds.contains(item.id)
                             ChipContent(
-                                text = item.description,
+                                text = item.name,
                                 isSelected = isSelected,
                                 onClick = { onChipSelected(categoryId, item.id, item.name, !isSelected) },
                                 itemId = item.id,

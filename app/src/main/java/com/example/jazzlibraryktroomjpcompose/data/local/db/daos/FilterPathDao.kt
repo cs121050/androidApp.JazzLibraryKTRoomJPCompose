@@ -7,30 +7,45 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 interface FilterPathDao {
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    @Insert
     suspend fun insertFilterPath(filterPath: FilterPathRoomEntity)
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertAllFilterPaths(filterPaths: List<FilterPathRoomEntity>)
+    @Query("""
+    SELECT f.*, v.*
+    FROM filter_path f
+    LEFT JOIN videos v ON f.video_id = v.video_id
+    ORDER BY f.timestamp DESC
+    """)
+    fun getAllFilterPaths(): Flow<List<FilterPathRoomEntity>>
 
-    @Update
-    suspend fun updateFilterPath(filterPath: FilterPathRoomEntity)
+    @Suppress("Unused")
+    @Query(
+    """
+    WITH ranked AS (
+        SELECT *,
+               LAG(serial_number) OVER (ORDER BY timestamp DESC, auto_increment_id DESC) AS prev_serial
+        FROM filter_path
+    )
+    SELECT auto_increment_id, serial_number, video_id, timestamp
+    FROM ranked
+    WHERE prev_serial IS NULL OR serial_number != prev_serial
+    ORDER BY timestamp DESC, auto_increment_id DESC
+    """
+    )
+    fun getAllFilterPathsWithoutConsecutiveDuplicates(): Flow<List<FilterPathRoomEntity>>
 
-    @Delete
-    suspend fun deleteFilterPath(filterPath: FilterPathRoomEntity)
+    @Query("SELECT * FROM filter_path WHERE timestamp < :currentTimestamp ORDER BY timestamp DESC LIMIT 1")
+    suspend fun getPrevFilterPath(currentTimestamp: Long): FilterPathRoomEntity?
+
+    @Query("SELECT * FROM filter_path ORDER BY timestamp DESC LIMIT 1")
+    suspend fun getLatestFilterPath(): FilterPathRoomEntity?
+
+    @Query("SELECT * FROM filter_path WHERE timestamp = :timestamp")
+    suspend fun getFilterPathByTimestamp(timestamp: Long): FilterPathRoomEntity?
+
+    @Query("DELETE FROM filter_path WHERE timestamp > :timestamp")
+    suspend fun deleteAllNewerThan(timestamp: Long)
 
     @Query("DELETE FROM filter_path")
     suspend fun deleteAllFilterPaths()
-
-    @Query("DELETE FROM filter_path WHERE category_id = :categoryId")
-    suspend fun deleteByCategory(categoryId: Int)
-
-    @Query("SELECT * FROM filter_path")
-    fun getAllFilterPaths(): Flow<List<FilterPathRoomEntity>>
-
-    @Query("SELECT * FROM filter_path WHERE category_id = :categoryId")
-    fun getFilterPathByCategory(categoryId: Int): Flow<List<FilterPathRoomEntity>>
-
-    @Query("SELECT * FROM filter_path WHERE entity_id = :entityId AND category_id = :categoryId")
-    fun getFilterPath(entityId: Int, categoryId: Int): Flow<FilterPathRoomEntity?>
 }

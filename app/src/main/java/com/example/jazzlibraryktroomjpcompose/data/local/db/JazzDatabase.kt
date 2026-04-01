@@ -20,7 +20,7 @@ import com.example.jazzlibraryktroomjpcompose.data.local.db.entities.*
         VideoContainsArtistRoomEntity::class,
         FilterPathRoomEntity::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
