@@ -125,7 +125,11 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.windowInsetsBottomHeight
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.ui.unit.Dp
+import kotlinx.coroutines.flow.map
 
 class ScrollLockState {
     var isLocked by mutableStateOf(false)
@@ -203,6 +207,12 @@ fun MainScreen(
     //DEBUGLOG
     LaunchedEffect(isFullscreen) {
         Log.d("Fullscreen", "isFullscreen: $isFullscreen, isLandscape: $isLandscape, playerVisible: ${playerUiState.isVisible}")
+    }
+
+    LaunchedEffect(playerUiState.currentVideoId) {
+        if (playerUiState.currentVideoId != null) {
+            viewModel.loadEnrichedHistory()
+        }
     }
 
     // Auto‑hide bars after 3 seconds when they become visible
@@ -369,7 +379,7 @@ fun MainScreen(
                         viewModel.shuffleVideoList()
                         viewModel.shuffleArtists()
                         //todo// album list
-
+                        viewModel.refreshHistory()
                     },
                     modifier = Modifier
                         .fillMaxSize()
@@ -480,6 +490,10 @@ fun MainScreen(
 
                                     MainTab.HISTORY -> HistoryContent(
                                         modifier = Modifier.fillMaxSize(),
+                                        viewModel = viewModel,
+                                        playerViewModel = playerViewModel,
+                                        onRefresh = { viewModel.refreshHistory() },
+                                        isPlayerVisible = isPlayerVisible
                                     )
                                 }
                             }
@@ -1783,16 +1797,274 @@ fun ArtistCard(
     }
 }
 
+// Add this after existing composables in MainScreen.kt
+
 @Composable
 fun HistoryContent(
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    viewModel: MainViewModel,
+    playerViewModel: PlayerViewModel,
+    onRefresh: () -> Unit,
+    isPlayerVisible: Boolean
 ) {
-    Box(
-        modifier = modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
-    ) {
-        Text("History Content")
+    val enrichedHistory by viewModel.enrichedHistory.collectAsState()
+
+    val currentPlayingDbId by playerViewModel.currentVideoDbIdState.collectAsState()
+
+
+    // Load data when this screen appears
+    LaunchedEffect(Unit) {
+        viewModel.loadEnrichedHistory()
     }
+
+    // Group by date (today, yesterday, older)
+    val groupedByDate = remember(enrichedHistory) {
+        val now = System.currentTimeMillis()
+        val todayStart = getStartOfDay(now)
+        val yesterdayStart = todayStart - 24 * 60 * 60 * 1000L
+        enrichedHistory.groupBy { item ->
+            when {
+                item.timestamp >= todayStart -> "Today"
+                item.timestamp >= yesterdayStart -> "Yesterday"
+                else -> formatDate(item.timestamp)
+            }
+        }.toList().sortedByDescending { (key, _) ->
+            when (key) {
+                "Today" -> 3
+                "Yesterday" -> 2
+                else -> 1
+            }
+        }
+    }
+
+    // --- Sliding filter bar (collapsible) ---
+    val filterBarHeightPx = remember { mutableIntStateOf(0) }
+    var filterBarOffset by remember { mutableFloatStateOf(0f) }
+
+    val nestedScrollConnection = remember {
+        object : NestedScrollConnection {
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                val delta = available.y
+                val newOffset = (filterBarOffset + delta).coerceIn(
+                    -filterBarHeightPx.intValue.toFloat(),
+                    0f
+                )
+                val consumed = newOffset - filterBarOffset
+                filterBarOffset = newOffset
+                return Offset(0f, consumed)
+            }
+        }
+    }
+
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .nestedScroll(nestedScrollConnection)
+    ) {
+        // History Filter Bar (slides out)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .onGloballyPositioned { coordinates ->
+                    filterBarHeightPx.intValue = coordinates.size.height
+                }
+                .offset { IntOffset(0, filterBarOffset.roundToInt()) }
+                .background(MaterialTheme.colorScheme.surface)
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.End,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Menu button
+            var expanded by remember { mutableStateOf(false) }
+            IconButton(onClick = { expanded = true }) {
+                Icon(Icons.Default.MoreVert, contentDescription = "Menu")
+            }
+            DropdownMenu(
+                expanded = expanded,
+                onDismissRequest = { expanded = false }
+            ) {
+                DropdownMenuItem(
+                    text = { Text("Clear History") },
+                    onClick = {
+                        viewModel.clearHistory()
+                        expanded = false
+                    }
+                )
+            }
+        }
+
+        // History List
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(vertical = 8.dp)
+        ) {
+            groupedByDate.forEach { (date, items) ->
+                item {
+                    Text(
+                        text = date,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                    )
+                }
+                items(items) { historyItem ->
+                    HistoryCard(
+                        item = historyItem,
+                        currentPlayingDbId = currentPlayingDbId,
+                        isPlayerVisible = isPlayerVisible,
+                        onFilterPathClick = {
+                            // Restore this filter path
+                            viewModel.restoreFilterPathFromGroupItem(historyItem)
+                        },
+                        onVideoClick = { video ->
+                            // Play video in mini mode without changing filter path
+                            val youtubeId = extractYouTubeVideoId(video.path)
+                            if (youtubeId != null) {
+                                playerViewModel.loadVideo(
+                                    videoId = youtubeId,
+                                    cardId = video.locationId,
+                                    currentFilterPath = null, // keep current filter
+                                    startInMiniMode = true,
+                                    videoDbId = video.id,
+                                    filterPathId = null // no filter path change
+                                )
+                            }
+                        }
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun HistoryCard(
+    item: MainViewModel.HistoryGroupItem,
+    isPlayerVisible: Boolean,
+    currentPlayingDbId: Int?,
+    onFilterPathClick: () -> Unit,
+    onVideoClick: (Video) -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp),
+        elevation = CardDefaults.cardElevation(2.dp)
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            // Filter path chips row (clickable)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onFilterPathClick() }
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                if (item.filterPaths.isEmpty()) {
+                    // Dimmed "No Filter" chip
+                    Box(
+                        modifier = Modifier
+                            .wrapContentWidth()
+                            .clip(RoundedCornerShape(Dimens.chipRoundedCorner))
+                            .background(
+                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 1f)
+                            )
+                            .padding(horizontal = Dimens.chiptextHorizontalPadding, vertical = 6.dp)
+                    ) {
+                        Text(
+                            text = "  *  ",
+                            style = MaterialTheme.typography.bodyMedium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                } else {
+                    item.filterPaths.forEach { filter ->
+                        FilterPathChip(
+                            text = filter.entityName,
+                            isSelected = false,
+                            onClick = { /* handled by parent row click */ }
+                        )
+                    }
+                }
+            }
+
+            // Video list (only shown if isPlayerVisible is true)
+            if (isPlayerVisible && item.videos.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(12.dp))
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    item.videos.forEach { video ->
+                        HistoryVideoRow(
+                            video = video,
+                            currentPlayingDbId = currentPlayingDbId,
+                            onClick = { onVideoClick(video) }
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun HistoryVideoRow(
+    video: Video,
+    currentPlayingDbId: Int?,
+    onClick: () -> Unit
+) {
+    val isCurrentlyPlaying = video.id == currentPlayingDbId   // direct Int comparison
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() }
+            .padding(4.dp)
+            .background(
+                color = if (isCurrentlyPlaying ) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 1f)
+                else Color.Transparent // or any default color
+            ),
+        verticalAlignment = Alignment.CenterVertically,
+
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        // Thumbnail
+        val thumbnailUrl = video.getThumbnailUrl()
+        AsyncImage(
+            model = ImageRequest.Builder(LocalContext.current)
+                .data(thumbnailUrl)
+                .crossfade(true)
+                .build(),
+            contentDescription = video.name,
+            modifier = Modifier.size(60.dp, 45.dp),
+            contentScale = ContentScale.Crop
+        )
+        // Title
+        Text(
+            text = video.name,
+            style = MaterialTheme.typography.bodyMedium,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f)
+        )
+    }
+}
+
+// Helper functions
+private fun getStartOfDay(timestamp: Long): Long {
+    val calendar = java.util.Calendar.getInstance().apply {
+        timeInMillis = timestamp
+        set(java.util.Calendar.HOUR_OF_DAY, 0)
+        set(java.util.Calendar.MINUTE, 0)
+        set(java.util.Calendar.SECOND, 0)
+        set(java.util.Calendar.MILLISECOND, 0)
+    }
+    return calendar.timeInMillis
+}
+
+private fun formatDate(timestamp: Long): String {
+    val sdf = java.text.SimpleDateFormat("dd MMM yyyy", java.util.Locale.getDefault())
+    return sdf.format(java.util.Date(timestamp))
 }
 
 @Composable

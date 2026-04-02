@@ -9,6 +9,7 @@ import com.example.jazzlibraryktroomjpcompose.data.local.db.JazzDatabase
 import com.example.jazzlibraryktroomjpcompose.data.local.db.entities.FilterPathRoomEntity
 import com.example.jazzlibraryktroomjpcompose.data.mappers.*
 import com.example.jazzlibraryktroomjpcompose.data.repository.JazzRepositoryImpl
+import com.example.jazzlibraryktroomjpcompose.domain.models.Video
 import com.example.jazzlibraryktroomjpcompose.ui.settings.SettingsRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
@@ -85,6 +86,15 @@ class MainViewModel @Inject constructor(
     private val _currentFilterPathId = MutableStateFlow<Int?>(null)
     val currentFilterPathId: StateFlow<Int?> = _currentFilterPathId.asStateFlow()
 
+    data class HistoryGroupItem(
+        val filterPathId: Int,
+        val timestamp: Long,
+        val filterPaths: List<FilterPath>,      // already enriched with names
+        val videos: List<Video>                 // domain Video objects
+    )
+
+    private val _enrichedHistory = MutableStateFlow<List<HistoryGroupItem>>(emptyList())
+    val enrichedHistory: StateFlow<List<HistoryGroupItem>> = _enrichedHistory.asStateFlow()
 
     init {
         checkAndLoadData()
@@ -431,6 +441,9 @@ class MainViewModel @Inject constructor(
             val insertedId = database.filterPathDao().insertFilterPathAndGetId(newEntry) // returns Long
             _currentFilterPathId.value = insertedId.toInt()
 
+            //make sure the history tab list reload real tiome if it is open
+            loadEnrichedHistory()
+
             // Update local state
             _currentFilterPath.value = newFilterPath
             currentStateTimestamp = timestamp
@@ -502,26 +515,6 @@ class MainViewModel @Inject constructor(
         }
     }
 
-    fun shuffleVideoList() {
-        viewModelScope.launch {
-            _isRefreshing.value = true
-            refreshTrigger.value += 1  // this is your existing trigger
-            // Simulate a tiny delay to make the spinner visible
-            // i dont need sufling, it just fetches new presufled set from db, each set is suffled by default
-            delay(300)
-            _isRefreshing.value = false
-        }
-    }
-
-    fun shuffleArtists() {
-        viewModelScope.launch {
-            // Shuffle the current display list
-            val current = _uiState.value.availableArtistsDisplay
-            val shuffled = current.shuffled()
-            _uiState.update { it.copy(availableArtistsDisplay = shuffled) }
-        }
-    }
-
     fun togglePlayerVisibility() {
         val newValue = !_isPlayerVisible.value
         _isPlayerVisible.value = newValue
@@ -574,6 +567,91 @@ class MainViewModel @Inject constructor(
             _filterState.update { it.copy(currentFilterPath = enrichedList) }
         }
     }
+
+    fun loadEnrichedHistory() {
+        viewModelScope.launch {
+            val rawEntries = database.filterPathDao().getAllHistoryEntries()
+            // Group by filterPathId
+            val grouped = rawEntries.groupBy { it.filterPathId }
+            val result = mutableListOf<HistoryGroupItem>()
+            for ((filterPathId, entries) in grouped) {
+                val first = entries.first()
+                // Deserialize filter paths and enrich names
+                val filterPaths = FilterPathMapper.deserialize(first.serialNumber)
+                val enrichedPaths = enrichFilterPathNames(filterPaths)
+                // Collect videos (distinct by videoId)
+                val videos = entries.mapNotNull { entry ->
+                    entry.videoId?.let { videoId ->
+                        // Fetch full Video domain object from database
+                        val videoEntity = database.videoDao().getVideoById(videoId).firstOrNull()
+                        videoEntity?.let { VideoMapper.toDomain(it) }
+                    }
+                }.distinctBy { it.id }
+                result.add(HistoryGroupItem(
+                    filterPathId = filterPathId,
+                    timestamp = first.timestamp,
+                    filterPaths = enrichedPaths,
+                    videos = videos
+                ))
+            }
+            _enrichedHistory.value = result.sortedByDescending { it.timestamp }
+        }
+    }
+
+    // MainViewModel.kt
+    fun restoreFilterPathFromGroupItem(item: HistoryGroupItem) {
+        viewModelScope.launch {
+            // Create a temporary FilterPathRoomEntity to reuse restore logic
+            val entity = FilterPathRoomEntity(
+                id = item.filterPathId,
+                serialNumber = FilterPathMapper.serialize(item.filterPaths),
+                timestamp = item.timestamp
+            )
+            restoreHistoryState(entity)
+        }
+    }
+
+    fun clearHistory() {
+        viewModelScope.launch {
+            database.filterPathDao().deleteAll()
+            _enrichedHistory.value = emptyList()
+            // Optionally reset current filter path
+            _currentFilterPath.value = emptyList()
+            currentStateTimestamp = 0L
+            _currentFilterPathId.value = null
+            applyFiltersFromPath(emptyList())
+        }
+    }
+
+    fun shuffleVideoList() {
+        viewModelScope.launch {
+            _isRefreshing.value = true
+            refreshTrigger.value += 1  // this is your existing trigger
+            // Simulate a tiny delay to make the spinner visible
+            // i dont need sufling, it just fetches new presufled set from db, each set is suffled by default
+            delay(300)
+            _isRefreshing.value = false
+        }
+    }
+
+    fun shuffleArtists() {
+        viewModelScope.launch {
+            // Shuffle the current display list
+            val current = _uiState.value.availableArtistsDisplay
+            val shuffled = current.shuffled()
+            _uiState.update { it.copy(availableArtistsDisplay = shuffled) }
+        }
+    }
+
+    // MainViewModel.kt
+    fun refreshHistory() {
+        viewModelScope.launch {
+            loadEnrichedHistory()   // reload from database
+            // Small delay to show the spinner (optional)
+
+        }
+    }
+
 }
 
 // UI State classes (unchanged)

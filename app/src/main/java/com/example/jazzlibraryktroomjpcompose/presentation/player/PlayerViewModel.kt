@@ -36,6 +36,14 @@ class PlayerViewModel @Inject constructor(
     private val filterPathContainsVideoDao: FilterPathContainsVideoDao
         get() = database.filterPathContainsVideoDao()
 
+    val currentVideoDbIdState: StateFlow<Int?> = _uiState
+        .map { it.currentVideoDbId }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = null
+        )
+
     init {
         viewModelScope.launch {
             combine(
@@ -82,6 +90,7 @@ class PlayerViewModel @Inject constructor(
 
         _uiState.update {
             it.copy(
+                currentVideoDbId = videoDbId,
                 isVisible = true,
                 isInMiniMode = startInMiniMode,   // use the flag
                 activeCardId = cardId,
