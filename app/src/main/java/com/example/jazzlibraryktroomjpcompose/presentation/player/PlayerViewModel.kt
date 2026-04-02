@@ -4,6 +4,9 @@ package com.example.jazzlibraryktroomjpcompose.presentation.player
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.jazzlibraryktroomjpcompose.data.local.db.JazzDatabase
+import com.example.jazzlibraryktroomjpcompose.data.local.db.daos.FilterPathContainsVideoDao
+import com.example.jazzlibraryktroomjpcompose.data.local.db.entities.FilterPathContainsVideoRoomEntity
 import com.example.jazzlibraryktroomjpcompose.data.player.YouTubePlayerControllerImpl
 import com.example.jazzlibraryktroomjpcompose.domain.models.FilterPath
 import com.example.jazzlibraryktroomjpcompose.domain.models.Video
@@ -16,8 +19,11 @@ import javax.inject.Inject
 
 @HiltViewModel
 class PlayerViewModel @Inject constructor(
-    private val playerController: VideoPlayerController
+    private val playerController: VideoPlayerController,
+    private val database: JazzDatabase
 ) : ViewModel() {
+
+    private var currentFilterPathId: Int? = null
 
     // UI state
     private val _uiState = MutableStateFlow(PlayerUiState())
@@ -26,6 +32,9 @@ class PlayerViewModel @Inject constructor(
     // Event channel for communication with the UI (MainScreen)
     private val _playerEvents = MutableSharedFlow<PlayerEvent>()
     val playerEvents: SharedFlow<PlayerEvent> = _playerEvents.asSharedFlow()
+
+    private val filterPathContainsVideoDao: FilterPathContainsVideoDao
+        get() = database.filterPathContainsVideoDao()
 
     init {
         viewModelScope.launch {
@@ -57,8 +66,13 @@ class PlayerViewModel @Inject constructor(
                   cardId: String?,
                   currentFilterPath:
                   List<FilterPath>?,
-                  startInMiniMode: Boolean = false
+                  startInMiniMode: Boolean = false,
+                  videoDbId: Int?,
+                  filterPathId: Int?
     ) {
+
+        currentFilterPathId = filterPathId
+
         // After loading, try to set current index
         val videos = _uiState.value.availableVideos ?: return
         val index = videos.indexOfFirst { extractYouTubeVideoId(it.path) == videoId }
@@ -76,6 +90,16 @@ class PlayerViewModel @Inject constructor(
         }
         playerController.loadVideo(videoId, autoPlay = true)
         Log.d("PlayerViewModel", "loadVideo: startInMiniMode=$startInMiniMode, videoId=$videoId")
+
+        if (videoDbId != null && filterPathId != null && filterPathId > 0) {
+            viewModelScope.launch {
+                val entry = FilterPathContainsVideoRoomEntity(
+                    filterPathId = filterPathId,
+                    videoId = videoDbId
+                )
+                filterPathContainsVideoDao.insert(entry)
+            }
+        }
     }
 
     /**
@@ -236,11 +260,17 @@ class PlayerViewModel @Inject constructor(
             val nextVideo = videos[currentIdx + 1]
             val nextVideoId = extractYouTubeVideoId(nextVideo.path)
             if (nextVideoId != null) {
-                loadVideo(nextVideoId, nextVideo.locationId, state.filterPathAtLoad, startInMiniMode)
+                loadVideo(
+                    videoId = nextVideoId,
+                    cardId = nextVideo.locationId,
+                    currentFilterPath = state.filterPathAtLoad,
+                    startInMiniMode = startInMiniMode,
+                    videoDbId = nextVideo.id,
+                    filterPathId = currentFilterPathId
+                )
                 _uiState.update { it.copy(currentIndex = currentIdx + 1) }
             }
         }
-        Log.d("PlayerViewModel", "nextVideo: startInMiniMode=$startInMiniMode")
     }
 
     fun previousVideo(startInMiniMode: Boolean = false) {
@@ -251,7 +281,14 @@ class PlayerViewModel @Inject constructor(
             val prevVideo = videos[currentIdx - 1]
             val prevVideoId = extractYouTubeVideoId(prevVideo.path)
             if (prevVideoId != null) {
-                loadVideo(prevVideoId, prevVideo.locationId, state.filterPathAtLoad, startInMiniMode)
+                loadVideo(
+                    videoId = prevVideoId,
+                    cardId = prevVideo.locationId,
+                    currentFilterPath = state.filterPathAtLoad,
+                    startInMiniMode = startInMiniMode,
+                    videoDbId = prevVideo.id,
+                    filterPathId = currentFilterPathId   // use the stored filter path ID
+                )
                 _uiState.update { it.copy(currentIndex = currentIdx - 1) }
             }
         }

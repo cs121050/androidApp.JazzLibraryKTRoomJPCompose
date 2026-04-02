@@ -23,4 +23,8 @@ interface FilterPathDao {
 
     @Query("DELETE FROM filter_path WHERE timestamp > :timestamp")
     suspend fun deleteAllNewerThan(timestamp: Long)
+
+    // Add this method to FilterPathDao
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertFilterPathAndGetId(filterPath: FilterPathRoomEntity): Long
 }
