@@ -198,6 +198,8 @@ fun MainScreen(
 
     val listState = rememberLazyListState()
 
+    val currentFilterPathId by viewModel.currentFilterPathId.collectAsState()
+
     //DEBUGLOG
     LaunchedEffect(isFullscreen) {
         Log.d("Fullscreen", "isFullscreen: $isFullscreen, isLandscape: $isLandscape, playerVisible: ${playerUiState.isVisible}")
@@ -415,6 +417,7 @@ fun MainScreen(
                                 videos = videosToShow,
                                 listState = listState,
                                 currentFilterPath = filterState.currentFilterPath,
+                                currentFilterPathId = currentFilterPathId,
                                 onTogglePlayerVisibility = { viewModel.togglePlayerVisibility() }
                             )
                         }
@@ -451,6 +454,7 @@ fun MainScreen(
                                         listState = listState,
                                         isPlayerVisible = isPlayerVisible,
                                         cardUiStates = cardUiStates,
+                                        currentFilterPathId = currentFilterPathId,
                                         onCardTitleClick = { videoId ->
                                             viewModel.onCardTitleClick(
                                                 videoId
@@ -748,6 +752,7 @@ fun toolbarBox(
     videos: List<Video>,
     currentFilterPath: List<FilterPath>,
     listState: LazyListState,
+    currentFilterPathId: Int?,
     onTogglePlayerVisibility: () -> Unit
 ) {
     SearchBar(
@@ -772,6 +777,7 @@ fun toolbarBox(
         videos = videos,
         listState = listState,
         currentFilterPath = currentFilterPath,
+        currentFilterPathId = currentFilterPathId,
         modifier = Modifier.fillMaxWidth()
     )
 }
@@ -837,6 +843,7 @@ fun VideoStatsRow(
     videos: List<Video>,
     listState: LazyListState,
     currentFilterPath: List<FilterPath>,
+    currentFilterPathId: Int?,
     modifier: Modifier = Modifier
 ) {
     val playerUiState by playerViewModel.uiState.collectAsState()
@@ -886,7 +893,9 @@ fun VideoStatsRow(
                     videoId = videoId,
                     cardId = firstVideo.locationId,
                     currentFilterPath = currentFilterPath,
-                    startInMiniMode = startInMiniMode
+                    startInMiniMode = startInMiniMode,
+                    videoDbId = firstVideo.id,
+                    filterPathId = currentFilterPathId
                 )
             }
         }
@@ -920,7 +929,9 @@ fun VideoStatsRow(
                     videoId = videoId,
                     cardId = targetVideo.locationId,
                     currentFilterPath = currentFilterPath,
-                    startInMiniMode = startInMiniMode
+                    startInMiniMode = startInMiniMode,
+                    videoDbId = targetVideo.id,
+                    filterPathId = currentFilterPathId
                 )
             }
         } else {
@@ -946,7 +957,9 @@ fun VideoStatsRow(
                     videoId = videoId,
                     cardId = targetVideo.locationId,
                     currentFilterPath = currentFilterPath,
-                    startInMiniMode = startInMiniMode
+                    startInMiniMode = startInMiniMode,
+                    videoDbId = targetVideo.id,
+                    filterPathId = currentFilterPathId
                 )
             }
         }
@@ -1086,6 +1099,7 @@ private fun VideoListContent(
     onActiveCardBoundsChanged: (String, IntOffset, IntSize) -> Unit,
     modifier: Modifier = Modifier,
     cardUiStates: Map<String, CardUiState>,
+    currentFilterPathId: Int?,
     onCardTitleClick: (String) -> Unit
 ) {
 // Find the index of the currently active video card
@@ -1239,7 +1253,9 @@ private fun VideoListContent(
                                 playerViewModel.loadVideo(
                                     videoId = videoId,
                                     cardId = video.locationId,
-                                    currentFilterPath = filterState.currentFilterPath
+                                    currentFilterPath = filterState.currentFilterPath,
+                                    videoDbId = video.id,
+                                    filterPathId = currentFilterPathId
                                 )
                             }
                         },

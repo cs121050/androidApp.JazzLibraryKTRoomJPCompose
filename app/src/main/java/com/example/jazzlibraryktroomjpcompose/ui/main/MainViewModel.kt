@@ -82,6 +82,9 @@ class MainViewModel @Inject constructor(
     // Also keep the timestamp of the current state to allow back navigation
     private var currentStateTimestamp: Long = 0L
 
+    private val _currentFilterPathId = MutableStateFlow<Int?>(null)
+    val currentFilterPathId: StateFlow<Int?> = _currentFilterPathId.asStateFlow()
+
 
     init {
         checkAndLoadData()
@@ -332,11 +335,15 @@ class MainViewModel @Inject constructor(
                 _currentFilterPath.value = enriched
                 currentStateTimestamp = latest.timestamp
                 applyFiltersFromPath(enriched)
+
+                _currentFilterPathId.value = latest.id
             } else {
                 // No history, start with empty filters
                 _currentFilterPath.value = emptyList()
                 currentStateTimestamp = 0L
                 applyFiltersFromPath(emptyList())
+
+                _currentFilterPathId.value = null
             }
             // Load all history for the History tab
             database.filterPathDao().getAllFilterPaths().collect { entries ->
@@ -421,7 +428,8 @@ class MainViewModel @Inject constructor(
 
             // Insert the new entry
             val newEntry = FilterPathMapper.toEntity(serial, timestamp)
-            database.filterPathDao().insertFilterPath(newEntry)
+            val insertedId = database.filterPathDao().insertFilterPathAndGetId(newEntry) // returns Long
+            _currentFilterPathId.value = insertedId.toInt()
 
             // Update local state
             _currentFilterPath.value = newFilterPath
@@ -442,7 +450,8 @@ class MainViewModel @Inject constructor(
             val serial = ""
             val timestamp = System.currentTimeMillis()
             val newEntry = FilterPathMapper.toEntity(serial, timestamp)
-            database.filterPathDao().insertFilterPath(newEntry)
+            val insertedId = database.filterPathDao().insertFilterPathAndGetId(newEntry)
+            _currentFilterPathId.value = insertedId.toInt()
 
             _currentFilterPath.value = emptyList()
             currentStateTimestamp = timestamp
@@ -558,6 +567,7 @@ class MainViewModel @Inject constructor(
             val filterList = FilterPathMapper.toDomain(entry)
             val enrichedList = enrichFilterPathNames(filterList)
             _currentFilterPath.value = enrichedList
+            _currentFilterPathId.value = entry.id
             currentStateTimestamp = entry.timestamp
 
             applyFiltersFromPath(enrichedList)

@@ -18,9 +18,10 @@ import com.example.jazzlibraryktroomjpcompose.data.local.db.entities.*
         DurationRoomEntity::class,
         VideoRoomEntity::class,
         VideoContainsArtistRoomEntity::class,
-        FilterPathRoomEntity::class
+        FilterPathRoomEntity::class,
+        FilterPathContainsVideoRoomEntity::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -34,6 +35,7 @@ abstract class JazzDatabase : RoomDatabase() {
     abstract fun videoDao(): VideoDao
     abstract fun videoContainsArtistDao(): VideoContainsArtistDao
     abstract fun filterPathDao(): FilterPathDao
+    abstract fun filterPathContainsVideoDao(): FilterPathContainsVideoDao
 
     companion object {
         @Volatile
