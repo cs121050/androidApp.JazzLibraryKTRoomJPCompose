@@ -15,7 +15,8 @@ data class Artist(
     val imageAuthor: String? = null,
     val imageLicense: String? = null,
     val imageSourceUrl: String? = null,
-    val wikipediaData: String? = null
+    val wikipediaData: String? = null,
+    val embadableVideoCount: Int = 0
 ) {
     // ✅ BUSINESS LOGIC in domain class methods
 

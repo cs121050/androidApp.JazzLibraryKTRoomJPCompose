@@ -28,7 +28,8 @@ object ArtistMapper {
             imageAuthor = domain.imageAuthor,
             imageLicense = domain.imageLicense,
             imageSourceUrl = domain.imageSourceUrl,
-            wikipediaData = domain.wikipediaData
+            wikipediaData = domain.wikipediaData,
+            embedableVideoCount = domain.embadableVideoCount
         )
     }
 
@@ -48,7 +49,8 @@ object ArtistMapper {
             imageAuthor = entity.imageAuthor,
             imageLicense = entity.imageLicense,
             imageSourceUrl = entity.imageSourceUrl,
-            wikipediaData = entity.wikipediaData
+            wikipediaData = entity.wikipediaData,
+            embadableVideoCount = entity.embedableVideoCount
         )
     }
 
@@ -69,7 +71,8 @@ object ArtistMapper {
             imageLicense = entity.artist.imageLicense,
             imageSourceUrl = entity.artist.imageSourceUrl,
             wikipediaData = entity.artist.wikipediaData,
-            videoCount = entity.videoCount
+            videoCount = entity.videoCount,
+            embadableVideoCount = entity.artist.embedableVideoCount
         )
     }
 

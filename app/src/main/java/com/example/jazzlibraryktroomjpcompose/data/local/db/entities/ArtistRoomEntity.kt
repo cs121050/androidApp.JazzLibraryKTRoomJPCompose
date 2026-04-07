@@ -58,8 +58,10 @@ data class ArtistRoomEntity(
     val imageSourceUrl: String? = null,
 
     @ColumnInfo(name = "wikipedia_data")
-    val wikipediaData: String? = null
+    val wikipediaData: String? = null,
 
+    @ColumnInfo(name = "embedable_video_count", defaultValue = "0")
+    val embedableVideoCount: Int = 0
 )
 
 

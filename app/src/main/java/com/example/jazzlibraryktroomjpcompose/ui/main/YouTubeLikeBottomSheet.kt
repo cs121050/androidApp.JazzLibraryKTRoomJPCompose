@@ -959,7 +959,7 @@ private fun PaginatedArtistChip(
     onClick: () -> Unit
 ) {
     // Determine if this chip has any videos
-    val hasVideos = artist.videoCount > 0
+    val hasVideos = artist.embadableVideoCount > 0
     val alpha = if (hasVideos) 1f else 0.5f
 
     // Colors with alpha applied

@@ -36,6 +36,16 @@ interface ArtistDao {
     @Query("DELETE FROM artists")
     suspend fun deleteAllArtists()
 
+    @Query("""
+    UPDATE artists SET embedable_video_count = (
+        SELECT COUNT(v.video_id)
+        FROM video_contains_artist vca
+        JOIN videos v ON vca.video_id = v.video_id
+        WHERE vca.artist_id = artists.artist_id AND v.video_availability = '1'
+    )
+""")
+    suspend fun updateAllEmbedableVideoCounts()
+
 
     @Query("SELECT * FROM artists WHERE artist_id = :id")
     fun getArtistById(id: Int): Flow<ArtistRoomEntity>
