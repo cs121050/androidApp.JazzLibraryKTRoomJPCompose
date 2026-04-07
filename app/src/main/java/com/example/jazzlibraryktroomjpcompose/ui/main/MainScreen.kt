@@ -125,7 +125,10 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.windowInsetsBottomHeight
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Cast
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.ui.unit.Dp
@@ -502,15 +505,11 @@ fun MainScreen(
                         // ----- PLAYER (draggable mini player) -----
                         if (playerUiState.isVisible) {
                             val density = LocalDensity.current
-                            val scope = rememberCoroutineScope()
                             val configuration = LocalConfiguration.current
                             val context = LocalContext.current
 
                             // Dragging state (only used in mini mode)
-                            val dragOffsetX = remember { Animatable(0f) }
                             val dragOffsetY = remember { Animatable(0f) }
-                            val closeThresholdPx = with(density) { 100.dp.toPx() }
-                            val xThresholdPx = with(density) { 100.dp.toPx() }
 
                             // Player size for boundary calculations
                             var playerSize by remember { mutableStateOf(IntSize.Zero) }
@@ -521,7 +520,6 @@ fun MainScreen(
                             // Reset offset when entering mini mode
                             LaunchedEffect(playerUiState.isInMiniMode) {
                                 if (playerUiState.isInMiniMode) {
-                                    dragOffsetY.snapTo(0f)
                                     dragOffsetY.snapTo(0f)
                                 }
                             }
@@ -557,55 +555,6 @@ fun MainScreen(
                                     .size(width = 235.dp, height = 200.dp)  // IMPORTANT : change this to 205 to 205 to comply with youtube rules!
                                     .padding(bottom = 6.dp, end = 6.dp)
                                     .align(Alignment.BottomEnd)
-                                    .offset { IntOffset(dragOffsetX.value.roundToInt(), dragOffsetY.value.roundToInt()) }
-                                    .pointerInput(Unit) {
-                                        detectDragGestures(
-                                            onDragStart = {
-                                                scope.launch {
-                                                    dragOffsetX.stop()
-                                                    dragOffsetY.stop()
-                                                }
-                                            },
-                                            onDrag = { change, dragAmount ->
-                                                change.consume()
-                                                scope.launch {
-                                                    var newX = (dragOffsetX.value + dragAmount.x).coerceIn(maxLeftOffset, 0f)
-                                                    var newY = (dragOffsetY.value + dragAmount.y).coerceIn(maxUpOffset, 0f)
-                                                    dragOffsetX.snapTo(newX)
-                                                    dragOffsetY.snapTo(newY)
-                                                }
-                                            },
-                                            onDragEnd = {
-                                                scope.launch {
-                                                    val dx = dragOffsetX.value
-                                                    val dy = dragOffsetY.value
-
-                                                    // Horizontal drag exceeds threshold AND is dominant direction
-                                                    if (abs(dx) > xThresholdPx && abs(dx) > abs(dy)) {
-                                                        Toast.makeText(context, "TODO: return feature triggered", Toast.LENGTH_SHORT).show()
-                                                        // Animate back
-                                                        dragOffsetX.animateTo(0f)
-                                                        dragOffsetY.animateTo(0f)
-                                                    }
-                                                    // Vertical drag exceeds close threshold
-                                                    else if (abs(dy) > closeThresholdPx) {
-                                                        playerViewModel.closePlayer()
-                                                    }
-                                                    // Otherwise snap back
-                                                    else {
-                                                        dragOffsetX.animateTo(0f)
-                                                        dragOffsetY.animateTo(0f)
-                                                    }
-                                                }
-                                            },
-                                            onDragCancel = {
-                                                scope.launch {
-                                                    dragOffsetX.animateTo(0f)
-                                                    dragOffsetY.animateTo(0f)
-                                                }
-                                            }
-                                        )
-                                    }
                                     .zIndex(5f)
 
                                 else -> {
@@ -628,7 +577,7 @@ fun MainScreen(
                             }
 
                             //miniplayer's box
-                            Box(
+                            Row(
                                 modifier = playerModifier
                                     .onGloballyPositioned { coordinates ->
                                         miniPlayerHeight = with(density) { coordinates.size.height.toDp() }
@@ -640,7 +589,11 @@ fun MainScreen(
                                     videoId = playerUiState.currentVideoId,
                                     isFullscreen = isFullscreen,
                                     isMiniMode = playerUiState.isInMiniMode && !isFullscreen,
-                                    onPlayerReady = { player -> playerViewModel.setPlayer(player) },
+                                    onPlayerReady = { player ->
+                                        playerViewModel.setPlayer(
+                                            player
+                                        )
+                                    },
                                     onWebViewReady = { webView ->
                                         webView.post {
                                             // Remove any extra space
@@ -651,16 +604,36 @@ fun MainScreen(
                                             webView.isHorizontalScrollBarEnabled = false
                                             webView.setInitialScale(100)
                                             // Force match parent
-                                            webView.layoutParams = webView.layoutParams.apply { // FIX: eliminates the scroling of the youtube content inside the youtubelpayer after fullscreen
-                                                width = ViewGroup.LayoutParams.MATCH_PARENT
-                                                height = ViewGroup.LayoutParams.MATCH_PARENT
-                                            }
+                                            webView.layoutParams =
+                                                webView.layoutParams.apply { // FIX: eliminates the scroling of the youtube content inside the youtubelpayer after fullscreen
+                                                    width =
+                                                        ViewGroup.LayoutParams.MATCH_PARENT
+                                                    height =
+                                                        ViewGroup.LayoutParams.MATCH_PARENT
+                                                }
                                             webView.requestLayout()
                                         }
                                     },
                                     onVideoEnded = { playerViewModel.nextVideo() },
-                                    modifier = Modifier.fillMaxSize()
+                                    modifier = Modifier
+                                        .weight(1f)          // Takes all available space after controls
+                                        .fillMaxHeight()
                                 )
+
+                                if (isFullscreen ) {
+                                    FullscreenControlsColumn(
+                                        onShare = { /* TODO */ },
+                                        onCast = { /* TODO */ },
+                                        onBack = { /* TODO */ },
+                                        onPrevious = { playerViewModel.previousVideo() },
+                                        onNext = { playerViewModel.nextVideo() },
+                                        onClose = { playerViewModel.closePlayer() },
+                                        modifier = Modifier
+                                            .fillMaxHeight()
+                                            .background(MaterialTheme.colorScheme.background)
+                                            .zIndex(10f)
+                                    )
+                                }
                             }
                         }
                     }
@@ -709,27 +682,50 @@ fun MainScreen(
                     }
                 }
             }
-
-            // youtube Player controls overlay (added)
-            PlayerControlsOverlay(
-                isVisible = playerUiState.isVisible,
-                isFullscreen = isFullscreen,
-                isMiniMode = playerUiState.isInMiniMode,
-                miniPlayerHeight = miniPlayerHeight,
-                onPrevious = {
-                    playerViewModel.previousVideo(startInMiniMode = currentTab != MainTab.VIDEOS)
-                },
-                onNext = {
-                    playerViewModel.nextVideo(startInMiniMode = currentTab != MainTab.VIDEOS)
-                },
-                onClose = { playerViewModel.closePlayer() },
-                modifier = Modifier.fillMaxSize()
-            )
         }
     }
 }
 
-
+@Composable
+private fun FullscreenControlsColumn(
+    onShare: () -> Unit,
+    onCast: () -> Unit,
+    onBack: () -> Unit,
+    onPrevious: () -> Unit,
+    onNext: () -> Unit,
+    onClose: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        IconButton(onClick = onShare) {
+            Icon(Icons.Default.Share, contentDescription = "Share", tint = Color.White)
+        }
+        Spacer(modifier = Modifier.height(16.dp))
+        IconButton(onClick = onCast) {
+            Icon(Icons.Default.Cast, contentDescription = "Cast", tint = Color.White)
+        }
+        Spacer(modifier = Modifier.height(16.dp))
+        IconButton(onClick = onBack) {
+            Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = Color.White)
+        }
+        Spacer(modifier = Modifier.height(32.dp))
+        IconButton(onClick = onPrevious) {
+            Icon(Icons.Default.SkipPrevious, contentDescription = "Previous", tint = Color.White)
+        }
+        Spacer(modifier = Modifier.height(16.dp))
+        IconButton(onClick = onNext) {
+            Icon(Icons.Default.SkipNext, contentDescription = "Next", tint = Color.White)
+        }
+        Spacer(modifier = Modifier.height(16.dp))
+        IconButton(onClick = onClose) {
+            Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White)
+        }
+    }
+}
 
 // Updated LoadingScreen (simpler)
 @Composable
@@ -869,24 +865,24 @@ fun VideoStatsRow(
     val controlsAccessible = isPlayerVisible && isVideoPlaying
 
     val pagerState = rememberPagerState(
-        initialPage = if (controlsAccessible) 0 else 1,
-        pageCount = { 2 }
+        initialPage = if (controlsAccessible) 1 else 2,
+        pageCount = { 3 }
     )
     val coroutineScope = rememberCoroutineScope()
-
+    val context = LocalContext.current
 
 
 
     // Keep pager on minimise page when controls become inaccessible
     LaunchedEffect(controlsAccessible) {
-        if (!controlsAccessible && pagerState.currentPage != 1) {
-            pagerState.animateScrollToPage(1)
+        if (!controlsAccessible && pagerState.currentPage != 2) {
+            pagerState.animateScrollToPage(2)
         }
     }
 
     LaunchedEffect(isVideoPlaying) {
-        if (controlsAccessible && pagerState.currentPage != 0) {
-            pagerState.animateScrollToPage(0)
+        if (controlsAccessible && pagerState.currentPage != 1) {
+            pagerState.animateScrollToPage(1)
         }
         Log.d("VIDEOSTATROW", "controlsAccessible: $controlsAccessible")
     }
@@ -921,7 +917,7 @@ fun VideoStatsRow(
 
 // In LaunchedEffect that triggers when pagerState.currentPage == 0
     LaunchedEffect(pagerState.currentPage) {
-        if (pagerState.currentPage == 0 && !playerUiState.isVisible) {
+        if (pagerState.currentPage == 1 && !playerUiState.isVisible) {
             loadFirstVideo()
         }
     }
@@ -1017,10 +1013,33 @@ fun VideoStatsRow(
         ) { page ->
             when (page) {
                 0 -> {
+                    // Extra controls (share, cast, back)
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(0.dp)
                     ) {
-                        IconButton(onClick = onPreviousClick) {   // use custom previous
+                        IconButton(onClick = {
+                            Toast.makeText(context, "Share - to be implemented", Toast.LENGTH_SHORT).show()
+                        }) {
+                            Icon(Icons.Default.Share, contentDescription = "Share")
+                        }
+                        IconButton(onClick = {
+                            Toast.makeText(context, "Cast - to be implemented", Toast.LENGTH_SHORT).show()
+                        }) {
+                            Icon(Icons.Default.Cast, contentDescription = "Cast")
+                        }
+                        IconButton(onClick = {
+                            Toast.makeText(context, "Back - to be implemented", Toast.LENGTH_SHORT).show()
+                        }) {
+                            Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                        }
+                    }
+                }
+                1 -> {
+                    // Playback controls (previous, next, close)
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(0.dp)
+                    ) {
+                        IconButton(onClick = onPreviousClick) {
                             Icon(Icons.Default.SkipPrevious, contentDescription = "Previous")
                         }
                         IconButton(onClick = onNextClick) {
@@ -1029,14 +1048,15 @@ fun VideoStatsRow(
                         IconButton(onClick = {
                             coroutineScope.launch {
                                 onClose()
-                                pagerState.animateScrollToPage(1)
+                                pagerState.animateScrollToPage(2)
                             }
                         }) {
                             Icon(Icons.Default.Close, contentDescription = "Close")
                         }
                     }
                 }
-                1 -> {
+                2 -> {
+                    // Global toggle (show/hide players)
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.End
