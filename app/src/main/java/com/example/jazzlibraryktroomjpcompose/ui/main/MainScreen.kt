@@ -716,8 +716,12 @@ fun MainScreen(
                 isFullscreen = isFullscreen,
                 isMiniMode = playerUiState.isInMiniMode,
                 miniPlayerHeight = miniPlayerHeight,
-                onPrevious = { playerViewModel.previousVideo() },
-                onNext = { playerViewModel.nextVideo() },
+                onPrevious = {
+                    playerViewModel.previousVideo(startInMiniMode = currentTab != MainTab.VIDEOS)
+                },
+                onNext = {
+                    playerViewModel.nextVideo(startInMiniMode = currentTab != MainTab.VIDEOS)
+                },
                 onClose = { playerViewModel.closePlayer() },
                 modifier = Modifier.fillMaxSize()
             )
