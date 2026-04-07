@@ -21,6 +21,7 @@ fun LeftDrawer(
     isOpen: Boolean,
     onClose: () -> Unit,
     onRefreshClick: () -> Unit, // NEW: Add refresh callback
+    onClearHistoryClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -49,9 +50,10 @@ fun LeftDrawer(
         // Menu Items
         val menuItems = listOf(
             MenuItem("Refresh Data", Icons.Default.Refresh) { onRefreshClick(); onClose() },
+            MenuItem("Clear History", Icons.Default.History) { onClearHistoryClick(); onClose() },
+
             MenuItem("Bookmarks", Icons.Default.Bookmark) { /* Handle bookmarks */ },
             MenuItem("Playlists", Icons.Default.PlaylistPlay) { /* Handle playlists */ },
-            MenuItem("History", Icons.Default.History) { /* Handle history */ },
             MenuItem("Settings", Icons.Default.Settings) { /* Handle settings */ },
             MenuItem("About", Icons.Default.Info) { /* Handle about */ }
         )
