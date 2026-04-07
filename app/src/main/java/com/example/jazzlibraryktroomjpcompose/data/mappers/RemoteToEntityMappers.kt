@@ -52,7 +52,8 @@ object RemoteToEntityMappers {
             musicbrainzUUID = this.musicbrainzUUID,
             discogsId = this.discogsId ?: 0,
             wikipediaUrl = this.wikipediaUrl,
-            wikipediaData = this.wikipedia_data
+            wikipediaData = this.wikipedia_data,
+            embedableVideoCount = 0
         )
     }
 

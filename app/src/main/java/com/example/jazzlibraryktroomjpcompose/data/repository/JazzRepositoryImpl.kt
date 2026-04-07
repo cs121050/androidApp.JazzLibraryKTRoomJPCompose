@@ -69,6 +69,8 @@ class JazzRepositoryImpl(
                         instruments, types, durations, videos,
                         artists, quotes, videoContainsArtists
                     )
+
+                    updateArtistsEmbedableVideoCounts()
                 }
 
                 Result.success(Unit)
@@ -110,5 +112,9 @@ class JazzRepositoryImpl(
 
     suspend fun isDatabaseEmpty(): Boolean = withContext(Dispatchers.IO) {
         database.videoDao().getCount() == 0
+    }
+
+    private suspend fun updateArtistsEmbedableVideoCounts() {
+        database.artistDao().updateAllEmbedableVideoCounts()
     }
 }

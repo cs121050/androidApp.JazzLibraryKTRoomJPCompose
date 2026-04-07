@@ -1757,7 +1757,7 @@ fun ArtistCard(
     modifier: Modifier = Modifier,
     onClick: () -> Unit = {}
 ) {
-    val hasVideos = artist.videoCount > 0
+    val hasVideos = artist.embadableVideoCount > 0
     val shape = RoundedCornerShape(12.dp)
 
     Box(
