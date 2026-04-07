@@ -57,4 +57,6 @@ interface FilterPathDao {
     @Query("DELETE FROM filter_path")
     suspend fun deleteAll()
 
+    @Query("SELECT COUNT(*) FROM filter_path")
+    suspend fun getCount(): Int
 }

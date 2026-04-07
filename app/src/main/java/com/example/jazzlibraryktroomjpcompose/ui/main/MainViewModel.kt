@@ -145,11 +145,19 @@ class MainViewModel @Inject constructor(
         viewModelScope.launch {
             _loadingState.value = LoadingState.LOADING
 
+            val emptyId = ensureInitialFilterPath()
+            if (emptyId != null) {
+                _currentFilterPathId.value = emptyId
+            }
+
             val hasData = checkIfDatabaseHasData()
 
             if (hasData) {
                 println("DEBUG: Database has data, loading from local storage")
                 _loadingState.value = LoadingState.SUCCESS
+
+                ensureInitialFilterPath()
+
                 loadInitialData()
                 loadFilterPath()
             } else {
@@ -613,13 +621,29 @@ class MainViewModel @Inject constructor(
 
     fun clearHistory() {
         viewModelScope.launch {
+            // 1. Delete all rows from filter_path table
             database.filterPathDao().deleteAll()
-            _enrichedHistory.value = emptyList()
-            // Optionally reset current filter path
+
+            // 2. Insert a new empty filter path (serialNumber = "") as the current state
+            val emptyEntry = FilterPathRoomEntity(
+                serialNumber = "",
+                timestamp = System.currentTimeMillis()
+            )
+            val newId = database.filterPathDao().insertFilterPathAndGetId(emptyEntry)
+            _currentFilterPathId.value = newId.toInt()
+
+            // 3. Reset the UI state to empty filters
             _currentFilterPath.value = emptyList()
-            currentStateTimestamp = 0L
-            _currentFilterPathId.value = null
+            currentStateTimestamp = emptyEntry.timestamp
             applyFiltersFromPath(emptyList())
+
+            // 4. Refresh the history UI (enriched list)
+            loadEnrichedHistory()
+
+            // 5. Also refresh the raw history entries flow (if used elsewhere)
+            database.filterPathDao().getAllFilterPaths().collect { entries ->
+                _historyEntries.value = entries
+            }
         }
     }
 
@@ -652,6 +676,21 @@ class MainViewModel @Inject constructor(
         }
     }
 
+    private suspend fun ensureInitialFilterPath(): Int? {
+        val count = database.filterPathDao().getCount()
+        return if (count == 0) {
+            val emptyEntry = FilterPathRoomEntity(
+                serialNumber = "",
+                timestamp = System.currentTimeMillis()
+            )
+            //Inserted empty filter path with id
+            val id = database.filterPathDao().insertFilterPathAndGetId(emptyEntry)
+            id.toInt()
+        } else {
+            // Get the latest entry's ID
+            database.filterPathDao().getLatestFilterPath()?.id
+        }
+    }
 }
 
 // UI State classes (unchanged)

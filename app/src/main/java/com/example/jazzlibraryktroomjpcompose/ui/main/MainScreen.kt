@@ -647,6 +647,7 @@ fun MainScreen(
                 isOpen = leftDrawerState == DrawerState.OPEN,
                 onClose = { viewModel.toggleLeftDrawer() },
                 onRefreshClick = { viewModel.safeRefreshDataFromAPI() },
+                onClearHistoryClick = {viewModel.clearHistory() },
                 modifier = Modifier
                     .fillMaxHeight()
                     .width(280.dp)
@@ -1887,37 +1888,6 @@ fun HistoryContent(
             .fillMaxSize()
             .nestedScroll(nestedScrollConnection)
     ) {
-        // History Filter Bar (slides out)
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .onGloballyPositioned { coordinates ->
-                    filterBarHeightPx.intValue = coordinates.size.height
-                }
-                .offset { IntOffset(0, filterBarOffset.roundToInt()) }
-                .background(MaterialTheme.colorScheme.surface)
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.End,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // Menu button
-            var expanded by remember { mutableStateOf(false) }
-            IconButton(onClick = { expanded = true }) {
-                Icon(Icons.Default.MoreVert, contentDescription = "Menu")
-            }
-            DropdownMenu(
-                expanded = expanded,
-                onDismissRequest = { expanded = false }
-            ) {
-                DropdownMenuItem(
-                    text = { Text("Clear History") },
-                    onClick = {
-                        viewModel.clearHistory()
-                        expanded = false
-                    }
-                )
-            }
-        }
 
         // History List
         LazyColumn(
