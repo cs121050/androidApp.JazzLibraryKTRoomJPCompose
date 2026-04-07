@@ -614,7 +614,9 @@ fun MainScreen(
                                             webView.requestLayout()
                                         }
                                     },
-                                    onVideoEnded = { playerViewModel.nextVideo() },
+                                    onVideoEnded = {
+                                        playerViewModel.nextVideo(startInMiniMode = currentTab != MainTab.VIDEOS)
+                                    },
                                     modifier = Modifier
                                         .weight(1f)          // Takes all available space after controls
                                         .fillMaxHeight()
@@ -1410,27 +1412,27 @@ fun VideoCard(
                         tint = MaterialTheme.colorScheme.primary
                     )
 
-                    // Optional: keep the fullscreen button (opens YouTube app)
-                    IconButton(
-                        onClick = {
-                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(video.path))
-                            context.startActivity(intent)
-                        },
-                        modifier = Modifier
-                            .align(Alignment.BottomEnd)
-                            .padding(8.dp)
-                            .size(48.dp)
-                            .background(
-                                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.7f),
-                                shape = RoundedCornerShape(24.dp)
-                            )
-                    ) {
-                        Icon(
-                            Icons.Default.Fullscreen,
-                            contentDescription = "Open in YouTube app",
-                            tint = Color.White
-                        )
-                    }
+                     // Optional: keep the fullscreen button (opens YouTube app)
+//                    IconButton(
+//                        onClick = {
+//                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(video.path))
+//                            context.startActivity(intent)
+//                        },
+//                        modifier = Modifier
+//                            .align(Alignment.BottomEnd)
+//                            .padding(8.dp)
+//                            .size(48.dp)
+//                            .background(
+//                                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.7f),
+//                                shape = RoundedCornerShape(24.dp)
+//                            )
+//                    ) {
+//                        Icon(
+//                            Icons.Default.Fullscreen,
+//                            contentDescription = "Open in YouTube app",
+//                            tint = Color.White
+//                        )
+//                    }
                 }
 
 
