@@ -6,7 +6,7 @@ import androidx.room.ForeignKey
 import androidx.room.PrimaryKey
 
 @Entity(
-    tableName = "filter_path_contains_video",
+    tableName = "filter_path_contains_media",
     foreignKeys = [
         ForeignKey(
             entity = FilterPathRoomEntity::class,
@@ -22,7 +22,7 @@ import androidx.room.PrimaryKey
         )
     ]
 )
-data class FilterPathContainsVideoRoomEntity(
+data class FilterPathContainsMediaRoomEntity(
     @PrimaryKey(autoGenerate = true)
     @ColumnInfo(name = "id")
     val id: Int = 0,

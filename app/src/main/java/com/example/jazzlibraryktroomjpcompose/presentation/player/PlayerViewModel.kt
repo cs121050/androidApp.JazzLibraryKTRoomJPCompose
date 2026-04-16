@@ -5,8 +5,8 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.jazzlibraryktroomjpcompose.data.local.db.JazzDatabase
-import com.example.jazzlibraryktroomjpcompose.data.local.db.daos.FilterPathContainsVideoDao
-import com.example.jazzlibraryktroomjpcompose.data.local.db.entities.FilterPathContainsVideoRoomEntity
+import com.example.jazzlibraryktroomjpcompose.data.local.db.daos.FilterPathContainsMediaDao
+import com.example.jazzlibraryktroomjpcompose.data.local.db.entities.FilterPathContainsMediaRoomEntity
 import com.example.jazzlibraryktroomjpcompose.data.player.YouTubePlayerControllerImpl
 import com.example.jazzlibraryktroomjpcompose.domain.models.FilterPath
 import com.example.jazzlibraryktroomjpcompose.domain.models.Video
@@ -33,8 +33,8 @@ class PlayerViewModel @Inject constructor(
     private val _playerEvents = MutableSharedFlow<PlayerEvent>()
     val playerEvents: SharedFlow<PlayerEvent> = _playerEvents.asSharedFlow()
 
-    private val filterPathContainsVideoDao: FilterPathContainsVideoDao
-        get() = database.filterPathContainsVideoDao()
+    private val filterPathContainsMediaDao: FilterPathContainsMediaDao
+        get() = database.filterPathContainsMediaDao()
 
     val currentVideoDbIdState: StateFlow<Int?> = _uiState
         .map { it.currentVideoDbId }
@@ -102,11 +102,11 @@ class PlayerViewModel @Inject constructor(
 
         if (videoDbId != null && filterPathId != null && filterPathId > 0) {
             viewModelScope.launch {
-                val entry = FilterPathContainsVideoRoomEntity(
+                val entry = FilterPathContainsMediaRoomEntity(
                     filterPathId = filterPathId,
                     videoId = videoDbId
                 )
-                filterPathContainsVideoDao.insert(entry)
+                filterPathContainsMediaDao.insert(entry)
             }
         }
     }
