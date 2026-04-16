@@ -1,15 +1,20 @@
 package com.example.jazzlibraryktroomjpcompose.data.repository
 
 
+import android.util.Log
 import androidx.room.withTransaction
 import com.example.jazzlibraryktroomjpcompose.data.local.db.JazzDatabase
+import com.example.jazzlibraryktroomjpcompose.data.local.db.entities.AlbumContainsArtistRoomEntity
+import com.example.jazzlibraryktroomjpcompose.data.local.db.entities.AlbumRoomEntity
 import com.example.jazzlibraryktroomjpcompose.data.local.db.entities.ArtistRoomEntity
 import com.example.jazzlibraryktroomjpcompose.data.local.db.entities.DurationRoomEntity
 import com.example.jazzlibraryktroomjpcompose.data.local.db.entities.InstrumentRoomEntity
 import com.example.jazzlibraryktroomjpcompose.data.local.db.entities.QuoteRoomEntity
+import com.example.jazzlibraryktroomjpcompose.data.local.db.entities.SongRoomEntity
 import com.example.jazzlibraryktroomjpcompose.data.local.db.entities.TypeRoomEntity
 import com.example.jazzlibraryktroomjpcompose.data.local.db.entities.VideoContainsArtistRoomEntity
 import com.example.jazzlibraryktroomjpcompose.data.local.db.entities.VideoRoomEntity
+import com.example.jazzlibraryktroomjpcompose.data.mappers.RemoteToEntityMappers.toAlbumContainsArtistEntities
 import com.example.jazzlibraryktroomjpcompose.data.mappers.RemoteToEntityMappers.toArtistEntities
 import com.example.jazzlibraryktroomjpcompose.data.mappers.RemoteToEntityMappers.toDurationEntities
 import com.example.jazzlibraryktroomjpcompose.data.mappers.RemoteToEntityMappers.toInstrumentEntities
@@ -17,6 +22,8 @@ import com.example.jazzlibraryktroomjpcompose.data.mappers.RemoteToEntityMappers
 import com.example.jazzlibraryktroomjpcompose.data.mappers.RemoteToEntityMappers.toTypeEntities
 import com.example.jazzlibraryktroomjpcompose.data.mappers.RemoteToEntityMappers.toVideoContainsArtistEntities
 import com.example.jazzlibraryktroomjpcompose.data.mappers.RemoteToEntityMappers.toVideoEntities
+import com.example.jazzlibraryktroomjpcompose.data.mappers.RemoteToEntityMappers.toSongEntities
+import com.example.jazzlibraryktroomjpcompose.data.mappers.RemoteToEntityMappers.toAlbumEntities
 import com.example.jazzlibraryktroomjpcompose.data.remote.api.RetrofitClient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -56,6 +63,14 @@ class JazzRepositoryImpl(
                 val artists = bootstrapData.artistList.toArtistEntities()
                 val quotes = bootstrapData.quoteList.toQuoteEntities()
                 val videoContainsArtists = bootstrapData.videoContainsArtistList.toVideoContainsArtistEntities()
+                val albums = bootstrapData.albumList.toAlbumEntities()
+                val songs = bootstrapData.songList.toSongEntities()
+                val albumContainsArtists = bootstrapData.albumContainsArtistList.toAlbumContainsArtistEntities()
+
+
+                // Create lookup sets for quick validation
+                val artistIds = artists.map { it.id }.toSet()
+                val albumIds = albums.map { it.albumId }.toSet()
 
                 // Use withTransaction which supports suspend functions
                 //    withTransaction: If any insert fails → ALL changes are rolled back
@@ -67,7 +82,8 @@ class JazzRepositoryImpl(
                     // Insert all data
                     insertAllDataWithinTransaction(
                         instruments, types, durations, videos,
-                        artists, quotes, videoContainsArtists
+                        artists, quotes, videoContainsArtists,
+                        albums, songs, albumContainsArtists
                     )
 
                     updateArtistsEmbedableVideoCounts()
@@ -90,6 +106,9 @@ class JazzRepositoryImpl(
         database.durationDao().deleteAllDurations()
         database.typeDao().deleteAllTypes()
         database.instrumentDao().deleteAllInstruments()
+        database.albumDao().deleteAllAlbums()
+        database.songDao().deleteAllSongs()
+        database.albumContainsArtistDao().deleteAllAlbumContainsArtists()
     }
 
     private suspend fun insertAllDataWithinTransaction(
@@ -99,7 +118,10 @@ class JazzRepositoryImpl(
         videos: List<VideoRoomEntity>,
         artists: List<ArtistRoomEntity>,
         quotes: List<QuoteRoomEntity>,
-        videoContainsArtists: List<VideoContainsArtistRoomEntity>
+        videoContainsArtists: List<VideoContainsArtistRoomEntity>,
+        albums: List<AlbumRoomEntity>,
+        songs: List<SongRoomEntity>,
+        albumContainsArtists: List<AlbumContainsArtistRoomEntity>
     ) {
         database.instrumentDao().insertAllInstruments(instruments)
         database.typeDao().insertAllTypes(types)
@@ -108,6 +130,9 @@ class JazzRepositoryImpl(
         database.videoDao().insertAllVideos(videos)
         database.quoteDao().insertAllQuotes(quotes)
         database.videoContainsArtistDao().insertAllVideoContainsArtists(videoContainsArtists)
+        database.albumDao().insertAllAlbums(albums)
+        database.songDao().insertAllSongs(songs)
+        database.albumContainsArtistDao().insertAllAlbumContainsArtists(albumContainsArtists)
     }
 
     suspend fun isDatabaseEmpty(): Boolean = withContext(Dispatchers.IO) {

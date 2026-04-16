@@ -73,6 +73,49 @@ object RemoteToEntityMappers {
         )
     }
 
+    fun RemoteAlbumContainsArtist.toAlbumContainsArtistEntity(): AlbumContainsArtistRoomEntity {
+        return AlbumContainsArtistRoomEntity(
+            artistId = this.artistId,
+            albumId = this.albumId,
+            isMain = this.isMain
+        )
+    }
+
+    fun RemoteSong.toSongEntity(): SongRoomEntity {
+        return SongRoomEntity(
+            songId = this.songId,
+            mainArtistId = this.mainArtistId,
+            relatedArtists = this.relatedArtists,
+            albumId = this.albumId,
+            songTitle = this.songTitle,
+            duration = this.duration,
+            ytVideoId = this.ytVideoId,
+            videoAvailability = this.videoAvailability
+        )
+    }
+
+    fun RemoteAlbum.toAlbumEntity(): AlbumRoomEntity {
+        return AlbumRoomEntity(
+            albumId = this.albumId,
+            youtubeVideoIdForThumbnail = this.youtubeVideoIdForThumbnail,
+            ratingAverage = this.ratingAverage,
+            ratingCount = this.ratingCount,
+            released = this.released,
+            releaseType = this.releaseType,
+            title = this.title,
+            wikipediaUrl = this.wikipediaUrl,
+            coverartarchiveThumb = this.coverartarchiveThumb,
+            extraArtists = this.extraArtists,
+            genres = this.genres,
+            labels = this.labels,
+            styles = this.styles,
+            tracklist = this.tracklist,
+            wikipediaData = this.wikipediaData
+        )
+    }
+
+
+
     // Extension functions  that converts
     // a list of RemoteInstrument objects to a list of InstrumentRoomEntity
     fun List<RemoteInstrument>.toInstrumentEntities(): List<InstrumentRoomEntity> {
@@ -102,4 +145,17 @@ object RemoteToEntityMappers {
     fun List<RemoteVideoContainsArtist>.toVideoContainsArtistEntities(): List<VideoContainsArtistRoomEntity> {
         return this.map { it.toVideoContainsArtistEntity() }
     }
+
+    fun List<RemoteAlbumContainsArtist>.toAlbumContainsArtistEntities(): List<AlbumContainsArtistRoomEntity> {
+        return this.map { it.toAlbumContainsArtistEntity() }
+    }
+
+    fun List<RemoteSong>.toSongEntities(): List<SongRoomEntity> {
+        return this.map { it.toSongEntity() }
+    }
+
+    fun List<RemoteAlbum>.toAlbumEntities(): List<AlbumRoomEntity> {
+        return this.map { it.toAlbumEntity() }
+    }
+
 }

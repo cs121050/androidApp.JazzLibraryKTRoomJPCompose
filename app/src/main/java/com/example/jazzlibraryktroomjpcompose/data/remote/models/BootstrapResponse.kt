@@ -23,7 +23,16 @@ data class BootstrapResponse(
     val quoteList: List<RemoteQuote>,
 
     @SerializedName("videoContainsArtistList")
-    val videoContainsArtistList: List<RemoteVideoContainsArtist>
+    val videoContainsArtistList: List<RemoteVideoContainsArtist>,
+
+    @SerializedName("songList")
+    val songList: List<RemoteSong>,
+
+    @SerializedName("albumList")
+    val albumList: List<RemoteAlbum>,
+
+    @SerializedName("albumContainsArtistList")
+    val albumContainsArtistList: List<RemoteAlbumContainsArtist>
 )
 
 data class RemoteInstrument(
@@ -132,3 +141,88 @@ data class RemoteVideoContainsArtist(
     @SerializedName("video_id")
     val videoId: Int
 )
+
+data class RemoteAlbumContainsArtist(
+    @SerializedName("artist_id")
+    val artistId: Int,
+
+    @SerializedName("album_id")
+    val albumId: Int,
+
+    @SerializedName("is_main")
+    val isMain: Int
+)
+
+data class RemoteSong(
+    @SerializedName("song_id")
+    val songId: Int,
+
+    @SerializedName("main_artist_id")
+    val mainArtistId: Int,
+
+    @SerializedName("related_artists")
+    val relatedArtists: String?,
+
+    @SerializedName("album_id")
+    val albumId: Int?,
+
+    @SerializedName("song_title")
+    val songTitle: String,
+
+    @SerializedName("duration")
+    val duration: String?,
+
+    @SerializedName("yt_videoid")
+    val ytVideoId: String?,
+
+    @SerializedName("video_availability")
+    val videoAvailability: String?
+)
+
+data class RemoteAlbum(
+    @SerializedName("album_id")
+    val albumId: Int,
+
+    @SerializedName("youtube_video_id_for_thumbnail")
+    val youtubeVideoIdForThumbnail: String?,
+
+    @SerializedName("rating_average")
+    val ratingAverage: Double?,
+
+    @SerializedName("rating_count")
+    val ratingCount: Int?,
+
+    @SerializedName("released")
+    val released: String?,
+
+    @SerializedName("release_type")
+    val releaseType: String?,
+
+    @SerializedName("title")
+    val title: String,
+
+    @SerializedName("wikipedia_url")
+    val wikipediaUrl: String?,
+
+    @SerializedName("coverartarchive_thumb")
+    val coverartarchiveThumb: String?,
+
+    @SerializedName("extra_artists")
+    val extraArtists: String?,
+
+    @SerializedName("genres")
+    val genres: String?,
+
+    @SerializedName("labels")
+    val labels: String?,
+
+    @SerializedName("styles")
+    val styles: String?,
+
+    @SerializedName("tracklist")
+    val tracklist: String?,
+
+    @SerializedName("wikipedia_data")
+    val wikipediaData: String?
+)
+

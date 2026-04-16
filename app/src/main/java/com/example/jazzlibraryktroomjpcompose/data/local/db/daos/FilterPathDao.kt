@@ -48,7 +48,7 @@ interface FilterPathDao {
         v.video_path AS videoPath,
         v.location_id AS locationId
     FROM filter_path f
-    LEFT JOIN filter_path_contains_video fcv ON fcv.filter_path_room_entity_id = f.id
+    LEFT JOIN filter_path_contains_media fcv ON fcv.filter_path_room_entity_id = f.id
     LEFT JOIN videos v ON v.video_id = fcv.video_id
     ORDER BY f.timestamp DESC
 """)
