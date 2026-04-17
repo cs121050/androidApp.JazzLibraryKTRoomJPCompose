@@ -67,11 +67,6 @@ class JazzRepositoryImpl(
                 val songs = bootstrapData.songList.toSongEntities()
                 val albumContainsArtists = bootstrapData.albumContainsArtistList.toAlbumContainsArtistEntities()
 
-
-                // Create lookup sets for quick validation
-                val artistIds = artists.map { it.id }.toSet()
-                val albumIds = albums.map { it.albumId }.toSet()
-
                 // Use withTransaction which supports suspend functions
                 //    withTransaction: If any insert fails → ALL changes are rolled back
                 //    Prevents partial/corrupted data in database

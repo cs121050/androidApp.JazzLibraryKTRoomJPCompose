@@ -1,6 +1,23 @@
 package com.example.jazzlibraryktroomjpcompose.domain
 
 import com.example.jazzlibraryktroomjpcompose.data.local.db.JazzDatabase
+import com.example.jazzlibraryktroomjpcompose.data.local.db.entities.AlbumRoomEntity
+import com.example.jazzlibraryktroomjpcompose.data.local.db.entities.ArtistRoomEntity
+import com.example.jazzlibraryktroomjpcompose.data.local.db.entities.ArtistWithVideoCount
+import com.example.jazzlibraryktroomjpcompose.data.local.db.entities.DurationRoomEntity
+import com.example.jazzlibraryktroomjpcompose.data.local.db.entities.DurationWithVideoCount
+import com.example.jazzlibraryktroomjpcompose.data.local.db.entities.InstrumentRoomEntity
+import com.example.jazzlibraryktroomjpcompose.data.local.db.entities.InstrumentWithVideoCount
+import com.example.jazzlibraryktroomjpcompose.data.local.db.entities.TypeRoomEntity
+import com.example.jazzlibraryktroomjpcompose.data.local.db.entities.TypeWithVideoCount
+import com.example.jazzlibraryktroomjpcompose.data.local.db.entities.VideoRoomEntity
+import com.example.jazzlibraryktroomjpcompose.data.mappers.AlbumMapper
+import com.example.jazzlibraryktroomjpcompose.data.mappers.ArtistMapper
+import com.example.jazzlibraryktroomjpcompose.data.mappers.DurationMapper
+import com.example.jazzlibraryktroomjpcompose.data.mappers.InstrumentMapper
+import com.example.jazzlibraryktroomjpcompose.data.mappers.TypeMapper
+import com.example.jazzlibraryktroomjpcompose.data.mappers.VideoMapper
+import com.example.jazzlibraryktroomjpcompose.domain.models.Album
 import com.example.jazzlibraryktroomjpcompose.domain.models.FilterPath
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
@@ -16,6 +33,7 @@ class FilterManager @Inject constructor(
 
     data class FilteredData(
         val videos: List<com.example.jazzlibraryktroomjpcompose.domain.models.Video>,
+        val albums: List<Album>,
         val artists: List<com.example.jazzlibraryktroomjpcompose.domain.models.Artist>,
         val instruments: List<com.example.jazzlibraryktroomjpcompose.domain.models.Instrument>,
         val durations: List<com.example.jazzlibraryktroomjpcompose.domain.models.Duration>,
@@ -37,6 +55,11 @@ class FilterManager @Inject constructor(
                 artistId = artistFilter?.entityId ?: 0,
                 durationId = durationFilter?.entityId ?: 0,
                 typeId = typeFilter?.entityId ?: 0
+            )
+
+            val albumsFlow = database.albumDao().getAlbumByMultipleFilters(
+                instrumentId = instrumentFilter?.entityId ?: 0,
+                artistId = artistFilter?.entityId ?: 0
             )
 
             // Get filtered artists
@@ -92,18 +115,26 @@ class FilterManager @Inject constructor(
             // Combine all flows
             combine(
                 videosFlow,
-                artistsFlowWithCount,//artistsFlow,
-                instrumentsFlowWithCount,//instrumentsFlow,
-                durationsFlowWithCount,//durationsFlow,
-                typesFlowWithCount//typesFlow
-            ) { videos, artists, instruments, durations, types ->
+                albumsFlow,
+                artistsFlowWithCount,
+                instrumentsFlowWithCount,
+                durationsFlowWithCount,
+                typesFlowWithCount
+            ) { values ->
+                val videos = values[0] as List<VideoRoomEntity>
+                val albums = values[1] as List<AlbumRoomEntity>
+                val artists = values[2] as List<ArtistWithVideoCount>
+                val instruments = values[3] as List<InstrumentWithVideoCount>
+                val durations = values[4] as List<DurationWithVideoCount>
+                val types = values[5] as List<TypeWithVideoCount>
 
                 FilteredData(
-                    videos = videos.map { com.example.jazzlibraryktroomjpcompose.data.mappers.VideoMapper.toDomain(it) },
-                    artists = artists.map { com.example.jazzlibraryktroomjpcompose.data.mappers.ArtistMapper.toDomainWithCount(it) },
-                    instruments = instruments.map { com.example.jazzlibraryktroomjpcompose.data.mappers.InstrumentMapper.toDomainWithCount(it) },
-                    durations = durations.map { com.example.jazzlibraryktroomjpcompose.data.mappers.DurationMapper.toDomainWithCount(it) },
-                    types = types.map { com.example.jazzlibraryktroomjpcompose.data.mappers.TypeMapper.toDomainWithCount(it) },
+                    videos = videos.map { VideoMapper.toDomain(it) },
+                    albums = albums.map { AlbumMapper.toDomain(it) },
+                    artists = artists.map { ArtistMapper.toDomainWithCount(it) },
+                    instruments = instruments.map { InstrumentMapper.toDomainWithCount(it) },
+                    durations = durations.map { DurationMapper.toDomainWithCount(it) },
+                    types = types.map { TypeMapper.toDomainWithCount(it) },
                     filterPath = filterPath
                 )
             }.collect { emit(it) }
@@ -219,4 +250,6 @@ class FilterManager @Inject constructor(
 
         return result.distinctBy { it.categoryId }  // Deduplicate before returning
     }
+
+
 }

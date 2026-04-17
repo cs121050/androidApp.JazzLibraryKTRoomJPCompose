@@ -76,7 +76,8 @@ class PlayerViewModel @Inject constructor(
                   List<FilterPath>?,
                   startInMiniMode: Boolean = false,
                   videoDbId: Int?,
-                  filterPathId: Int?
+                  filterPathId: Int?,
+                  typeOfMedia: Int = 0
     ) {
 
         currentFilterPathId = filterPathId
@@ -104,7 +105,8 @@ class PlayerViewModel @Inject constructor(
             viewModelScope.launch {
                 val entry = FilterPathContainsMediaRoomEntity(
                     filterPathId = filterPathId,
-                    videoId = videoDbId
+                    videoId = videoDbId,
+                    typeOfMedia = typeOfMedia
                 )
                 filterPathContainsMediaDao.insert(entry)
             }

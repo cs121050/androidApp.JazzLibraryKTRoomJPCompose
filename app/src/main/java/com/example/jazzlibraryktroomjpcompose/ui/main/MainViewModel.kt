@@ -1,6 +1,7 @@
 // MainViewModel.kt - Updated to only fetch API data when database is empty
 package com.example.jazzlibraryktroomjpcompose.ui.main
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.jazzlibraryktroomjpcompose.domain.FilterManager
@@ -9,6 +10,7 @@ import com.example.jazzlibraryktroomjpcompose.data.local.db.JazzDatabase
 import com.example.jazzlibraryktroomjpcompose.data.local.db.entities.FilterPathRoomEntity
 import com.example.jazzlibraryktroomjpcompose.data.mappers.*
 import com.example.jazzlibraryktroomjpcompose.data.repository.JazzRepositoryImpl
+import com.example.jazzlibraryktroomjpcompose.domain.models.Album
 import com.example.jazzlibraryktroomjpcompose.domain.models.Video
 import com.example.jazzlibraryktroomjpcompose.ui.settings.SettingsRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -288,6 +290,14 @@ class MainViewModel @Inject constructor(
                     }
                 },
                 launch {
+                    database.albumDao().getAllAlbums()
+                        .map { entities -> entities.map { AlbumMapper.toDomain(it) } }
+                        .collect { albums ->
+                            _uiState.update { it.copy(albums = albums) }
+                            Log.d("AlbumDebug", "Initial load: albums = ${albums.size}")
+                        }
+                },
+                launch {
                     database.instrumentDao().getAllInstrumentsWithArtistCount()
                         .map { entities -> entities.map { InstrumentMapper.toDomainWithCount(it) } }
                         .collect { instruments ->
@@ -331,6 +341,14 @@ class MainViewModel @Inject constructor(
                         .collect { videoContainsArtists ->
                             _uiState.update { it.copy(availableVideoContainsArtists = videoContainsArtists) }
                             println("DEBUG: Loaded ${videoContainsArtists.size} video-artist associations")
+                        }
+                },
+                launch {
+                    database.albumContainsArtistDao().getAllAlbumContainsArtists()
+                        .map { entities -> entities.map { AlbumContainsArtistMapper.toDomain(it) } }
+                        .collect { albumContainsArtists ->
+                            _uiState.update { it.copy(availableAlbumContainsArtists = albumContainsArtists) }
+                            println("DEBUG: Loaded ${albumContainsArtists.size} album-artist associations")
                         }
                 }
             )
@@ -388,13 +406,17 @@ class MainViewModel @Inject constructor(
                 _uiState.update { uiState ->
                     uiState.copy(
                         filteredVideos = finalVideos,
+                        filteredAlbums = filteredData.albums,
                         availableArtistsDisplay = filteredData.artists,
                         availableArtists = filteredData.artists,
                         availableInstruments = filteredData.instruments,
                         availableDurations = filteredData.durations,
                         availableTypes = filteredData.types
                     )
+
                 }
+                Log.d("AlbumDebug", "Filters applied: filterPath = $filterPaths, filteredAlbums size = ${filteredData.albums.size}")
+
 
                 _filterState.update { filterState ->
                     filterState.copy(
@@ -667,6 +689,15 @@ class MainViewModel @Inject constructor(
         }
     }
 
+    fun shuffleAlbums() {
+        viewModelScope.launch {
+            val current = _uiState.value.albums
+            val shuffled = current.shuffled()
+            _uiState.update { it.copy(albums = shuffled) }
+            Log.d("AlbumDebug", "Shuffled albums")
+        }
+    }
+
     // MainViewModel.kt
     fun refreshHistory() {
         viewModelScope.launch {
@@ -691,12 +722,15 @@ class MainViewModel @Inject constructor(
             database.filterPathDao().getLatestFilterPath()?.id
         }
     }
+
 }
 
 // UI State classes (unchanged)
 data class MainUiState(
     val videos: List<com.example.jazzlibraryktroomjpcompose.domain.models.Video> = emptyList(),
     val filteredVideos: List<com.example.jazzlibraryktroomjpcompose.domain.models.Video> = emptyList(),
+    val albums: List<Album> = emptyList(),        // always the full set (shuffled if needed)
+    val filteredAlbums: List<Album> = emptyList(),
     val allInstruments: List<com.example.jazzlibraryktroomjpcompose.domain.models.Instrument> = emptyList(),
     val availableArtists: List<com.example.jazzlibraryktroomjpcompose.domain.models.Artist> = emptyList(), // natural order, used for chips
     val availableArtistsDisplay: List<com.example.jazzlibraryktroomjpcompose.domain.models.Artist> = emptyList(),   // display order (shuffled or base)
@@ -704,6 +738,7 @@ data class MainUiState(
     val availableDurations: List<com.example.jazzlibraryktroomjpcompose.domain.models.Duration> = emptyList(),
     val availableTypes: List<com.example.jazzlibraryktroomjpcompose.domain.models.Type> = emptyList(),
     val availableVideoContainsArtists: List<com.example.jazzlibraryktroomjpcompose.domain.models.VideoContainsArtist> = emptyList(),
+    val availableAlbumContainsArtists: List<com.example.jazzlibraryktroomjpcompose.domain.models.AlbumContainsArtist> = emptyList(),
     val isLoading: Boolean = false, // General UI loading (any operation) (USER POINT OF VIEW LOADING)
     val errorMessage: String? = null
 )
@@ -735,5 +770,6 @@ enum class BottomSheetState {
     HALF_EXPANDED,
     EXPANDED
 }
+
 
 enum class MainTab { VIDEOS, ARTISTS, HISTORY }

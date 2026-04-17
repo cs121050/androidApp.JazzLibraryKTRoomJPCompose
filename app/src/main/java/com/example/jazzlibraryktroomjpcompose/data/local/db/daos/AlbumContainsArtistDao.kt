@@ -36,4 +36,7 @@ interface AlbumContainsArtistDao {
 
     @Query("DELETE FROM album_contains_artist WHERE artist_id = :artistId")
     suspend fun deleteAllAlbumsForArtist(artistId: Int)
+
+    @Query("SELECT album_id FROM album_contains_artist WHERE artist_id = :artistId")
+    fun getAlbumIdsByArtist(artistId: Int): Flow<List<Int>>
 }
