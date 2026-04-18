@@ -771,5 +771,17 @@ enum class BottomSheetState {
     EXPANDED
 }
 
+enum class AlbumSortType {
+    RELEASE_DATE_ASC,
+    RELEASE_DATE_DESC,
+    RATING_ASC,
+    RATING_DESC
+}
+
+enum class TypeOfMedia {
+    EDUCATIONAL,
+    ALBUM
+}
+
 
 enum class MainTab { VIDEOS, ARTISTS, HISTORY }

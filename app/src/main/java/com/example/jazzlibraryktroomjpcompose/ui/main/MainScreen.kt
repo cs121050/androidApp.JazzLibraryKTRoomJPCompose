@@ -132,6 +132,7 @@ import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.ui.unit.Dp
+import com.example.jazzlibraryktroomjpcompose.domain.models.Album
 import kotlinx.coroutines.flow.map
 
 class ScrollLockState {
@@ -206,6 +207,8 @@ fun MainScreen(
     val listState = rememberLazyListState()
 
     val currentFilterPathId by viewModel.currentFilterPathId.collectAsState()
+
+    val currentMediaEntry by playerViewModel.currentFilterPathMedia.collectAsState()
 
     //DEBUGLOG
     LaunchedEffect(isFullscreen) {
@@ -425,7 +428,7 @@ fun MainScreen(
                                 isPlayerVisible = isPlayerVisible,
                                 onPrevious = { playerViewModel.previousVideo() },
                                 onNext = { playerViewModel.nextVideo() },
-                                onClose = { playerViewModel.closePlayer()},
+                                onClose = { playerViewModel.closePlayer(currentFilterPathId)},
                                 playerViewModel = playerViewModel,
                                 videos = videosToShow,
                                 listState = listState,
@@ -488,7 +491,9 @@ fun MainScreen(
                                                 artist.fullName,
                                                 true // add filter
                                             )
-                                        }
+                                        },
+                                        filteredAlbums = uiState.filteredAlbums,
+                                        onAlbumSelected = {  /* todo */ }
                                     )
 
                                     MainTab.HISTORY -> HistoryContent(
@@ -629,7 +634,7 @@ fun MainScreen(
                                         onBack = { /* TODO */ },
                                         onPrevious = { playerViewModel.previousVideo() },
                                         onNext = { playerViewModel.nextVideo() },
-                                        onClose = { playerViewModel.closePlayer() },
+                                        onClose = { playerViewModel.closePlayer(currentFilterPathId) },
                                         modifier = Modifier
                                             .fillMaxHeight()
                                             .background(MaterialTheme.colorScheme.background)
@@ -874,7 +879,8 @@ fun VideoStatsRow(
     val coroutineScope = rememberCoroutineScope()
     val context = LocalContext.current
 
-
+    // Type of media: null by default, becomes 0 when (page 0 or 1) are visible
+    var currentTypeOfMedia by remember { mutableStateOf<Int?>(null) }
 
     // Keep pager on minimise page when controls become inaccessible
     LaunchedEffect(controlsAccessible) {
@@ -888,6 +894,14 @@ fun VideoStatsRow(
             pagerState.animateScrollToPage(1)
         }
         Log.d("VIDEOSTATROW", "controlsAccessible: $controlsAccessible")
+    }
+
+    // Set currentTypeOfMedia based on which page is active
+    LaunchedEffect(pagerState.currentPage) {
+        when (pagerState.currentPage) {
+            0, 1 -> currentTypeOfMedia = 0 // educational media controls
+            3, 4 -> currentTypeOfMedia = 0 // album media controls
+        }
     }
 
     fun isVideoIndexVisible(index: Int): Boolean {
@@ -911,8 +925,9 @@ fun VideoStatsRow(
                     cardId = firstVideo.locationId,
                     currentFilterPath = currentFilterPath,
                     startInMiniMode = startInMiniMode,
-                    videoDbId = firstVideo.id,
-                    filterPathId = currentFilterPathId
+                    mediaDbId = firstVideo.id,
+                    filterPathId = currentFilterPathId,
+                    typeOfMedia = currentTypeOfMedia
                 )
             }
         }
@@ -947,8 +962,9 @@ fun VideoStatsRow(
                     cardId = targetVideo.locationId,
                     currentFilterPath = currentFilterPath,
                     startInMiniMode = startInMiniMode,
-                    videoDbId = targetVideo.id,
-                    filterPathId = currentFilterPathId
+                    mediaDbId = targetVideo.id,
+                    filterPathId = currentFilterPathId,
+                    typeOfMedia = currentTypeOfMedia
                 )
             }
         } else {
@@ -975,8 +991,9 @@ fun VideoStatsRow(
                     cardId = targetVideo.locationId,
                     currentFilterPath = currentFilterPath,
                     startInMiniMode = startInMiniMode,
-                    videoDbId = targetVideo.id,
-                    filterPathId = currentFilterPathId
+                    mediaDbId = targetVideo.id,
+                    filterPathId = currentFilterPathId,
+                    typeOfMedia = currentTypeOfMedia
                 )
             }
         }
@@ -1052,6 +1069,7 @@ fun VideoStatsRow(
                             coroutineScope.launch {
                                 onClose()
                                 pagerState.animateScrollToPage(2)
+                                currentTypeOfMedia = null
                             }
                         }) {
                             Icon(Icons.Default.Close, contentDescription = "Close")
@@ -1147,6 +1165,8 @@ private fun VideoListContent(
     val activeCardIndex = videosToShow.indexOfFirst { it.locationId == playerUiState.activeCardId }
     val context = LocalContext.current
     val imageLoader = coil.ImageLoader(context)
+
+    val typeOfMedia = 0 // educational videos only here.
 
     //helps with loading the thubnails faster while scrolling
     LaunchedEffect(listState) {
@@ -1295,8 +1315,9 @@ private fun VideoListContent(
                                     videoId = videoId,
                                     cardId = video.locationId,
                                     currentFilterPath = filterState.currentFilterPath,
-                                    videoDbId = video.id,
-                                    filterPathId = currentFilterPathId
+                                    mediaDbId = video.id,
+                                    filterPathId = currentFilterPathId,
+                                    typeOfMedia = typeOfMedia
                                 )
                             }
                         },
@@ -1546,9 +1567,11 @@ fun ArtistContent(
     modifier: Modifier = Modifier,
     artistsShuffled: List<Artist>,
     artistsBase: List<Artist>,
+    filteredAlbums: List<Album>,
     onRefresh: () -> Unit = {},
     filterPath: List<FilterPath>, // new parameter
-    onArtistSelected: (Artist) -> Unit = {} // new callback
+    onArtistSelected: (Artist) -> Unit = {},
+    onAlbumSelected: (Album) -> Unit = {}
 ) {
     // Check if there's an artist filter
     val selectedArtist = filterPath
@@ -1562,7 +1585,10 @@ fun ArtistContent(
         // Single artist view
         SingleArtistView(
             artist = selectedArtist,
-            modifier = modifier
+            filteredAlbums = filteredAlbums,
+            onAlbumSelected = onAlbumSelected,
+            modifier = modifier,
+
         )
         return
     }
@@ -1578,6 +1604,8 @@ fun ArtistContent(
     if (artistsShuffled.size == 1) {
         SingleArtistView(
             artist = artistsShuffled.first(),
+            filteredAlbums = filteredAlbums,
+            onAlbumSelected = onAlbumSelected,
             modifier = modifier
         )
         return
@@ -1838,7 +1866,6 @@ fun HistoryContent(
 
     val currentPlayingDbId by playerViewModel.currentVideoDbIdState.collectAsState()
 
-
     // Load data when this screen appears
     LaunchedEffect(Unit) {
         viewModel.loadEnrichedHistory()
@@ -1921,8 +1948,9 @@ fun HistoryContent(
                                     cardId = video.locationId,
                                     currentFilterPath = null, // keep current filter
                                     startInMiniMode = true,
-                                    videoDbId = video.id,
-                                    filterPathId = null // no filter path change
+                                    mediaDbId = video.id,
+                                    filterPathId = null, // no filter path change
+                                    typeOfMedia = null
                                 )
                             }
                         }
@@ -2087,6 +2115,8 @@ fun ArtistImage(
 @Composable
 fun SingleArtistView(
     artist: Artist,
+    filteredAlbums: List<Album>,
+    onAlbumSelected: (Album) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -2175,15 +2205,13 @@ fun SingleArtistView(
             )
         }
 
-        // 4. Albums section header
+        // 4. Albums section
         item {
-            Text(
-                text = "Albums",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp)
+            AlbumsSection(
+                artist = artist,
+                filteredAlbums = filteredAlbums,
+                onAlbumSelected = onAlbumSelected,
+                modifier = Modifier.fillMaxWidth()
             )
         }
 
@@ -2635,4 +2663,30 @@ fun PlayerControlsOverlay(
 
         }
     }
+}
+
+@Composable
+fun AlbumsSection(
+    artist: Artist,
+    filteredAlbums: List<Album>,
+    onAlbumSelected: (Album) -> Unit,
+    modifier: Modifier = Modifier
+) {
+
+    var sortType by remember { mutableStateOf(AlbumSortType.RELEASE_DATE_DESC) }
+
+//    if (selectedAlbum != null) {
+//        AlbumPlayerCard(
+//            ...
+//            modifier = modifier
+//        )
+//    } else {
+//        AlbumGridView(
+//            albums = filteredAlbums,
+//            sortType = sortType,
+//            onSortTypeChange = { sortType = it },
+//            onAlbumClick = { selectedAlbum = it },
+//            modifier = modifier
+//        )
+//    }
 }
