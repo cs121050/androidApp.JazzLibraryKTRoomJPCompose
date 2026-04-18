@@ -31,8 +31,8 @@ data class FilterPathContainsMediaRoomEntity(
     val filterPathId: Int,
 
     @ColumnInfo(name = "video_id")
-    val videoId: Int,
+    val videoId: Int?,
 
     @ColumnInfo(name = "type_of_media")
-    val typeOfMedia: Int
+    val typeOfMedia: Int?
 )

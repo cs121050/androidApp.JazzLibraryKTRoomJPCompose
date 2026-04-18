@@ -44,6 +44,10 @@ class PlayerViewModel @Inject constructor(
             initialValue = null
         )
 
+    // Add a new StateFlow
+    private val _currentFilterPathMedia = MutableStateFlow<FilterPathContainsMediaRoomEntity?>(null)
+    val currentFilterPathMedia: StateFlow<FilterPathContainsMediaRoomEntity?> = _currentFilterPathMedia.asStateFlow()
+
     init {
         viewModelScope.launch {
             combine(
@@ -75,9 +79,9 @@ class PlayerViewModel @Inject constructor(
                   currentFilterPath:
                   List<FilterPath>?,
                   startInMiniMode: Boolean = false,
-                  videoDbId: Int?,
+                  mediaDbId: Int?,
                   filterPathId: Int?,
-                  typeOfMedia: Int = 0
+                  typeOfMedia: Int?
     ) {
 
         currentFilterPathId = filterPathId
@@ -89,9 +93,12 @@ class PlayerViewModel @Inject constructor(
             _uiState.update { it.copy(currentIndex = index) }
         }
 
+
+
+
         _uiState.update {
             it.copy(
-                currentVideoDbId = videoDbId,
+                currentVideoDbId = mediaDbId,
                 isVisible = true,
                 isInMiniMode = startInMiniMode,   // use the flag
                 activeCardId = cardId,
@@ -101,14 +108,15 @@ class PlayerViewModel @Inject constructor(
         playerController.loadVideo(videoId, autoPlay = true)
         Log.d("PlayerViewModel", "loadVideo: startInMiniMode=$startInMiniMode, videoId=$videoId")
 
-        if (videoDbId != null && filterPathId != null && filterPathId > 0) {
+        if (mediaDbId != null && filterPathId != null && filterPathId > 0) {
             viewModelScope.launch {
                 val entry = FilterPathContainsMediaRoomEntity(
                     filterPathId = filterPathId,
-                    videoId = videoDbId,
+                    videoId = mediaDbId,
                     typeOfMedia = typeOfMedia
                 )
                 filterPathContainsMediaDao.insert(entry)
+                _currentFilterPathMedia.value = entry
             }
         }
     }
@@ -172,8 +180,22 @@ class PlayerViewModel @Inject constructor(
     /**
      * Close the player completely (hide it and release resources).
      */
-    fun closePlayer() {
+    fun closePlayer(filterPathId: Int?) {
+
         _uiState.update { it.copy(isVisible = false, activeCardId = null) }
+
+        if (filterPathId != null ) {
+            viewModelScope.launch {
+                val entry = FilterPathContainsMediaRoomEntity(
+                    filterPathId = filterPathId,
+                    videoId = null,
+                    typeOfMedia = null
+                )
+                filterPathContainsMediaDao.insert(entry)
+                _currentFilterPathMedia.value = entry
+            }
+        }
+
         playerController.release()
     }
 
@@ -276,8 +298,9 @@ class PlayerViewModel @Inject constructor(
                     cardId = nextVideo.locationId,
                     currentFilterPath = state.filterPathAtLoad,
                     startInMiniMode = startInMiniMode,
-                    videoDbId = nextVideo.id,
-                    filterPathId = currentFilterPathId
+                    mediaDbId = nextVideo.id,
+                    filterPathId = currentFilterPathId,
+                    typeOfMedia = 0
                 )
                 _uiState.update { it.copy(currentIndex = currentIdx + 1) }
             }
@@ -297,8 +320,9 @@ class PlayerViewModel @Inject constructor(
                     cardId = prevVideo.locationId,
                     currentFilterPath = state.filterPathAtLoad,
                     startInMiniMode = startInMiniMode,
-                    videoDbId = prevVideo.id,
-                    filterPathId = currentFilterPathId   // use the stored filter path ID
+                    mediaDbId = prevVideo.id,
+                    filterPathId = currentFilterPathId,   // use the stored filter path ID
+                    typeOfMedia = 0
                 )
                 _uiState.update { it.copy(currentIndex = currentIdx - 1) }
             }
