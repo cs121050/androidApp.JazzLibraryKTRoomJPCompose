@@ -115,7 +115,10 @@ import android.util.Log
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Toast
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
 import com.google.accompanist.systemuicontroller.rememberSystemUiController
@@ -141,8 +144,10 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyHorizontalGrid
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.material.icons.filled.Album
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
@@ -153,9 +158,14 @@ import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.example.jazzlibraryktroomjpcompose.ui.main.util.instrumentColor
+import java.text.DecimalFormat
+
+import androidx.compose.animation.AnimatedVisibility as CoreAnimatedVisibility
 
 enum class AlbumGridTab { MAIN, FEATURED }
 enum class SortDirection { ASC, DESC }
+
+private const val TAG = "AlbumGridView"
 
 class ScrollLockState {
     var isLocked by mutableStateOf(false)
@@ -407,7 +417,8 @@ fun MainScreen(
                     onRefresh = {
                         viewModel.shuffleVideoList()
                         viewModel.shuffleArtists()
-                        //todo// album list
+                        viewModel.shuffleAlbums()
+
                         viewModel.refreshHistory()
                     },
                     modifier = Modifier
@@ -505,6 +516,7 @@ fun MainScreen(
                                         modifier = Modifier.fillMaxSize(),
                                         artistsShuffled = uiState.availableArtistsDisplay,
                                         artistsBase = uiState.availableArtists,
+                                        albumsDisplay = uiState.availableAlbumsDisplay,
                                         filterPath = filterState.currentFilterPath, // pass filter path
                                         onRefresh = { viewModel.shuffleArtists() },
                                         onArtistSelected = { artist ->
@@ -1592,6 +1604,7 @@ fun ArtistContent(
     artistsShuffled: List<Artist>,
     artistsBase: List<Artist>,
     filteredAlbums: List<Album>,
+    albumsDisplay: List<Album>,
     onRefresh: () -> Unit = {},
     filterPath: List<FilterPath>, // new parameter
     onArtistSelected: (Artist) -> Unit = {},
@@ -1613,6 +1626,7 @@ fun ArtistContent(
             filteredAlbums = filteredAlbums,
             onAlbumSelected = onAlbumSelected,
             currentMediaEntryTypeOfMedia= currentMediaEntryTypeOfMedia,
+            albumsDisplay = albumsDisplay,
             modifier = modifier
         )
         return
@@ -1632,6 +1646,7 @@ fun ArtistContent(
             filteredAlbums = filteredAlbums,
             onAlbumSelected = onAlbumSelected,
             currentMediaEntryTypeOfMedia= currentMediaEntryTypeOfMedia,
+            albumsDisplay = albumsDisplay,
             modifier = modifier
         )
         return
@@ -2142,6 +2157,7 @@ fun ArtistImage(
 fun SingleArtistView(
     artist: Artist,
     filteredAlbums: List<Album>,
+    albumsDisplay: List<Album>,
     onAlbumSelected: (Album) -> Unit,
     currentMediaEntryTypeOfMedia: Int?,
     modifier: Modifier = Modifier
@@ -2245,6 +2261,7 @@ fun SingleArtistView(
                     filteredAlbums = filteredAlbums,
                     onAlbumSelected = onAlbumSelected,
                     currentMediaEntryTypeOfMedia = currentMediaEntryTypeOfMedia,
+                    albumsDisplay = albumsDisplay,
                     modifier = Modifier.fillMaxSize()
                 )
             }
@@ -2706,6 +2723,7 @@ fun AlbumsSection(
     filteredAlbums: List<Album>,
     onAlbumSelected: (Album) -> Unit,
     currentMediaEntryTypeOfMedia: Int?,
+    albumsDisplay: List<Album>,
     modifier: Modifier = Modifier
 ) {
     var sortType by remember { mutableStateOf(AlbumSortType.RELEASE_DATE_DESC) }
@@ -2721,8 +2739,9 @@ fun AlbumsSection(
 //        )
         else -> {
             AlbumGridView(
-                albums = filteredAlbums,
+                //albums = filteredAlbums,
                 onAlbumClick = onAlbumSelected,
+                albumsDisplay = albumsDisplay,
                 modifier = modifier.fillMaxHeight()   // ✅ pass through the modifier
             )
         }
@@ -2731,15 +2750,18 @@ fun AlbumsSection(
 
 @Composable
 fun AlbumGridView(
-    albums: List<Album>,
     onAlbumClick: (Album) -> Unit,
+    albumsDisplay: List<Album>,
     modifier: Modifier = Modifier
 ) {
-    // Count albums per tab
-    val mainCount = remember(albums) { albums.count { it.isMain == 1 } }
-    val featuredCount = remember(albums) { albums.count { it.isMain == 0 } }
+    // Tab state
+    val mainCount = remember(albumsDisplay) { albumsDisplay.count { it.isMain == 1 } }
+    val featuredCount = remember(albumsDisplay) { albumsDisplay.count { it.isMain == 0 } }
 
-    // Tab state: default to Main if it has albums, otherwise Featured (if any), otherwise null
+    // Shuffled vs alphabetical mode (only active when no year/rating sort)
+    var isAlphabeticalMode by remember { mutableStateOf(false) }
+
+
     var selectedTab by remember {
         mutableStateOf(
             when {
@@ -2750,7 +2772,6 @@ fun AlbumGridView(
         )
     }
 
-    // Ensure selectedTab never points to an empty tab
     LaunchedEffect(mainCount, featuredCount) {
         selectedTab = when {
             selectedTab == AlbumGridTab.MAIN && mainCount == 0 && featuredCount > 0 -> AlbumGridTab.FEATURED
@@ -2761,89 +2782,190 @@ fun AlbumGridView(
         }
     }
 
+    LaunchedEffect(albumsDisplay) {
+        isAlphabeticalMode = false   // back to shuffled after refresh
+    }
+
     // Sorting state
-    var yearSort by remember { mutableStateOf<SortDirection?>(SortDirection.DESC) }
+    var yearSort by remember { mutableStateOf<SortDirection?>(null) }      // start with no sort
     var ratingSort by remember { mutableStateOf<SortDirection?>(null) }
 
     fun setYearSort(direction: SortDirection?) {
         yearSort = direction
         if (direction != null) ratingSort = null
+        isAlphabeticalMode = false   // ← add this
     }
 
     fun setRatingSort(direction: SortDirection?) {
         ratingSort = direction
         if (direction != null) yearSort = null
+        isAlphabeticalMode = false   // ← add this
     }
 
-    // Filter albums based on selected tab
-    val filteredAlbums = remember(albums, selectedTab) {
+    val filteredByTab = remember(albumsDisplay, selectedTab) {
         when (selectedTab) {
-            AlbumGridTab.MAIN -> albums.filter { it.isMain == 1 }
-            AlbumGridTab.FEATURED -> albums.filter { it.isMain == 0 }
+            AlbumGridTab.MAIN -> albumsDisplay.filter { it.isMain == 1 }
+            AlbumGridTab.FEATURED -> albumsDisplay.filter { it.isMain == 0 }
             null -> emptyList()
         }
     }
 
-    // Apply sorting
-    val sortedAlbums = remember(filteredAlbums, yearSort, ratingSort) {
+    // Helper to move null-thumbnail albums to the end while preserving order within groups
+    fun List<Album>.moveNullThumbnailsToEnd(): List<Album> {
+        val (withThumb, withoutThumb) = partition { it.youtubeVideoIdForThumbnail != null }
+        return withThumb + withoutThumb
+    }
+
+    // Sorted albums: priority rating > year > alphabetical
+    val sortedAlbums = remember(filteredByTab, yearSort, ratingSort, isAlphabeticalMode) {
         when {
-            yearSort != null -> {
-                val comparator = if (yearSort == SortDirection.ASC)
-                    compareBy<Album, String?>(nullsLast(), { it.released })
-                else
-                    compareByDescending<Album, String?>(nullsLast(), { it.released })
-                filteredAlbums.sortedWith(comparator)
-            }
             ratingSort != null -> {
-                val comparator = if (ratingSort == SortDirection.ASC)
-                    compareBy<Album, Double?>(nullsLast(), { it.ratingAverage })
-                else
-                    compareByDescending<Album, Double?>(nullsLast(), { it.ratingAverage })
-                filteredAlbums.sortedWith(comparator)
+                val baseComparator = compareBy<Album, Double?>(nullsLast()) { it.ratingAverage }
+                val comparator = if (ratingSort == SortDirection.ASC) baseComparator else baseComparator.reversed()
+                filteredByTab.sortedWith(comparator)
+            }
+            yearSort != null -> {
+                val baseComparator = compareBy<Album, Int?>(nullsLast()) { it.year }
+                val comparator = if (yearSort == SortDirection.ASC) baseComparator else baseComparator.reversed()
+                filteredByTab.sortedWith(comparator)
             }
             else -> {
-                filteredAlbums.sortedWith(compareByDescending<Album, String?>(nullsLast(), { it.released }))
+                if (isAlphabeticalMode) {
+                    filteredByTab.sortedWith(compareBy { it.title?.lowercase() ?: "" })
+                } else {
+                    filteredByTab.moveNullThumbnailsToEnd()
+                }
             }
         }
     }
 
-    // Determine if there are any albums to show (for hiding sorting chips)
     val hasAlbums = sortedAlbums.isNotEmpty()
 
-    // Pagination
-    val pages = remember(sortedAlbums) { sortedAlbums.chunked(6) }
-    val pagerState = rememberPagerState(pageCount = { pages.size })
-    val coroutineScope = rememberCoroutineScope()
+    // ========== YEAR NOTE STATE & TIMER ==========
+    var currentNoteText by remember { mutableStateOf("") }
+    var showYearNote by remember { mutableStateOf(false) }
 
-    // Reset to first page when list changes
-    LaunchedEffect(sortedAlbums) {
-        if (pages.isNotEmpty()) {
-            pagerState.scrollToPage(0)
+    // Auto‑hide after 3 seconds
+    LaunchedEffect(currentNoteText) {
+        if (currentNoteText.isNotBlank()) {
+            showYearNote = true
+            delay(3000)
+            showYearNote = false
         }
     }
 
+    // Helper to generate note text based on current sort mode and album
+    fun getNoteText(album: Album): String {
+        return when {
+            ratingSort != null -> {
+                val avg = album.ratingAverage
+                val count = album.ratingCount ?: 0
+                val avgStr = if (avg != null) DecimalFormat("#.#").format(avg) else "?"
+                "$avgStr / $count"
+            }
+            yearSort != null -> {
+                album.year?.toString() ?: ""
+            }
+            else -> ""   // ← no note when no sort chip active
+        }
+    }
+
+    // Update note from an album
+    fun updateNoteFromAlbum(album: Album?) {
+        if (album != null) {
+            currentNoteText = getNoteText(album)
+            Log.d(TAG, "Note updated: mode=${if (ratingSort != null) "rating" else if (yearSort != null) "year" else "alpha"}, text=$currentNoteText, album=${album.title}")
+        } else {
+            currentNoteText = ""
+        }
+    }
+
+    // ========== GRID SCROLL STATE ==========
+    val gridState = rememberLazyGridState()
+    val coroutineScope = rememberCoroutineScope()
+
+    // Observe first visible item and update note on any scroll
+    LaunchedEffect(gridState.firstVisibleItemIndex, ratingSort, yearSort) {
+        if (sortedAlbums.isNotEmpty()) {
+            val index = gridState.firstVisibleItemIndex.coerceIn(0, sortedAlbums.lastIndex)
+            val album = sortedAlbums.getOrNull(index)
+            updateNoteFromAlbum(album)
+        }
+    }
+
+    // ========== DOT SCROLLBAR ==========
+    val dotCount = remember(sortedAlbums.size) {
+        if (sortedAlbums.isEmpty()) 1 else minOf(20, sortedAlbums.size)
+    }
+
+    val activeDotIndex by remember {
+        derivedStateOf {
+            if (sortedAlbums.isEmpty() || dotCount <= 1) 0
+            else {
+                val totalItems = sortedAlbums.size
+                val firstVisible = gridState.firstVisibleItemIndex
+                ((firstVisible.toFloat() / (totalItems - 1).coerceAtLeast(1)) * (dotCount - 1)).roundToInt()
+            }
+        }
+    }
+
+    fun scrollToItemIndex(index: Int) {
+        if (index in sortedAlbums.indices) {
+            coroutineScope.launch {
+                gridState.scrollToItem(index)
+            }
+        }
+    }
+
+    fun onDotClicked(dotIdx: Int) {
+        if (sortedAlbums.isEmpty()) return
+        // If no year/rating sort is active, switch to alphabetical mode
+        if (yearSort == null && ratingSort == null) {
+            isAlphabeticalMode = true
+        }
+        val targetIndex = if (dotCount <= 1) 0 else {
+            (dotIdx.toFloat() / (dotCount - 1) * (sortedAlbums.size - 1)).roundToInt()
+        }
+        scrollToItemIndex(targetIndex)
+        val album = sortedAlbums.getOrNull(targetIndex)
+        updateNoteFromAlbum(album)
+    }
+
+    fun onDotDragged(dotIdx: Int, isDragging: Boolean) {
+        if (isDragging) {
+            if (yearSort == null && ratingSort == null) {
+                isAlphabeticalMode = true
+            }
+            val targetIndex = if (dotCount <= 1) 0 else {
+                (dotIdx.toFloat() / (dotCount - 1) * (sortedAlbums.size - 1)).roundToInt()
+            }
+            scrollToItemIndex(targetIndex)
+            val album = sortedAlbums.getOrNull(targetIndex)
+            updateNoteFromAlbum(album)
+        }
+    }
+
+    // ========== UI ==========
     Column(modifier = modifier.fillMaxSize()) {
+        // Filter and sort chips
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            // Main chip – always visible, disabled if no main albums
             FilterChip(
                 selected = selectedTab == AlbumGridTab.MAIN,
                 onClick = { selectedTab = AlbumGridTab.MAIN },
                 label = { Text("Main") },
                 enabled = mainCount > 0
             )
-            // Featured chip – always visible, disabled if no featured albums
             FilterChip(
                 selected = selectedTab == AlbumGridTab.FEATURED,
                 onClick = { selectedTab = AlbumGridTab.FEATURED },
                 label = { Text("Featured") },
                 enabled = featuredCount > 0
             )
-            // Year and Rating chips are shown only if there is at least one album
             if (hasAlbums) {
                 // Year sorting chip
                 FilterChip(
@@ -2861,7 +2983,7 @@ fun AlbumGridView(
                             Icon(
                                 if (yearSort == SortDirection.ASC) Icons.Default.ArrowUpward
                                 else Icons.Default.ArrowDownward,
-                                contentDescription = if (yearSort == SortDirection.ASC) "Ascending" else "Descending",
+                                contentDescription = null,
                                 modifier = Modifier.size(16.dp)
                             )
                         }
@@ -2883,7 +3005,7 @@ fun AlbumGridView(
                             Icon(
                                 if (ratingSort == SortDirection.ASC) Icons.Default.ArrowUpward
                                 else Icons.Default.ArrowDownward,
-                                contentDescription = if (ratingSort == SortDirection.ASC) "Ascending" else "Descending",
+                                contentDescription = null,
                                 modifier = Modifier.size(16.dp)
                             )
                         }
@@ -2892,14 +3014,9 @@ fun AlbumGridView(
             }
         }
 
-        // Horizontal pager (shows empty state if no albums)
-        HorizontalPager(
-            state = pagerState,
-            modifier = Modifier.weight(1f).fillMaxHeight()
-        ) { page ->
-            val pageAlbums = pages.getOrElse(page) { emptyList() }
-            if (pageAlbums.isEmpty()) {
-                // Optional: show a placeholder when no albums
+        // Horizontal grid with floating note
+        Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+            if (sortedAlbums.isEmpty()) {
                 Box(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
@@ -2907,51 +3024,158 @@ fun AlbumGridView(
                     Text("No albums to display")
                 }
             } else {
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(horizontal = 14.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                LazyHorizontalGrid(
+                    rows = GridCells.Fixed(2),
+                    state = gridState,
+                    modifier = Modifier.fillMaxSize(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)
                 ) {
-                    for (row in 0 until 2) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            for (col in 0 until 3) {
-                                val index = row * 3 + col
-                                val album = pageAlbums.getOrNull(index)
-                                if (album != null) {
-                                    AlbumCard(
-                                        album = album,
-                                        modifier = Modifier
-                                            .weight(1f)
-                                            .aspectRatio(0.65f),
-                                        onClick = { onAlbumClick(album) }
-                                    )
-                                } else {
-                                    Spacer(modifier = Modifier.weight(1f))
-                                }
-                            }
-                        }
+                    items(sortedAlbums) { album ->
+                        AlbumCard(
+                            album = album,
+                            modifier = Modifier
+                                .width(120.dp)
+                                .animateContentSize(),
+                            onClick = { onAlbumClick(album) }
+                        )
                     }
+                }
+
+                // Floating note chip (always shown on scroll, content depends on sort mode)
+                androidx.compose.animation.AnimatedVisibility(
+                    visible = showYearNote && currentNoteText.isNotBlank() && (yearSort != null || ratingSort != null),
+                    //enter = fadeIn(),
+                    exit = fadeOut(),
+                    modifier = Modifier.align(Alignment.TopStart)
+                ) {
+                    AssistChip(
+                        onClick = { },
+                        label = { Text(currentNoteText) },
+                        modifier = Modifier
+                            .padding(16.dp)
+                            .zIndex(1f),
+                        colors = AssistChipDefaults.assistChipColors(
+                            containerColor = MaterialTheme.colorScheme.primaryContainer,
+                            labelColor = MaterialTheme.colorScheme.onPrimaryContainer
+                        ),
+                        shape = RoundedCornerShape(16.dp)
+                    )
                 }
             }
         }
+        // State for scrubbing (interacting with dots)
+        var isScrubbing by remember { mutableStateOf(false) }
+        var scrubYear by remember { mutableStateOf("") }
 
-        // Dots indicator only if more than one page and pages not empty
-        if (pages.size > 1) {
-            DotsRow(
-                pageCount = pages.size,
-                currentPage = pagerState.currentPage,
-                onPageSelected = { page ->
-                    coroutineScope.launch { pagerState.animateScrollToPage(page) }
+        fun getYearString(album: Album): String = album.year?.toString() ?: ""
+
+        fun updateScrubYearForIndex(index: Int) {
+            if (index in sortedAlbums.indices) {
+                val album = sortedAlbums[index]
+                scrubYear = getYearString(album)
+                Log.d(TAG, "Scrub index=$index, album=${album.title}, year=${album.year}")
+            } else {
+                scrubYear = ""
+                Log.w(TAG, "Scrub index out of range: $index")
+            }
+        }
+
+
+        fun onDotHover(dotIdx: Int, isDragging: Boolean) {
+            if (isDragging) {
+                val targetIndex = if (dotCount <= 1) 0 else {
+                    (dotIdx.toFloat() / (dotCount - 1) * (sortedAlbums.size - 1)).roundToInt()
+                }
+                scrollToItemIndex(targetIndex)
+                updateScrubYearForIndex(targetIndex)
+                isScrubbing = true
+            }
+        }
+
+        // Custom dot scrollbar (only if there are albums)
+        if (sortedAlbums.isNotEmpty() && dotCount > 1) {
+            DotScrollbar(
+                dotCount = dotCount,
+                activeDotIndex = activeDotIndex,
+                onDotClick = { dotIdx -> onDotClicked(dotIdx) },
+                onDotDrag = { dotIdx, isDragging ->
+                        onDotHover(dotIdx, isDragging)
                 },
-                modifier = Modifier.padding(vertical = 8.dp)
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
+            )
+        } else if (sortedAlbums.isNotEmpty() && dotCount == 1) {
+            // Single dot (no interaction needed) – just show a single dot
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.Center
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(8.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primary)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun DotScrollbar(
+    dotCount: Int,
+    activeDotIndex: Int,
+    onDotClick: (Int) -> Unit,
+    onDotDrag: (Int, Boolean) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    // Use a Row with dots spaced evenly
+    // To support dragging, we can use a pointerInput on the whole row and calculate which dot the pointer is over.
+    Row(
+        modifier = modifier
+            .height(24.dp)
+            .pointerInput(Unit) {
+                // Detect drag events and call onDotDrag with the nearest dot
+                awaitPointerEventScope {
+                    while (true) {
+                        val event = awaitPointerEvent()
+                        val position = event.changes.firstOrNull()?.position ?: continue
+                        val dotWidth = size.width / dotCount
+                        val dotIndex = (position.x / dotWidth).toInt().coerceIn(0, dotCount - 1)
+                        val isDragging = event.changes.any { it.pressed }
+                        onDotDrag(dotIndex, isDragging)
+                        if (isDragging && event.changes.all { !it.pressed }) {
+                            // when drag ends, call with false
+                            onDotDrag(dotIndex, false)
+                        }
+                    }
+                }
+            },
+        horizontalArrangement = Arrangement.SpaceEvenly,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        for (i in 0 until dotCount) {
+            val isActive = i == activeDotIndex
+            Box(
+                modifier = Modifier
+                    .size(if (isActive) 10.dp else 6.dp)
+                    .clip(CircleShape)
+                    .background(
+                        if (isActive) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
+                    )
+                    .clickable { onDotClick(i) }
             )
         }
     }
-}@Composable
+}
+
+@Composable
 fun AlbumCard(
     album: Album,
     modifier: Modifier = Modifier,

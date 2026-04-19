@@ -401,12 +401,15 @@ class MainViewModel @Inject constructor(
             ) { filteredData, shouldRandomise, _ ->
                 filteredData to shouldRandomise
             }.collect { (filteredData, shouldRandomise) ->
+
                 val finalVideos = if (shouldRandomise) filteredData.videos.shuffled() else filteredData.videos
+                val displayAlbums = filteredData.albums.shuffled()
 
                 _uiState.update { uiState ->
                     uiState.copy(
                         filteredVideos = finalVideos,
                         filteredAlbums = filteredData.albums,
+                        availableAlbumsDisplay = displayAlbums,
                         availableArtistsDisplay = filteredData.artists,
                         availableArtists = filteredData.artists,
                         availableInstruments = filteredData.instruments,
@@ -691,10 +694,9 @@ class MainViewModel @Inject constructor(
 
     fun shuffleAlbums() {
         viewModelScope.launch {
-            val current = _uiState.value.albums
+            val current = _uiState.value.availableAlbumsDisplay
             val shuffled = current.shuffled()
-            _uiState.update { it.copy(albums = shuffled) }
-            Log.d("AlbumDebug", "Shuffled albums")
+            _uiState.update { it.copy(availableAlbumsDisplay = shuffled) }
         }
     }
 
@@ -736,6 +738,7 @@ data class MainUiState(
     val allInstruments: List<com.example.jazzlibraryktroomjpcompose.domain.models.Instrument> = emptyList(),
     val availableArtists: List<com.example.jazzlibraryktroomjpcompose.domain.models.Artist> = emptyList(), // natural order, used for chips
     val availableArtistsDisplay: List<com.example.jazzlibraryktroomjpcompose.domain.models.Artist> = emptyList(),   // display order (shuffled or base)
+    val availableAlbumsDisplay: List<Album> = emptyList(),
     val availableInstruments: List<com.example.jazzlibraryktroomjpcompose.domain.models.Instrument> = emptyList(),
     val availableDurations: List<com.example.jazzlibraryktroomjpcompose.domain.models.Duration> = emptyList(),
     val availableTypes: List<com.example.jazzlibraryktroomjpcompose.domain.models.Type> = emptyList(),
