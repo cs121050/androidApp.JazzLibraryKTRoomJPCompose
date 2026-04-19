@@ -19,6 +19,9 @@ data class AlbumRoomEntity(
     @ColumnInfo(name = "rating_count")
     val ratingCount: Int?,
 
+    @ColumnInfo(name = "year")
+    val year: Int?,
+
     @ColumnInfo(name = "released")
     val released: String?,
 

@@ -192,6 +192,9 @@ data class RemoteAlbum(
     @SerializedName("rating_count")
     val ratingCount: Int?,
 
+    @SerializedName("year")
+    val year: Int?,
+
     @SerializedName("released")
     val released: String?,
 

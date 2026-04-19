@@ -100,6 +100,7 @@ object RemoteToEntityMappers {
             youtubeVideoIdForThumbnail = this.youtubeVideoIdForThumbnail,
             ratingAverage = this.ratingAverage,
             ratingCount = this.ratingCount,
+            year = this.year ?: 0,
             released = this.released,
             releaseType = this.releaseType,
             title = this.title,

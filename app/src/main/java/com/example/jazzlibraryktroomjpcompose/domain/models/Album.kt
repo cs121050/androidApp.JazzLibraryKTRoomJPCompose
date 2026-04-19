@@ -7,6 +7,7 @@ data class Album(
     val youtubeVideoIdForThumbnail: String?,
     val ratingAverage: Double?,
     val ratingCount: Int?,
+    val year: Int?,
     val released: String?,
     val releaseType: String?,
     val title: String,

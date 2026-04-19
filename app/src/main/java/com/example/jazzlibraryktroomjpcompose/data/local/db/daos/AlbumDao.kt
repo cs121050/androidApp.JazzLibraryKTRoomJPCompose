@@ -43,7 +43,7 @@ interface AlbumDao {
     JOIN artists art ON art.artist_id = aca.artist_id
     WHERE aca.artist_id = :artistId
       AND (:instrumentId = 0 OR art.instrument_id = :instrumentId)
-    ORDER BY a.released DESC
+    ORDER BY a.title DESC
 """)
     fun getAlbumsByArtistAndInstrumentWithMainFlag(artistId: Int, instrumentId: Int): Flow<List<AlbumWithIsMainFlag>>
 
@@ -67,7 +67,7 @@ interface AlbumDao {
     WHERE (:instrumentId = 0 OR art.instrument_id = :instrumentId)
       AND (:artistId = 0 OR aca.artist_id = :artistId)
       AND aca.is_main = 1
-    ORDER BY a.released DESC
+    ORDER BY a.title DESC
 """)
     fun getAlbumByMultipleFilters(instrumentId: Int, artistId: Int): Flow<List<AlbumWithIsMainFlag>>
 
