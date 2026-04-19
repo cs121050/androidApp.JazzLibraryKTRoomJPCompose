@@ -1,7 +1,9 @@
 package com.example.jazzlibraryktroomjpcompose.domain
 
+import android.util.Log
 import com.example.jazzlibraryktroomjpcompose.data.local.db.JazzDatabase
 import com.example.jazzlibraryktroomjpcompose.data.local.db.entities.AlbumRoomEntity
+import com.example.jazzlibraryktroomjpcompose.data.local.db.entities.AlbumWithIsMainFlag
 import com.example.jazzlibraryktroomjpcompose.data.local.db.entities.ArtistRoomEntity
 import com.example.jazzlibraryktroomjpcompose.data.local.db.entities.ArtistWithVideoCount
 import com.example.jazzlibraryktroomjpcompose.data.local.db.entities.DurationRoomEntity
@@ -23,6 +25,8 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onEach
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -57,10 +61,24 @@ class FilterManager @Inject constructor(
                 typeId = typeFilter?.entityId ?: 0
             )
 
-            val albumsFlow = database.albumDao().getAlbumByMultipleFilters(
-                instrumentId = instrumentFilter?.entityId ?: 0,
-                artistId = artistFilter?.entityId ?: 0
-            )
+            val albumsFlow = if (artistFilter != null) {
+                Log.d("FilterManager", "Using artist filter: artistId=${artistFilter.entityId}, instrumentId=${instrumentFilter?.entityId ?: 0}")
+                database.albumDao().getAlbumsByArtistAndInstrumentWithMainFlag(
+                    artistId = artistFilter.entityId,
+                    instrumentId = instrumentFilter?.entityId ?: 0
+                ).onEach { albums ->
+                    Log.d("FilterManager", "getAlbumsByArtistAndInstrumentWithMainFlag returned ${albums.size} albums")
+                }
+            } else {
+                Log.d("FilterManager", "Using generic filter: instrumentId=${instrumentFilter?.entityId ?: 0}, artistId=0")
+                database.albumDao().getAlbumByMultipleFilters(
+                    instrumentId = instrumentFilter?.entityId ?: 0,
+                    artistId = 0
+                ).onEach { albums ->
+                    Log.d("FilterManager", "getAlbumByMultipleFilters returned ${albums.size} albums")
+                }
+            }
+
 
             // Get filtered artists
             val artistsFlow = database.artistDao().getArtistsByMultipleFilters(
@@ -122,7 +140,7 @@ class FilterManager @Inject constructor(
                 typesFlowWithCount
             ) { values ->
                 val videos = values[0] as List<VideoRoomEntity>
-                val albums = values[1] as List<AlbumRoomEntity>
+                val albums = values[1] as List<AlbumWithIsMainFlag>
                 val artists = values[2] as List<ArtistWithVideoCount>
                 val instruments = values[3] as List<InstrumentWithVideoCount>
                 val durations = values[4] as List<DurationWithVideoCount>
@@ -130,7 +148,7 @@ class FilterManager @Inject constructor(
 
                 FilteredData(
                     videos = videos.map { VideoMapper.toDomain(it) },
-                    albums = albums.map { AlbumMapper.toDomain(it) },
+                    albums = albums.map { AlbumMapper.toDomainWithIsMainFlag(it) },
                     artists = artists.map { ArtistMapper.toDomainWithCount(it) },
                     instruments = instruments.map { InstrumentMapper.toDomainWithCount(it) },
                     durations = durations.map { DurationMapper.toDomainWithCount(it) },

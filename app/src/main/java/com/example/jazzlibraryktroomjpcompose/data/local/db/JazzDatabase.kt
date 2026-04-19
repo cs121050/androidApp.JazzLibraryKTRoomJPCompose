@@ -24,7 +24,7 @@ import com.example.jazzlibraryktroomjpcompose.data.local.db.entities.*
         AlbumRoomEntity::class,
         AlbumContainsArtistRoomEntity::class
     ],
-    version = 11,
+    version = 12,
     exportSchema = true
 )
 @TypeConverters(Converters::class)

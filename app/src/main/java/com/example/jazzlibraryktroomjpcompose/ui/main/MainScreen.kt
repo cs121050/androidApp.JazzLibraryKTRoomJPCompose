@@ -115,6 +115,7 @@ import android.util.Log
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Toast
+import androidx.compose.animation.animateContentSize
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
 import com.google.accompanist.systemuicontroller.rememberSystemUiController
@@ -131,9 +132,30 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Surface
 import androidx.compose.ui.unit.Dp
 import com.example.jazzlibraryktroomjpcompose.domain.models.Album
 import kotlinx.coroutines.flow.map
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.material.icons.filled.Album
+import androidx.compose.material.icons.filled.ArrowDownward
+import androidx.compose.material.icons.filled.ArrowUpward
+import androidx.compose.material.ripple.rememberRipple
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import com.example.jazzlibraryktroomjpcompose.ui.main.util.instrumentColor
+
+enum class AlbumGridTab { MAIN, FEATURED }
+enum class SortDirection { ASC, DESC }
 
 class ScrollLockState {
     var isLocked by mutableStateOf(false)
@@ -209,6 +231,7 @@ fun MainScreen(
     val currentFilterPathId by viewModel.currentFilterPathId.collectAsState()
 
     val currentMediaEntry by playerViewModel.currentFilterPathMedia.collectAsState()
+    val currentMediaEntryTypeOfMedia = currentMediaEntry?.typeOfMedia
 
     //DEBUGLOG
     LaunchedEffect(isFullscreen) {
@@ -493,6 +516,7 @@ fun MainScreen(
                                             )
                                         },
                                         filteredAlbums = uiState.filteredAlbums,
+                                        currentMediaEntryTypeOfMedia = currentMediaEntryTypeOfMedia,
                                         onAlbumSelected = {  /* todo */ }
                                     )
 
@@ -1571,7 +1595,8 @@ fun ArtistContent(
     onRefresh: () -> Unit = {},
     filterPath: List<FilterPath>, // new parameter
     onArtistSelected: (Artist) -> Unit = {},
-    onAlbumSelected: (Album) -> Unit = {}
+    onAlbumSelected: (Album) -> Unit = {},
+    currentMediaEntryTypeOfMedia: Int?
 ) {
     // Check if there's an artist filter
     val selectedArtist = filterPath
@@ -1587,8 +1612,8 @@ fun ArtistContent(
             artist = selectedArtist,
             filteredAlbums = filteredAlbums,
             onAlbumSelected = onAlbumSelected,
-            modifier = modifier,
-
+            currentMediaEntryTypeOfMedia= currentMediaEntryTypeOfMedia,
+            modifier = modifier
         )
         return
     }
@@ -1606,6 +1631,7 @@ fun ArtistContent(
             artist = artistsShuffled.first(),
             filteredAlbums = filteredAlbums,
             onAlbumSelected = onAlbumSelected,
+            currentMediaEntryTypeOfMedia= currentMediaEntryTypeOfMedia,
             modifier = modifier
         )
         return
@@ -2098,7 +2124,7 @@ fun ArtistImage(
     contentScale: ContentScale = ContentScale.Crop
 ) {
     // Generate on each composition – cheap enough
-    val fallbackPainter = BitmapPainter(generateIdenticon(artist).asImageBitmap())
+    val fallbackPainter = BitmapPainter(generateIdenticon(artist.fullName, artist.instrumentId).asImageBitmap())
 
     AsyncImage(
         model = ImageRequest.Builder(LocalContext.current)
@@ -2117,6 +2143,7 @@ fun SingleArtistView(
     artist: Artist,
     filteredAlbums: List<Album>,
     onAlbumSelected: (Album) -> Unit,
+    currentMediaEntryTypeOfMedia: Int?,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -2155,7 +2182,7 @@ fun SingleArtistView(
                         modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center
                     ) {
-                        val fallbackPainter = BitmapPainter(generateIdenticon(artist).asImageBitmap())
+                        val fallbackPainter = BitmapPainter(generateIdenticon(artist.fullName, artist.instrumentId).asImageBitmap())
                         Image(
                             painter = fallbackPainter,
                             contentDescription = artist.fullName,
@@ -2206,13 +2233,21 @@ fun SingleArtistView(
         }
 
         // 4. Albums section
+        // Inside SingleArtistView, replace the item for AlbumsSection with:
         item {
-            AlbumsSection(
-                artist = artist,
-                filteredAlbums = filteredAlbums,
-                onAlbumSelected = onAlbumSelected,
-                modifier = Modifier.fillMaxWidth()
-            )
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(460.dp)   // ✅ provide finite height
+            ) {
+                AlbumsSection(
+                    artist = artist,
+                    filteredAlbums = filteredAlbums,
+                    onAlbumSelected = onAlbumSelected,
+                    currentMediaEntryTypeOfMedia = currentMediaEntryTypeOfMedia,
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
         }
 
         // 5. Horizontal albums row placeholder
@@ -2254,7 +2289,7 @@ fun SingleArtistView(
                         contentScale = ContentScale.Fit
                     )
                 } else {
-                    val fallbackPainter = BitmapPainter(generateIdenticon(artist).asImageBitmap())
+                    val fallbackPainter = BitmapPainter(generateIdenticon(artist.fullName, artist.instrumentId).asImageBitmap())
                     Image(
                         painter = fallbackPainter,
                         contentDescription = artist.fullName,
@@ -2670,23 +2705,346 @@ fun AlbumsSection(
     artist: Artist,
     filteredAlbums: List<Album>,
     onAlbumSelected: (Album) -> Unit,
+    currentMediaEntryTypeOfMedia: Int?,
     modifier: Modifier = Modifier
 ) {
-
     var sortType by remember { mutableStateOf(AlbumSortType.RELEASE_DATE_DESC) }
 
-//    if (selectedAlbum != null) {
-//        AlbumPlayerCard(
-//            ...
-//            modifier = modifier
-//        )
-//    } else {
-//        AlbumGridView(
+    when (currentMediaEntryTypeOfMedia) {
+        1 -> Box(modifier = modifier.fillMaxSize()) {
+            Text("AlbumPlayerCard mode TODO:")
+        }
+//            AlbumPlayerCard(
 //            albums = filteredAlbums,
-//            sortType = sortType,
-//            onSortTypeChange = { sortType = it },
-//            onAlbumClick = { selectedAlbum = it },
+//            onAlbumSelected = onAlbumSelected,
 //            modifier = modifier
 //        )
-//    }
+        else -> {
+            AlbumGridView(
+                albums = filteredAlbums,
+                onAlbumClick = onAlbumSelected,
+                modifier = modifier.fillMaxHeight()   // ✅ pass through the modifier
+            )
+        }
+    }
+}
+
+@Composable
+fun AlbumGridView(
+    albums: List<Album>,
+    onAlbumClick: (Album) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    // Count albums per tab
+    val mainCount = remember(albums) { albums.count { it.isMain == 1 } }
+    val featuredCount = remember(albums) { albums.count { it.isMain == 0 } }
+
+    // Tab state: default to Main if it has albums, otherwise Featured (if any), otherwise null
+    var selectedTab by remember {
+        mutableStateOf(
+            when {
+                mainCount > 0 -> AlbumGridTab.MAIN
+                featuredCount > 0 -> AlbumGridTab.FEATURED
+                else -> null
+            }
+        )
+    }
+
+    // Ensure selectedTab never points to an empty tab
+    LaunchedEffect(mainCount, featuredCount) {
+        selectedTab = when {
+            selectedTab == AlbumGridTab.MAIN && mainCount == 0 && featuredCount > 0 -> AlbumGridTab.FEATURED
+            selectedTab == AlbumGridTab.FEATURED && featuredCount == 0 && mainCount > 0 -> AlbumGridTab.MAIN
+            selectedTab == AlbumGridTab.MAIN && mainCount == 0 && featuredCount == 0 -> null
+            selectedTab == AlbumGridTab.FEATURED && featuredCount == 0 && mainCount == 0 -> null
+            else -> selectedTab
+        }
+    }
+
+    // Sorting state
+    var yearSort by remember { mutableStateOf<SortDirection?>(SortDirection.DESC) }
+    var ratingSort by remember { mutableStateOf<SortDirection?>(null) }
+
+    fun setYearSort(direction: SortDirection?) {
+        yearSort = direction
+        if (direction != null) ratingSort = null
+    }
+
+    fun setRatingSort(direction: SortDirection?) {
+        ratingSort = direction
+        if (direction != null) yearSort = null
+    }
+
+    // Filter albums based on selected tab
+    val filteredAlbums = remember(albums, selectedTab) {
+        when (selectedTab) {
+            AlbumGridTab.MAIN -> albums.filter { it.isMain == 1 }
+            AlbumGridTab.FEATURED -> albums.filter { it.isMain == 0 }
+            null -> emptyList()
+        }
+    }
+
+    // Apply sorting
+    val sortedAlbums = remember(filteredAlbums, yearSort, ratingSort) {
+        when {
+            yearSort != null -> {
+                val comparator = if (yearSort == SortDirection.ASC)
+                    compareBy<Album, String?>(nullsLast(), { it.released })
+                else
+                    compareByDescending<Album, String?>(nullsLast(), { it.released })
+                filteredAlbums.sortedWith(comparator)
+            }
+            ratingSort != null -> {
+                val comparator = if (ratingSort == SortDirection.ASC)
+                    compareBy<Album, Double?>(nullsLast(), { it.ratingAverage })
+                else
+                    compareByDescending<Album, Double?>(nullsLast(), { it.ratingAverage })
+                filteredAlbums.sortedWith(comparator)
+            }
+            else -> {
+                filteredAlbums.sortedWith(compareByDescending<Album, String?>(nullsLast(), { it.released }))
+            }
+        }
+    }
+
+    // Determine if there are any albums to show (for hiding sorting chips)
+    val hasAlbums = sortedAlbums.isNotEmpty()
+
+    // Pagination
+    val pages = remember(sortedAlbums) { sortedAlbums.chunked(6) }
+    val pagerState = rememberPagerState(pageCount = { pages.size })
+    val coroutineScope = rememberCoroutineScope()
+
+    // Reset to first page when list changes
+    LaunchedEffect(sortedAlbums) {
+        if (pages.isNotEmpty()) {
+            pagerState.scrollToPage(0)
+        }
+    }
+
+    Column(modifier = modifier.fillMaxSize()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            // Main chip – always visible, disabled if no main albums
+            FilterChip(
+                selected = selectedTab == AlbumGridTab.MAIN,
+                onClick = { selectedTab = AlbumGridTab.MAIN },
+                label = { Text("Main") },
+                enabled = mainCount > 0
+            )
+            // Featured chip – always visible, disabled if no featured albums
+            FilterChip(
+                selected = selectedTab == AlbumGridTab.FEATURED,
+                onClick = { selectedTab = AlbumGridTab.FEATURED },
+                label = { Text("Featured") },
+                enabled = featuredCount > 0
+            )
+            // Year and Rating chips are shown only if there is at least one album
+            if (hasAlbums) {
+                // Year sorting chip
+                FilterChip(
+                    selected = yearSort != null,
+                    onClick = {
+                        when (yearSort) {
+                            null -> setYearSort(SortDirection.ASC)
+                            SortDirection.ASC -> setYearSort(SortDirection.DESC)
+                            SortDirection.DESC -> setYearSort(null)
+                        }
+                    },
+                    label = { Text("Year") },
+                    leadingIcon = if (yearSort != null) {
+                        {
+                            Icon(
+                                if (yearSort == SortDirection.ASC) Icons.Default.ArrowUpward
+                                else Icons.Default.ArrowDownward,
+                                contentDescription = if (yearSort == SortDirection.ASC) "Ascending" else "Descending",
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    } else null
+                )
+                // Rating sorting chip
+                FilterChip(
+                    selected = ratingSort != null,
+                    onClick = {
+                        when (ratingSort) {
+                            null -> setRatingSort(SortDirection.ASC)
+                            SortDirection.ASC -> setRatingSort(SortDirection.DESC)
+                            SortDirection.DESC -> setRatingSort(null)
+                        }
+                    },
+                    label = { Text("Rating") },
+                    leadingIcon = if (ratingSort != null) {
+                        {
+                            Icon(
+                                if (ratingSort == SortDirection.ASC) Icons.Default.ArrowUpward
+                                else Icons.Default.ArrowDownward,
+                                contentDescription = if (ratingSort == SortDirection.ASC) "Ascending" else "Descending",
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    } else null
+                )
+            }
+        }
+
+        // Horizontal pager (shows empty state if no albums)
+        HorizontalPager(
+            state = pagerState,
+            modifier = Modifier.weight(1f).fillMaxHeight()
+        ) { page ->
+            val pageAlbums = pages.getOrElse(page) { emptyList() }
+            if (pageAlbums.isEmpty()) {
+                // Optional: show a placeholder when no albums
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("No albums to display")
+                }
+            } else {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 14.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    for (row in 0 until 2) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            for (col in 0 until 3) {
+                                val index = row * 3 + col
+                                val album = pageAlbums.getOrNull(index)
+                                if (album != null) {
+                                    AlbumCard(
+                                        album = album,
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .aspectRatio(0.65f),
+                                        onClick = { onAlbumClick(album) }
+                                    )
+                                } else {
+                                    Spacer(modifier = Modifier.weight(1f))
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Dots indicator only if more than one page and pages not empty
+        if (pages.size > 1) {
+            DotsRow(
+                pageCount = pages.size,
+                currentPage = pagerState.currentPage,
+                onPageSelected = { page ->
+                    coroutineScope.launch { pagerState.animateScrollToPage(page) }
+                },
+                modifier = Modifier.padding(vertical = 8.dp)
+            )
+        }
+    }
+}@Composable
+fun AlbumCard(
+    album: Album,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    val thumbnailUrl = album.getThumbnailUrl()
+
+    Card(
+        modifier = modifier
+            .clickable { onClick() }
+            .shadow(2.dp, RoundedCornerShape(12.dp))
+            .animateContentSize(),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        ),
+        elevation = CardDefaults.cardElevation(
+            defaultElevation = 2.dp,
+            pressedElevation = 6.dp
+        )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(8.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            // Square thumbnail (unchanged)
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(1f)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+            ) {
+                if (thumbnailUrl != null) {
+                    AsyncImage(
+                        model = ImageRequest.Builder(LocalContext.current)
+                            .data(thumbnailUrl)
+                            .crossfade(true)
+                            .build(),
+                        contentDescription = album.title,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop,
+                        error = painterResource(R.drawable.ic_error)
+                    )
+                } else {
+                    Icon(
+                        Icons.Default.Album,
+                        contentDescription = null,
+                        modifier = Modifier
+                            .align(Alignment.Center)
+                            .size(32.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Text(
+                text = album.title,
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Start,
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            // ✅ Fixed row: year takes only needed width, artist fills rest
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(4.dp) // small breathing gap
+            ) {
+                // Year – no weight, wraps content
+                Text(
+                    text = album.released?.take(4) ?: "",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                    maxLines = 1
+                )
+
+                // Artist name – takes remaining space, starts right after year
+                Text(
+                    text = album.artistFullName ?: "",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),//instrumentColor(album.artistInstrumentId ?: 0).copy(alpha = 0.7f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f) // fills rest, no gap before it
+                )
+            }
+        }
+    }
 }
