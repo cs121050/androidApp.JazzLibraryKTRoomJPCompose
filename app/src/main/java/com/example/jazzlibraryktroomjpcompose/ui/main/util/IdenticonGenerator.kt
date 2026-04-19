@@ -8,9 +8,9 @@ import androidx.compose.ui.graphics.Color as ComposeColor
 import androidx.compose.ui.graphics.toArgb
 import com.example.jazzlibraryktroomjpcompose.domain.models.Artist
 
-fun generateIdenticon(artist: Artist, size: Int = 200): Bitmap {
+fun generateIdenticon(artistFullName: String, instrumentId: Int, size: Int = 200): Bitmap {
     // Get base color from instrument (your existing function)
-    val baseColor = instrumentColor(artist.instrumentId).toArgb()
+    val baseColor = instrumentColor(instrumentId).toArgb()
 
     val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
     val canvas = Canvas(bitmap)
@@ -20,7 +20,7 @@ fun generateIdenticon(artist: Artist, size: Int = 200): Bitmap {
     }
 
     val cellSize = size / 5
-    val hash = artist.fullName.hashCode()
+    val hash = artistFullName.hashCode()
 
     // 5x5 grid, mirrored on the left half
     for (row in 0 until 5) {

@@ -2,6 +2,7 @@ package com.example.jazzlibraryktroomjpcompose.data.local.db.daos
 
 import androidx.room.*
 import com.example.jazzlibraryktroomjpcompose.data.local.db.entities.AlbumRoomEntity
+import com.example.jazzlibraryktroomjpcompose.data.local.db.entities.AlbumWithIsMainFlag
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -35,15 +36,16 @@ interface AlbumDao {
     @Query("SELECT * FROM albums WHERE title LIKE '%' || :query || '%' ORDER BY title ASC")
     fun searchAlbumsByTitle(query: String): Flow<List<AlbumRoomEntity>>
 
-    // Single filter – by artist
     @Query("""
-        SELECT a.* 
-        FROM albums a 
-        JOIN album_contains_artist aca ON aca.album_id = a.album_id
-        WHERE aca.artist_id = :artistId
-        ORDER BY a.released DESC
-    """)
-    fun getAlbumsByArtist(artistId: Int): Flow<List<AlbumRoomEntity>>
+    SELECT DISTINCT a.*, aca.is_main, art.artist_id, art.artist_name || ' ' || art.artist_surname AS artist_full_name, art.instrument_id AS artist_instrument_id
+    FROM albums a
+    JOIN album_contains_artist aca ON aca.album_id = a.album_id
+    JOIN artists art ON art.artist_id = aca.artist_id
+    WHERE aca.artist_id = :artistId
+      AND (:instrumentId = 0 OR art.instrument_id = :instrumentId)
+    ORDER BY a.released DESC
+""")
+    fun getAlbumsByArtistAndInstrumentWithMainFlag(artistId: Int, instrumentId: Int): Flow<List<AlbumWithIsMainFlag>>
 
     // Single filter – by instrument
     @Query("""
@@ -58,15 +60,16 @@ interface AlbumDao {
 
     // Double filter – artist AND instrument
     @Query("""
-    SELECT DISTINCT a.* 
+    SELECT DISTINCT a.*, aca.is_main, art.artist_id, art.artist_name || ' ' || art.artist_surname AS artist_full_name, art.instrument_id AS artist_instrument_id
     FROM albums a 
     LEFT JOIN album_contains_artist aca ON aca.album_id = a.album_id
     LEFT JOIN artists art ON art.artist_id = aca.artist_id
     WHERE (:instrumentId = 0 OR art.instrument_id = :instrumentId)
       AND (:artistId = 0 OR aca.artist_id = :artistId)
+      AND aca.is_main = 1
     ORDER BY a.released DESC
 """)
-    fun getAlbumByMultipleFilters(instrumentId: Int, artistId: Int): Flow<List<AlbumRoomEntity>>
+    fun getAlbumByMultipleFilters(instrumentId: Int, artistId: Int): Flow<List<AlbumWithIsMainFlag>>
 
     @Query("SELECT * FROM albums ORDER BY released DESC")
     fun getAllAlbumsSortedByReleaseDateDesc(): Flow<List<AlbumRoomEntity>>

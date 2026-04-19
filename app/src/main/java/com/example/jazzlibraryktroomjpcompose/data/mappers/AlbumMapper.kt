@@ -1,6 +1,7 @@
 package com.example.jazzlibraryktroomjpcompose.data.mappers
 
 import com.example.jazzlibraryktroomjpcompose.data.local.db.entities.AlbumRoomEntity
+import com.example.jazzlibraryktroomjpcompose.data.local.db.entities.AlbumWithIsMainFlag
 import com.example.jazzlibraryktroomjpcompose.domain.models.Album
 
 object AlbumMapper {
@@ -41,6 +42,30 @@ object AlbumMapper {
             styles = domain.styles,
             tracklist = domain.tracklist,
             wikipediaData = domain.wikipediaData
+        )
+    }
+
+    fun toDomainWithIsMainFlag(entity: AlbumWithIsMainFlag): Album {
+        return Album(
+            albumId = entity.album.albumId,
+            youtubeVideoIdForThumbnail = entity.album.youtubeVideoIdForThumbnail,
+            ratingAverage = entity.album.ratingAverage,
+            ratingCount = entity.album.ratingCount,
+            released = entity.album.released,
+            releaseType = entity.album.releaseType,
+            title = entity.album.title,
+            wikipediaUrl = entity.album.wikipediaUrl,
+            coverartarchiveThumb = entity.album.coverartarchiveThumb,
+            extraArtists = entity.album.extraArtists,
+            genres = entity.album.genres,
+            labels = entity.album.labels,
+            styles = entity.album.styles,
+            tracklist = entity.album.tracklist,
+            wikipediaData = entity.album.wikipediaData,
+            isMain = entity.isMain,   // ← the flag from the JOIN
+            artistId = entity.artistId,
+            artistFullName = entity.artistFullName,
+            artistInstrumentId = entity.artistInstrumentId
         )
     }
 }
