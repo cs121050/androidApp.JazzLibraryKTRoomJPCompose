@@ -159,91 +159,88 @@ class FilterManager @Inject constructor(
         }
     }
 //TODO// separate bussiness logic from basic functionality
-    suspend fun handleChipSelection(
-        currentFilterPath: List<FilterPath>,
-        selectedCategoryId: Int,
-        selectedEntityId: Int,
-        selectedEntityName: String
-    ): List<FilterPath> {
+suspend fun handleChipSelection(
+    currentFilterPath: List<FilterPath>,
+    selectedCategoryId: Int,
+    selectedEntityId: Int,
+    selectedEntityName: String
+): List<FilterPath> {
 
-        val result = when {
-            // Check if chip is already selected (deselect case)
-            currentFilterPath.any { it.categoryId == selectedCategoryId && it.entityId == selectedEntityId } -> {
-                // Remove this chip
-                val newPath = currentFilterPath.filterNot {
-                    it.categoryId == selectedCategoryId && it.entityId == selectedEntityId
-                }
-
-                // If we're deselecting an instrument, also remove any artist
-                if (selectedCategoryId == FilterPath.CATEGORY_INSTRUMENT) {
-                    newPath.filterNot { it.categoryId == FilterPath.CATEGORY_ARTIST }
-                } else {
-                    newPath
-                }
+    val result = when {
+        // Deselection case (chip already selected)
+        currentFilterPath.any { it.categoryId == selectedCategoryId && it.entityId == selectedEntityId } -> {
+            val newPath = currentFilterPath.filterNot {
+                it.categoryId == selectedCategoryId && it.entityId == selectedEntityId
             }
-
-            // Check if there's already a chip in this category (replace case)
-            currentFilterPath.any { it.categoryId == selectedCategoryId } -> {
-                // Remove ALL existing chips in this category and add the new one
-                val filteredPath = currentFilterPath.filterNot { it.categoryId == selectedCategoryId }
-
-                // If selecting an instrument, also remove any artist
-                val pathWithoutArtist = if (selectedCategoryId == FilterPath.CATEGORY_INSTRUMENT) {
-                    filteredPath.filterNot { it.categoryId == FilterPath.CATEGORY_ARTIST }
-                } else {
-                    filteredPath
-                }
-                pathWithoutArtist + FilterPath(
-                    categoryId = selectedCategoryId,
-                    entityId = selectedEntityId,
-                    entityName = selectedEntityName
-                )
+            // If deselecting an instrument, also remove any artist
+            if (selectedCategoryId == FilterPath.CATEGORY_INSTRUMENT) {
+                newPath.filterNot { it.categoryId == FilterPath.CATEGORY_ARTIST }
+            } else {
+                newPath
             }
+        }
 
-            // New chip selection
-            else -> {
-                val newFilterPath = currentFilterPath.toMutableList()
-                newFilterPath.add(
-                    FilterPath(
+        // Selection case (new or replacement – same logic)
+        else -> {
+            // Remove all existing chips of the same category
+            var filteredPath = currentFilterPath.filterNot { it.categoryId == selectedCategoryId }
+
+            when (selectedCategoryId) {
+                FilterPath.CATEGORY_ARTIST -> {
+                    // 1. Remove any existing instrument filter
+                    filteredPath = filteredPath.filterNot { it.categoryId == FilterPath.CATEGORY_INSTRUMENT }
+
+                    // 2. Get the artist's primary instrument
+                    val artist = database.artistDao().getArtistById(selectedEntityId).firstOrNull()
+                    val instrumentId = artist?.instrumentId
+                    val instrumentName = if (instrumentId != null && instrumentId > 0) {
+                        database.instrumentDao().getInstrumentById(instrumentId).firstOrNull()?.name ?: ""
+                    } else ""
+
+                    // 3. Build the new list: base + instrument (if valid) + artist
+                    val newPath = filteredPath.toMutableList()
+                    if (instrumentId != null && instrumentId > 0 && instrumentName.isNotBlank()) {
+                        newPath.add(
+                            FilterPath(
+                                categoryId = FilterPath.CATEGORY_INSTRUMENT,
+                                entityId = instrumentId,
+                                entityName = instrumentName
+                            )
+                        )
+                    }
+                    newPath.add(
+                        FilterPath(
+                            categoryId = FilterPath.CATEGORY_ARTIST,
+                            entityId = selectedEntityId,
+                            entityName = selectedEntityName
+                        )
+                    )
+                    newPath.toList()
+                }
+
+                FilterPath.CATEGORY_INSTRUMENT -> {
+                    // When selecting an instrument, remove any existing artist
+                    filteredPath = filteredPath.filterNot { it.categoryId == FilterPath.CATEGORY_ARTIST }
+                    filteredPath + FilterPath(
                         categoryId = selectedCategoryId,
                         entityId = selectedEntityId,
                         entityName = selectedEntityName
                     )
-                )
-
-                // Special rule: If artist is selected and no instrument is selected,
-                // automatically select the artist's instrument
-                if (selectedCategoryId == FilterPath.CATEGORY_ARTIST &&
-                    !currentFilterPath.any { it.categoryId == FilterPath.CATEGORY_INSTRUMENT }) {
-
-                    val artist = database.artistDao().getArtistById(selectedEntityId).firstOrNull()
-                    artist?.let {
-                        // Check if we haven't already added this instrument
-                        if (!newFilterPath.any { filter ->
-                                filter.categoryId == FilterPath.CATEGORY_INSTRUMENT &&
-                                        filter.entityId == it.instrumentId
-                            }) {
-                            newFilterPath.add(
-                                FilterPath(
-                                    categoryId = FilterPath.CATEGORY_INSTRUMENT,
-                                    entityId = it.instrumentId,
-                                    entityName = database.instrumentDao().getInstrumentById(it.instrumentId)
-                                        .firstOrNull()?.name ?: "Unknown"
-                                )
-                            )
-                        }
-                    }
                 }
 
-                // NEW RULE: If instrument is selected, remove any existing artist
-                if (selectedCategoryId == FilterPath.CATEGORY_INSTRUMENT) {
-                    newFilterPath.removeIf { it.categoryId == FilterPath.CATEGORY_ARTIST }
+                else -> {
+                    // For duration or type, just add the new chip
+                    filteredPath + FilterPath(
+                        categoryId = selectedCategoryId,
+                        entityId = selectedEntityId,
+                        entityName = selectedEntityName
+                    )
                 }
-                newFilterPath.toList()
             }
         }
-        return result.distinctBy { it.categoryId }  // Deduplicate before returning
     }
+    return result.distinctBy { it.categoryId }
+}
 
     suspend fun handleChipDeselection(
         currentFilterPath: List<FilterPath>,
