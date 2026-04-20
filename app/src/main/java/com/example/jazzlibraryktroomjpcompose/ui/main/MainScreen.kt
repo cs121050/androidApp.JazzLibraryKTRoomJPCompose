@@ -244,6 +244,8 @@ fun MainScreen(
     val currentMediaEntry by playerViewModel.currentFilterPathMedia.collectAsState()
     val currentMediaEntryTypeOfMedia = currentMediaEntry?.typeOfMedia
 
+    val scrollToAlbumsTrigger = remember { mutableStateOf(0) }
+
     LaunchedEffect(currentFilterPathId) {
         Log.d("MainScreen", "currentFilterPathId changed to: $currentFilterPathId")
     }
@@ -536,7 +538,22 @@ fun MainScreen(
                                         currentMediaEntryTypeOfMedia = currentMediaEntryTypeOfMedia,
                                         currentFilterPathId = currentFilterPathId,
                                         minimiseMaximiseToggle = isPlayerVisible,
-                                        onAlbumSelected = {  /* todo */ }
+                                        onAlbumSelected = { album ->
+                                            val alreadyFiltered = filterState.currentFilterPath.any {
+                                                it.categoryId == FilterPath.CATEGORY_ARTIST && it.entityId == album.artistId
+                                            }
+                                            if (!alreadyFiltered && album.artistId != null) {
+                                                viewModel.handleChipSelection(
+                                                    FilterPath.CATEGORY_ARTIST,
+                                                    album.artistId,
+                                                    album.artistFullName ?: "Unknown Artist",
+                                                    true
+                                                )
+                                            }
+                                            // Always scroll to albums section after clicking an album card
+                                            scrollToAlbumsTrigger.value++
+                                        },
+                                        scrollToAlbumsTrigger = scrollToAlbumsTrigger
                                     )
 
                                     MainTab.HISTORY -> HistoryContent(
@@ -1616,6 +1633,7 @@ fun ArtistContent(
     filterPath: List<FilterPath>, // new parameter
     onArtistSelected: (Artist) -> Unit = {},
     onAlbumSelected: (Album) -> Unit = {},
+    scrollToAlbumsTrigger: MutableState<Int>,
     currentFilterPathId: Int?,
     minimiseMaximiseToggle: Boolean,
     currentMediaEntryTypeOfMedia: Int?
@@ -1638,6 +1656,7 @@ fun ArtistContent(
             albumsDisplay = albumsDisplay,
             currentFilterPathId = currentFilterPathId,
             minimiseMaximiseToggle = minimiseMaximiseToggle,
+            scrollToAlbumsTrigger = scrollToAlbumsTrigger,
             modifier = modifier
         )
         return
@@ -1660,6 +1679,7 @@ fun ArtistContent(
             albumsDisplay = albumsDisplay,
             currentFilterPathId = currentFilterPathId,
             minimiseMaximiseToggle = minimiseMaximiseToggle,
+            scrollToAlbumsTrigger = scrollToAlbumsTrigger,
             modifier = modifier
         )
         return
@@ -2192,6 +2212,7 @@ fun SingleArtistView(
     filteredAlbums: List<Album>,
     albumsDisplay: List<Album>,
     onAlbumSelected: (Album) -> Unit,
+    scrollToAlbumsTrigger: MutableState<Int>,
     currentMediaEntryTypeOfMedia: Int?,
     currentFilterPathId:  Int?,
     minimiseMaximiseToggle: Boolean,
@@ -2204,7 +2225,19 @@ fun SingleArtistView(
     val hasThumbnail = artist.thumbnailUrl != null
     val imageHeight = if (hasThumbnail) 300.dp else 150.dp
 
+    val listState = rememberLazyListState()     // lazy list state for scrolling
+
+    // Scroll to albums section (index 3) when trigger changes
+    LaunchedEffect(scrollToAlbumsTrigger.value) {
+        if (scrollToAlbumsTrigger.value > 0) {
+            // Small delay to ensure the layout is ready
+            delay(100)
+            listState.animateScrollToItem(4)
+        }
+    }
+
     LazyColumn(
+        state = listState,
         modifier = modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
