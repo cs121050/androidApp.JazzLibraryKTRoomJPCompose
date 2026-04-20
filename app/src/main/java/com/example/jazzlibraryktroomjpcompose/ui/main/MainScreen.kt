@@ -3138,7 +3138,7 @@ fun DotScrollbar(
     // To support dragging, we can use a pointerInput on the whole row and calculate which dot the pointer is over.
     Row(
         modifier = modifier
-            .height(24.dp)
+            .height(10.dp)
             .pointerInput(Unit) {
                 // Detect drag events and call onDotDrag with the nearest dot
                 awaitPointerEventScope {
@@ -3156,7 +3156,7 @@ fun DotScrollbar(
                     }
                 }
             },
-        horizontalArrangement = Arrangement.SpaceEvenly,
+        horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically
     ) {
         for (i in 0 until dotCount) {
