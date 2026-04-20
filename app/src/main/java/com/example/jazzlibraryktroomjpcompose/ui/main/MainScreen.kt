@@ -2820,8 +2820,11 @@ fun AlbumGridView(
     val sortedAlbums = remember(filteredByTab, yearSort, ratingSort, isAlphabeticalMode) {
         when {
             ratingSort != null -> {
-                val baseComparator = compareBy<Album, Double?>(nullsLast()) { it.ratingAverage }
-                val comparator = if (ratingSort == SortDirection.ASC) baseComparator else baseComparator.reversed()
+                // Primary: ratingAverage, Secondary: ratingCount
+                val avgComparator = compareBy<Album, Double?>(nullsLast()) { it.ratingAverage }
+                val countComparator = compareBy<Album, Int?>(nullsLast()) { it.ratingCount }
+                val combined = avgComparator.then(countComparator)
+                val comparator = if (ratingSort == SortDirection.ASC) combined else combined.reversed()
                 filteredByTab.sortedWith(comparator)
             }
             yearSort != null -> {
@@ -2860,8 +2863,8 @@ fun AlbumGridView(
             ratingSort != null -> {
                 val avg = album.ratingAverage
                 val count = album.ratingCount ?: 0
-                val avgStr = if (avg != null) DecimalFormat("#.#").format(avg) else "?"
-                "$avgStr / $count"
+                val avgStr = if (avg != null) DecimalFormat("#.##").format(avg) else "?"
+                "$avgStr ($count)"
             }
             yearSort != null -> {
                 album.year?.toString() ?: ""
