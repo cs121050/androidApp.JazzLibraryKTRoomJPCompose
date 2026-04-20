@@ -2284,9 +2284,9 @@ fun SingleArtistView(
     // Scroll to albums section (index 3) when trigger changes
     LaunchedEffect(scrollToAlbumsTrigger.value) {
         if (scrollToAlbumsTrigger.value > 0) {
-            // Small delay to ensure the layout is ready
-            delay(100)
-            listState.animateScrollToItem(4)
+            delay(100) // let layout settle
+            listState.animateScrollToItem(4) // scroll to albums section
+            scrollToAlbumsTrigger.value = 0 // reset after scroll
         }
     }
 
