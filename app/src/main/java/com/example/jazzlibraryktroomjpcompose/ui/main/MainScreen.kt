@@ -1543,20 +1543,39 @@ fun VideoCard(
 
 
                 // Artists row – show only if there are artists
-                if (artists.isNotEmpty()) {
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        artists.forEach { artist ->
-                            FilterPathChip(
-                                text = artist.fullName,
-                                isSelected = false,
-                                onClick = { onArtistClick(artist) }
-                            )
+            if (artists.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    artists.forEach { artist ->
+                        // Chip with identicon and artist name
+                        Surface(
+                            shape = RoundedCornerShape(16.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant,
+                            modifier = Modifier.clickable { onArtistClick(artist) }
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                            ) {
+                                ArtistImage(
+                                    artist = artist,
+                                    modifier = Modifier.size(20.dp),
+                                    contentScale = ContentScale.Crop
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = artist.fullName,
+                                    style = MaterialTheme.typography.labelMedium
+                                )
+                            }
                         }
                     }
+                }
             }
         }
     }
