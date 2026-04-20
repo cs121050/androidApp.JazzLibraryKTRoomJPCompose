@@ -512,11 +512,13 @@ fun MainScreen(
                                         isPlayerVisible = isPlayerVisible,
                                         cardUiStates = cardUiStates,
                                         currentFilterPathId = currentFilterPathId,
+                                        videoArtistsMap = viewModel.videoArtistsMap.collectAsState().value,
                                         onCardTitleClick = { videoId ->
                                             viewModel.onCardTitleClick(
                                                 videoId
                                             )
-                                        }
+                                        },
+                                        viewModel = viewModel
                                     )
 
                                     MainTab.ARTISTS -> ArtistContent(
@@ -553,7 +555,8 @@ fun MainScreen(
                                             // Always scroll to albums section after clicking an album card
                                             scrollToAlbumsTrigger.value++
                                         },
-                                        scrollToAlbumsTrigger = scrollToAlbumsTrigger
+                                        scrollToAlbumsTrigger = scrollToAlbumsTrigger,
+                                        viewModel = viewModel
                                     )
 
                                     MainTab.HISTORY -> HistoryContent(
@@ -1219,6 +1222,8 @@ private fun VideoListContent(
     modifier: Modifier = Modifier,
     cardUiStates: Map<String, CardUiState>,
     currentFilterPathId: Int?,
+    videoArtistsMap: Map<Int, List<Artist>>,
+    viewModel: MainViewModel,
     onCardTitleClick: (String) -> Unit
 ) {
 // Find the index of the currently active video card
@@ -1382,7 +1387,21 @@ private fun VideoListContent(
                             }
                         },
                         cardState = cardUiStates[video.locationId] ?: CardUiState(),
-                        onCardTitleClick = { onCardTitleClick(video.locationId) }
+                        onCardTitleClick = { onCardTitleClick(video.locationId) },
+                        artists = videoArtistsMap[video.id] ?: emptyList(),
+                        onArtistClick = { artist ->
+                            val alreadyFiltered = filterState.currentFilterPath.any {
+                                it.categoryId == FilterPath.CATEGORY_ARTIST && it.entityId == artist.id
+                            }
+                            if (!alreadyFiltered && artist.id != null) {
+                                viewModel.handleChipSelection(
+                                    FilterPath.CATEGORY_ARTIST,
+                                    artist.id,
+                                    artist.fullName ?: "Unknown Artist",
+                                    true
+                                )
+                            }
+                        }
                     )
                 }
             }
@@ -1399,7 +1418,9 @@ fun VideoCard(
     onCardClicked: () -> Unit, // called when user taps to load video
     modifier: Modifier = Modifier,
     cardState: CardUiState,
-    onCardTitleClick: () -> Unit
+    onCardTitleClick: () -> Unit,
+    artists: List<Artist>,              // new parameter
+    onArtistClick: (Artist) -> Unit     // callback to apply filter
 ) {
     val context = LocalContext.current
 
@@ -1520,13 +1541,22 @@ fun VideoCard(
 
             }
 
-            // --- Expanded content (if any) ---
-            if (cardState.expanded && isPlayerVisible) {
-                // You can add more details here (description, artist list, etc.)
-                Text(
-                    text = "Additional info here...",
-                    modifier = Modifier.padding(top = 8.dp)
-                )
+
+                // Artists row – show only if there are artists
+                if (artists.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        artists.forEach { artist ->
+                            FilterPathChip(
+                                text = artist.fullName,
+                                isSelected = false,
+                                onClick = { onArtistClick(artist) }
+                            )
+                        }
+                    }
             }
         }
     }
@@ -1636,6 +1666,7 @@ fun ArtistContent(
     scrollToAlbumsTrigger: MutableState<Int>,
     currentFilterPathId: Int?,
     minimiseMaximiseToggle: Boolean,
+    viewModel: MainViewModel,
     currentMediaEntryTypeOfMedia: Int?
 ) {
     // Check if there's an artist filter
@@ -1657,6 +1688,7 @@ fun ArtistContent(
             currentFilterPathId = currentFilterPathId,
             minimiseMaximiseToggle = minimiseMaximiseToggle,
             scrollToAlbumsTrigger = scrollToAlbumsTrigger,
+            viewModel = viewModel,
             modifier = modifier
         )
         return
@@ -1680,6 +1712,7 @@ fun ArtistContent(
             currentFilterPathId = currentFilterPathId,
             minimiseMaximiseToggle = minimiseMaximiseToggle,
             scrollToAlbumsTrigger = scrollToAlbumsTrigger,
+            viewModel = viewModel,
             modifier = modifier
         )
         return
@@ -1799,6 +1832,7 @@ fun ArtistContent(
                     currentFilterPathId = currentFilterPathId,
                     minimiseMaximiseToggle = minimiseMaximiseToggle,
                     showMainAndFeaturedChips = false,
+                    albumArtistsMap = viewModel.albumArtistsMap.collectAsState().value,
                     modifier = Modifier.fillMaxSize()
                 )
             }
@@ -2216,6 +2250,7 @@ fun SingleArtistView(
     currentMediaEntryTypeOfMedia: Int?,
     currentFilterPathId:  Int?,
     minimiseMaximiseToggle: Boolean,
+    viewModel: MainViewModel,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -2331,6 +2366,7 @@ fun SingleArtistView(
                     currentFilterPathId = currentFilterPathId,
                     minimiseMaximiseToggle = minimiseMaximiseToggle,
                     showMainAndFeaturedChips = true,
+                    albumArtistsMap = viewModel.albumArtistsMap.collectAsState().value,
                     modifier = Modifier.fillMaxSize()
                 )
             }
@@ -2792,6 +2828,7 @@ fun AlbumsSection(
     currentMediaEntryTypeOfMedia: Int?,
     albumsDisplay: List<Album>,
     currentFilterPathId: Int?,
+    albumArtistsMap: Map<Int, List<MainViewModel.AlbumArtistInfo>>,
     minimiseMaximiseToggle: Boolean,
     showMainAndFeaturedChips: Boolean,
     modifier: Modifier = Modifier
@@ -2805,6 +2842,7 @@ fun AlbumsSection(
             onAlbumClick = onAlbumSelected,
             albumsDisplay = albumsDisplay,
             currentFilterPathId = currentFilterPathId,
+            albumArtistsMap = albumArtistsMap,
             minimiseMaximiseToggle = minimiseMaximiseToggle,
             showMainAndFeaturedChips = showMainAndFeaturedChips,
             modifier = modifier.fillMaxHeight()
@@ -2818,17 +2856,35 @@ fun AlbumGridView(
     albumsDisplay: List<Album>,
     currentFilterPathId: Int?,
     minimiseMaximiseToggle: Boolean,
+    albumArtistsMap: Map<Int, List<MainViewModel.AlbumArtistInfo>>,
     showMainAndFeaturedChips: Boolean,
     modifier: Modifier = Modifier
 ) {
-    // Tab state
-    val mainCount = remember(albumsDisplay) { albumsDisplay.count { it.isMain == 1 } }
-    val featuredCount = remember(albumsDisplay) { albumsDisplay.count { it.isMain == 0 } }
 
     // Shuffled vs alphabetical mode (only active when no year/rating sort)
     var isAlphabeticalMode by remember { mutableStateOf(false) }
 
-    Log.d(TAG, "AlbumGridView recomposed with filterPathId=$currentFilterPathId, albumsDisplay.size=${albumsDisplay.size}")
+    fun isMainAlbum(album: Album): Boolean {
+        return albumArtistsMap[album.albumId]
+            ?.any { if (album.isMain == 1) true else false } == true
+    }
+
+    // Helper: get display artist name (first artist's full name)
+    fun getArtistDisplayName(album: Album): String {
+        return albumArtistsMap[album.albumId]
+            ?.firstOrNull()
+            ?.artist
+            ?.fullName
+            ?: ""
+    }
+
+    // Tab state
+    val mainCount = remember(albumsDisplay, albumArtistsMap) {
+        albumsDisplay.count { isMainAlbum(it) }
+    }
+    val featuredCount = remember(albumsDisplay, albumArtistsMap) {
+        albumsDisplay.count { !isMainAlbum(it) }
+    }
 
     var selectedTab by remember {
         mutableStateOf(
@@ -2874,10 +2930,10 @@ fun AlbumGridView(
         isAlphabeticalMode = false   // ← add this
     }
 
-    val filteredByTab = remember(albumsDisplay, selectedTab) {
+    val filteredByTab = remember(albumsDisplay, selectedTab, albumArtistsMap) {
         when (selectedTab) {
-            AlbumGridTab.MAIN -> albumsDisplay.filter { it.isMain == 1 }
-            AlbumGridTab.FEATURED -> albumsDisplay.filter { it.isMain == 0 }
+            AlbumGridTab.MAIN -> albumsDisplay.filter { isMainAlbum(it) }
+            AlbumGridTab.FEATURED -> albumsDisplay.filter { !isMainAlbum(it) }
             null -> emptyList()
         }
     }
@@ -3080,6 +3136,7 @@ fun AlbumGridView(
                     items(sortedAlbums) { album ->
                         AlbumCard(
                             album = album,
+                            artistName = getArtistDisplayName(album),  // ← computed from map
                             modifier = Modifier
                                 .width(cardWidth)
                                 .animateContentSize(),
@@ -3223,6 +3280,7 @@ fun DotScrollbar(
 @Composable
 fun AlbumCard(
     album: Album,
+    artistName: String,
     modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
@@ -3294,9 +3352,8 @@ fun AlbumCard(
             // ✅ Fixed row: year takes only needed width, artist fills rest
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(4.dp) // small breathing gap
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                // Year – no weight, wraps content
                 Text(
                     text = album.released?.take(4) ?: "",
                     style = MaterialTheme.typography.labelSmall,
@@ -3304,14 +3361,13 @@ fun AlbumCard(
                     maxLines = 1
                 )
 
-                // Artist name – takes remaining space, starts right after year
                 Text(
-                    text = album.artistFullName ?: "",
+                    text = artistName,   // ← now from map, not from album.artistFullName
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),//instrumentColor(album.artistInstrumentId ?: 0).copy(alpha = 0.7f),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f) // fills rest, no gap before it
+                    modifier = Modifier.weight(1f)
                 )
             }
         }
