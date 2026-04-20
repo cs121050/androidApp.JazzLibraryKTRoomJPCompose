@@ -1764,6 +1764,25 @@ fun ArtistContent(
                 }
             }
         }
+
+        // 2. 👇 NEW: Album grid below the artists
+        item {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(460.dp)   // ✅ provide finite height
+            ) {
+                AlbumsSection(
+                    onAlbumSelected = onAlbumSelected,
+                    currentMediaEntryTypeOfMedia = currentMediaEntryTypeOfMedia,
+                    albumsDisplay = albumsDisplay,
+                    currentFilterPathId = currentFilterPathId,
+                    minimiseMaximiseToggle = minimiseMaximiseToggle,
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+        }
+
     }
 }
 
@@ -2272,8 +2291,6 @@ fun SingleArtistView(
                     .height(460.dp)   // ✅ provide finite height
             ) {
                 AlbumsSection(
-                    artist = artist,
-                    filteredAlbums = filteredAlbums,
                     onAlbumSelected = onAlbumSelected,
                     currentMediaEntryTypeOfMedia = currentMediaEntryTypeOfMedia,
                     albumsDisplay = albumsDisplay,
@@ -2736,8 +2753,6 @@ fun PlayerControlsOverlay(
 
 @Composable
 fun AlbumsSection(
-    artist: Artist,
-    filteredAlbums: List<Album>,
     onAlbumSelected: (Album) -> Unit,
     currentMediaEntryTypeOfMedia: Int?,
     albumsDisplay: List<Album>,
@@ -2745,30 +2760,18 @@ fun AlbumsSection(
     minimiseMaximiseToggle: Boolean,
     modifier: Modifier = Modifier
 ) {
-    var sortType by remember { mutableStateOf(AlbumSortType.RELEASE_DATE_DESC) }
+    Column(
+        modifier = Modifier.fillMaxWidth()
+    ) {
 
-    Log.d("AlbumsSection", "filterPathId=$currentFilterPathId, albumsDisplay.size=${albumsDisplay.size}")
-    Log.d("AlbumsSection", "Calling AlbumGridView with filterPathId=$currentFilterPathId, albumsDisplay.size=${albumsDisplay.size}")
 
-    when (currentMediaEntryTypeOfMedia) {
-        1 -> Box(modifier = modifier.fillMaxSize()) {
-            Text("AlbumPlayerCard mode TODO:")
-        }
-//            AlbumPlayerCard(
-//            albums = filteredAlbums,
-//            onAlbumSelected = onAlbumSelected,
-//            modifier = modifier
-//        )
-
-        else -> {
-                AlbumGridView(
-                    onAlbumClick = onAlbumSelected,
-                    albumsDisplay = albumsDisplay,
-                    currentFilterPathId = currentFilterPathId,
-                    minimiseMaximiseToggle = minimiseMaximiseToggle,
-                    modifier = modifier.fillMaxHeight()
-                )
-        }
+        AlbumGridView(
+            onAlbumClick = onAlbumSelected,
+            albumsDisplay = albumsDisplay,
+            currentFilterPathId = currentFilterPathId,
+            minimiseMaximiseToggle = minimiseMaximiseToggle,
+            modifier = modifier.fillMaxHeight()
+        )
     }
 }
 
