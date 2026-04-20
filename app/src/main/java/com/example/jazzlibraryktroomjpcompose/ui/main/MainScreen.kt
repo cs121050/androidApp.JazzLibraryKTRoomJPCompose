@@ -1778,6 +1778,7 @@ fun ArtistContent(
                     albumsDisplay = albumsDisplay,
                     currentFilterPathId = currentFilterPathId,
                     minimiseMaximiseToggle = minimiseMaximiseToggle,
+                    showMainAndFeaturedChips = false,
                     modifier = Modifier.fillMaxSize()
                 )
             }
@@ -2296,6 +2297,7 @@ fun SingleArtistView(
                     albumsDisplay = albumsDisplay,
                     currentFilterPathId = currentFilterPathId,
                     minimiseMaximiseToggle = minimiseMaximiseToggle,
+                    showMainAndFeaturedChips = true,
                     modifier = Modifier.fillMaxSize()
                 )
             }
@@ -2758,6 +2760,7 @@ fun AlbumsSection(
     albumsDisplay: List<Album>,
     currentFilterPathId: Int?,
     minimiseMaximiseToggle: Boolean,
+    showMainAndFeaturedChips: Boolean,
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -2770,6 +2773,7 @@ fun AlbumsSection(
             albumsDisplay = albumsDisplay,
             currentFilterPathId = currentFilterPathId,
             minimiseMaximiseToggle = minimiseMaximiseToggle,
+            showMainAndFeaturedChips = showMainAndFeaturedChips,
             modifier = modifier.fillMaxHeight()
         )
     }
@@ -2781,6 +2785,7 @@ fun AlbumGridView(
     albumsDisplay: List<Album>,
     currentFilterPathId: Int?,
     minimiseMaximiseToggle: Boolean,
+    showMainAndFeaturedChips: Boolean,
     modifier: Modifier = Modifier
 ) {
     // Tab state
@@ -2808,6 +2813,10 @@ fun AlbumGridView(
             selectedTab == AlbumGridTab.FEATURED && featuredCount == 0 && mainCount > 0 -> AlbumGridTab.MAIN
             selectedTab == AlbumGridTab.MAIN && mainCount == 0 && featuredCount == 0 -> null
             selectedTab == AlbumGridTab.FEATURED && featuredCount == 0 && mainCount == 0 -> null
+            // No tab selected, but now MAIN has albums → select MAIN
+            selectedTab == null && mainCount > 0 -> AlbumGridTab.MAIN
+            // No tab selected, MAIN has 0 but FEATURED has albums → select FEATURED
+            selectedTab == null && featuredCount > 0 -> AlbumGridTab.FEATURED
             else -> selectedTab
         }
     }
@@ -3000,72 +3009,18 @@ fun AlbumGridView(
 
     // ========== UI ==========
     Column(modifier = modifier.fillMaxSize()) {
-        // Filter and sort chips
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            FilterChip(
-                selected = selectedTab == AlbumGridTab.MAIN,
-                onClick = { selectedTab = AlbumGridTab.MAIN },
-                label = { Text("Main") },
-                enabled = mainCount > 0
-            )
-            FilterChip(
-                selected = selectedTab == AlbumGridTab.FEATURED,
-                onClick = { selectedTab = AlbumGridTab.FEATURED },
-                label = { Text("Featured") },
-                enabled = featuredCount > 0
-            )
-            if (hasAlbums) {
-                // Year sorting chip
-                FilterChip(
-                    selected = yearSort != null,
-                    onClick = {
-                        when (yearSort) {
-                            null -> setYearSort(SortDirection.ASC)
-                            SortDirection.ASC -> setYearSort(SortDirection.DESC)
-                            SortDirection.DESC -> setYearSort(null)
-                        }
-                    },
-                    label = { Text("Year") },
-                    leadingIcon = if (yearSort != null) {
-                        {
-                            Icon(
-                                if (yearSort == SortDirection.ASC) Icons.Default.ArrowUpward
-                                else Icons.Default.ArrowDownward,
-                                contentDescription = null,
-                                modifier = Modifier.size(16.dp)
-                            )
-                        }
-                    } else null
-                )
-                // Rating sorting chip
-                FilterChip(
-                    selected = ratingSort != null,
-                    onClick = {
-                        when (ratingSort) {
-                            null -> setRatingSort(SortDirection.ASC)
-                            SortDirection.ASC -> setRatingSort(SortDirection.DESC)
-                            SortDirection.DESC -> setRatingSort(null)
-                        }
-                    },
-                    label = { Text("Rating") },
-                    leadingIcon = if (ratingSort != null) {
-                        {
-                            Icon(
-                                if (ratingSort == SortDirection.ASC) Icons.Default.ArrowUpward
-                                else Icons.Default.ArrowDownward,
-                                contentDescription = null,
-                                modifier = Modifier.size(16.dp)
-                            )
-                        }
-                    } else null
-                )
-            }
-        }
+        AlbumFilterChipsRow(
+            selectedTab = selectedTab,
+            onTabSelected = { selectedTab = it },
+            mainCount = mainCount,
+            featuredCount = featuredCount,
+            hasAlbums = hasAlbums,
+            yearSort = yearSort,
+            ratingSort = ratingSort,
+            setYearSort = ::setYearSort,
+            showMainAndFeaturedChips = showMainAndFeaturedChips,
+            setRatingSort = ::setRatingSort
+        )
 
         // Horizontal grid with floating note
         Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
@@ -3077,7 +3032,7 @@ fun AlbumGridView(
                     Text("No albums to display")
                 }
             } else {
-                val fixedGridCells = if (minimiseMaximiseToggle) 1 else 2
+                val fixedGridCells = if (minimiseMaximiseToggle) 2 else 1
 
                 LazyHorizontalGrid(
                     rows = GridCells.Fixed(fixedGridCells),
@@ -3087,7 +3042,7 @@ fun AlbumGridView(
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                     contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)
                 ) {
-                    val cardWidth = if (minimiseMaximiseToggle) 250.dp else 120.dp
+                    val cardWidth = if (minimiseMaximiseToggle) 120.dp else 250.dp
 
                     items(sortedAlbums) { album ->
                         AlbumCard(
@@ -3326,6 +3281,88 @@ fun AlbumCard(
                     modifier = Modifier.weight(1f) // fills rest, no gap before it
                 )
             }
+        }
+    }
+}
+
+@Composable
+fun AlbumFilterChipsRow(
+    selectedTab: AlbumGridTab?,
+    onTabSelected: (AlbumGridTab) -> Unit,
+    showMainAndFeaturedChips: Boolean,
+    mainCount: Int,
+    featuredCount: Int,
+    hasAlbums: Boolean,
+    yearSort: SortDirection?,
+    ratingSort: SortDirection?,
+    setYearSort: (SortDirection?) -> Unit,
+    setRatingSort: (SortDirection?) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        if (showMainAndFeaturedChips) {
+            FilterChip(
+                selected = selectedTab == AlbumGridTab.MAIN,
+                onClick = { onTabSelected(AlbumGridTab.MAIN) },
+                label = { Text("Main") },
+                enabled = mainCount > 0
+            )
+            FilterChip(
+                selected = selectedTab == AlbumGridTab.FEATURED,
+                onClick = { onTabSelected(AlbumGridTab.FEATURED) },
+                label = { Text("Featured") },
+                enabled = featuredCount > 0
+            )
+        }
+        if (hasAlbums) {
+            // Year sorting chip
+            FilterChip(
+                selected = yearSort != null,
+                onClick = {
+                    when (yearSort) {
+                        null -> setYearSort(SortDirection.ASC)
+                        SortDirection.ASC -> setYearSort(SortDirection.DESC)
+                        SortDirection.DESC -> setYearSort(null)
+                    }
+                },
+                label = { Text("Year") },
+                leadingIcon = if (yearSort != null) {
+                    {
+                        Icon(
+                            if (yearSort == SortDirection.ASC) Icons.Default.ArrowUpward
+                            else Icons.Default.ArrowDownward,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                } else null
+            )
+            // Rating sorting chip
+            FilterChip(
+                selected = ratingSort != null,
+                onClick = {
+                    when (ratingSort) {
+                        null -> setRatingSort(SortDirection.ASC)
+                        SortDirection.ASC -> setRatingSort(SortDirection.DESC)
+                        SortDirection.DESC -> setRatingSort(null)
+                    }
+                },
+                label = { Text("Rating") },
+                leadingIcon = if (ratingSort != null) {
+                    {
+                        Icon(
+                            if (ratingSort == SortDirection.ASC) Icons.Default.ArrowUpward
+                            else Icons.Default.ArrowDownward,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                } else null
+            )
         }
     }
 }
