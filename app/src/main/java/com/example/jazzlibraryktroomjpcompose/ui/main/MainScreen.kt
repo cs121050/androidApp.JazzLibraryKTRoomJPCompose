@@ -144,6 +144,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.LazyHorizontalGrid
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -242,6 +243,10 @@ fun MainScreen(
 
     val currentMediaEntry by playerViewModel.currentFilterPathMedia.collectAsState()
     val currentMediaEntryTypeOfMedia = currentMediaEntry?.typeOfMedia
+
+    LaunchedEffect(currentFilterPathId) {
+        Log.d("MainScreen", "currentFilterPathId changed to: $currentFilterPathId")
+    }
 
     //DEBUGLOG
     LaunchedEffect(isFullscreen) {
@@ -529,6 +534,8 @@ fun MainScreen(
                                         },
                                         filteredAlbums = uiState.filteredAlbums,
                                         currentMediaEntryTypeOfMedia = currentMediaEntryTypeOfMedia,
+                                        currentFilterPathId = currentFilterPathId,
+                                        minimiseMaximiseToggle = isPlayerVisible,
                                         onAlbumSelected = {  /* todo */ }
                                     )
 
@@ -1609,6 +1616,8 @@ fun ArtistContent(
     filterPath: List<FilterPath>, // new parameter
     onArtistSelected: (Artist) -> Unit = {},
     onAlbumSelected: (Album) -> Unit = {},
+    currentFilterPathId: Int?,
+    minimiseMaximiseToggle: Boolean,
     currentMediaEntryTypeOfMedia: Int?
 ) {
     // Check if there's an artist filter
@@ -1627,6 +1636,8 @@ fun ArtistContent(
             onAlbumSelected = onAlbumSelected,
             currentMediaEntryTypeOfMedia= currentMediaEntryTypeOfMedia,
             albumsDisplay = albumsDisplay,
+            currentFilterPathId = currentFilterPathId,
+            minimiseMaximiseToggle = minimiseMaximiseToggle,
             modifier = modifier
         )
         return
@@ -1647,6 +1658,8 @@ fun ArtistContent(
             onAlbumSelected = onAlbumSelected,
             currentMediaEntryTypeOfMedia= currentMediaEntryTypeOfMedia,
             albumsDisplay = albumsDisplay,
+            currentFilterPathId = currentFilterPathId,
+            minimiseMaximiseToggle = minimiseMaximiseToggle,
             modifier = modifier
         )
         return
@@ -2160,6 +2173,8 @@ fun SingleArtistView(
     albumsDisplay: List<Album>,
     onAlbumSelected: (Album) -> Unit,
     currentMediaEntryTypeOfMedia: Int?,
+    currentFilterPathId:  Int?,
+    minimiseMaximiseToggle: Boolean,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -2262,6 +2277,8 @@ fun SingleArtistView(
                     onAlbumSelected = onAlbumSelected,
                     currentMediaEntryTypeOfMedia = currentMediaEntryTypeOfMedia,
                     albumsDisplay = albumsDisplay,
+                    currentFilterPathId = currentFilterPathId,
+                    minimiseMaximiseToggle = minimiseMaximiseToggle,
                     modifier = Modifier.fillMaxSize()
                 )
             }
@@ -2724,9 +2741,14 @@ fun AlbumsSection(
     onAlbumSelected: (Album) -> Unit,
     currentMediaEntryTypeOfMedia: Int?,
     albumsDisplay: List<Album>,
+    currentFilterPathId: Int?,
+    minimiseMaximiseToggle: Boolean,
     modifier: Modifier = Modifier
 ) {
     var sortType by remember { mutableStateOf(AlbumSortType.RELEASE_DATE_DESC) }
+
+    Log.d("AlbumsSection", "filterPathId=$currentFilterPathId, albumsDisplay.size=${albumsDisplay.size}")
+    Log.d("AlbumsSection", "Calling AlbumGridView with filterPathId=$currentFilterPathId, albumsDisplay.size=${albumsDisplay.size}")
 
     when (currentMediaEntryTypeOfMedia) {
         1 -> Box(modifier = modifier.fillMaxSize()) {
@@ -2737,13 +2759,15 @@ fun AlbumsSection(
 //            onAlbumSelected = onAlbumSelected,
 //            modifier = modifier
 //        )
+
         else -> {
-            AlbumGridView(
-                //albums = filteredAlbums,
-                onAlbumClick = onAlbumSelected,
-                albumsDisplay = albumsDisplay,
-                modifier = modifier.fillMaxHeight()   // ✅ pass through the modifier
-            )
+                AlbumGridView(
+                    onAlbumClick = onAlbumSelected,
+                    albumsDisplay = albumsDisplay,
+                    currentFilterPathId = currentFilterPathId,
+                    minimiseMaximiseToggle = minimiseMaximiseToggle,
+                    modifier = modifier.fillMaxHeight()
+                )
         }
     }
 }
@@ -2752,6 +2776,8 @@ fun AlbumsSection(
 fun AlbumGridView(
     onAlbumClick: (Album) -> Unit,
     albumsDisplay: List<Album>,
+    currentFilterPathId: Int?,
+    minimiseMaximiseToggle: Boolean,
     modifier: Modifier = Modifier
 ) {
     // Tab state
@@ -2761,6 +2787,7 @@ fun AlbumGridView(
     // Shuffled vs alphabetical mode (only active when no year/rating sort)
     var isAlphabeticalMode by remember { mutableStateOf(false) }
 
+    Log.d(TAG, "AlbumGridView recomposed with filterPathId=$currentFilterPathId, albumsDisplay.size=${albumsDisplay.size}")
 
     var selectedTab by remember {
         mutableStateOf(
@@ -2818,6 +2845,7 @@ fun AlbumGridView(
 
     // Sorted albums: priority rating > year > alphabetical
     val sortedAlbums = remember(filteredByTab, yearSort, ratingSort, isAlphabeticalMode) {
+        Log.d(TAG, "🔄 Sorted albums recalculated, new size=${filteredByTab.size}")
         when {
             ratingSort != null -> {
                 // Primary: ratingAverage, Secondary: ratingCount
@@ -2884,7 +2912,10 @@ fun AlbumGridView(
     }
 
     // ========== GRID SCROLL STATE ==========
-    val gridState = rememberLazyGridState()
+    val gridState = remember(currentFilterPathId, albumsDisplay.size) {
+        Log.d(TAG, "🔄 Creating NEW LazyGridState! filterPathId=$currentFilterPathId, size=${albumsDisplay.size}")
+        LazyGridState()
+    }
     val coroutineScope = rememberCoroutineScope()
 
     // Observe first visible item and update note on any scroll
@@ -2896,41 +2927,60 @@ fun AlbumGridView(
         }
     }
 
-    // ========== DOT SCROLLBAR ==========
-    val dotCount = remember(sortedAlbums.size) {
-        if (sortedAlbums.isEmpty()) 1 else minOf(20, sortedAlbums.size)
+    // Log when the grid state's first visible item changes
+    LaunchedEffect(gridState.firstVisibleItemIndex) {
+        Log.d(TAG, "Grid first visible index changed to: ${gridState.firstVisibleItemIndex}")
     }
 
-    val activeDotIndex by remember {
-        derivedStateOf {
-            if (sortedAlbums.isEmpty() || dotCount <= 1) 0
-            else {
-                val totalItems = sortedAlbums.size
-                val firstVisible = gridState.firstVisibleItemIndex
-                ((firstVisible.toFloat() / (totalItems - 1).coerceAtLeast(1)) * (dotCount - 1)).roundToInt()
-            }
+    // ========== DOT SCROLLBAR ==========
+    val albumsPerDot = 6
+    val dotCount = if (sortedAlbums.isEmpty()) 1 else {
+        (sortedAlbums.size + (albumsPerDot - 1) ) / albumsPerDot  // ceil division
+    }
+
+    val activeDotIndex = if (sortedAlbums.isEmpty() || dotCount <= 1) {
+        0
+    } else {
+        val firstVisibleIndex = gridState.firstVisibleItemIndex
+        val group = firstVisibleIndex / albumsPerDot
+        group.coerceIn(0, dotCount - 1)
+    }
+
+        fun scrollToDot(dotIdx: Int) {
+        val targetIndex = (dotIdx * albumsPerDot).coerceAtMost(sortedAlbums.lastIndex)
+        coroutineScope.launch {
+            gridState.scrollToItem(targetIndex)
         }
     }
 
     fun scrollToItemIndex(index: Int) {
+        Log.d(TAG, "scrollToItemIndex requested: index=$index, sortedAlbums.size=${sortedAlbums.size}")
         if (index in sortedAlbums.indices) {
             coroutineScope.launch {
+                Log.d(TAG, "Executing scrollToItem($index)")
                 gridState.scrollToItem(index)
+                delay(100)
+                Log.d(TAG, "After scroll: firstVisibleItemIndex=${gridState.firstVisibleItemIndex}")
             }
+        } else {
+            Log.w(TAG, "scrollToItemIndex: index $index out of bounds (0..${sortedAlbums.lastIndex})")
+        }
+    }
+
+    fun scrollToGroup(dotIdx: Int) {
+        val targetIndex = (dotIdx * albumsPerDot).coerceAtMost(sortedAlbums.lastIndex)
+        coroutineScope.launch {
+            gridState.scrollToItem(targetIndex)
         }
     }
 
     fun onDotClicked(dotIdx: Int) {
         if (sortedAlbums.isEmpty()) return
-        // If no year/rating sort is active, switch to alphabetical mode
         if (yearSort == null && ratingSort == null) {
             isAlphabeticalMode = true
         }
-        val targetIndex = if (dotCount <= 1) 0 else {
-            (dotIdx.toFloat() / (dotCount - 1) * (sortedAlbums.size - 1)).roundToInt()
-        }
-        scrollToItemIndex(targetIndex)
-        val album = sortedAlbums.getOrNull(targetIndex)
+        scrollToGroup(dotIdx)
+        val album = sortedAlbums.getOrNull(dotIdx * albumsPerDot)
         updateNoteFromAlbum(album)
     }
 
@@ -2939,11 +2989,8 @@ fun AlbumGridView(
             if (yearSort == null && ratingSort == null) {
                 isAlphabeticalMode = true
             }
-            val targetIndex = if (dotCount <= 1) 0 else {
-                (dotIdx.toFloat() / (dotCount - 1) * (sortedAlbums.size - 1)).roundToInt()
-            }
-            scrollToItemIndex(targetIndex)
-            val album = sortedAlbums.getOrNull(targetIndex)
+            scrollToGroup(dotIdx)
+            val album = sortedAlbums.getOrNull(dotIdx * albumsPerDot)
             updateNoteFromAlbum(album)
         }
     }
@@ -3027,19 +3074,23 @@ fun AlbumGridView(
                     Text("No albums to display")
                 }
             } else {
+                val fixedGridCells = if (minimiseMaximiseToggle) 1 else 2
+
                 LazyHorizontalGrid(
-                    rows = GridCells.Fixed(2),
+                    rows = GridCells.Fixed(fixedGridCells),
                     state = gridState,
                     modifier = Modifier.fillMaxSize(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                     contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)
                 ) {
+                    val cardWidth = if (minimiseMaximiseToggle) 250.dp else 120.dp
+
                     items(sortedAlbums) { album ->
                         AlbumCard(
                             album = album,
                             modifier = Modifier
-                                .width(120.dp)
+                                .width(cardWidth)
                                 .animateContentSize(),
                             onClick = { onAlbumClick(album) }
                         )
