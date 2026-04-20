@@ -1,6 +1,7 @@
 // MainViewModel.kt - Updated to only fetch API data when database is empty
 package com.example.jazzlibraryktroomjpcompose.ui.main
 
+import android.content.ContentValues.TAG
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -11,6 +12,7 @@ import com.example.jazzlibraryktroomjpcompose.data.local.db.entities.FilterPathR
 import com.example.jazzlibraryktroomjpcompose.data.mappers.*
 import com.example.jazzlibraryktroomjpcompose.data.repository.JazzRepositoryImpl
 import com.example.jazzlibraryktroomjpcompose.domain.models.Album
+import com.example.jazzlibraryktroomjpcompose.domain.models.Artist
 import com.example.jazzlibraryktroomjpcompose.domain.models.Video
 import com.example.jazzlibraryktroomjpcompose.ui.settings.SettingsRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -87,6 +89,59 @@ class MainViewModel @Inject constructor(
 
     private val _currentFilterPathId = MutableStateFlow<Int?>(null)
     val currentFilterPathId: StateFlow<Int?> = _currentFilterPathId.asStateFlow()
+
+    data class AlbumArtistInfo(
+        val artist: Artist,
+        val isMain: Boolean
+    )
+
+    val videoArtistsMap: StateFlow<Map<Int, List<Artist>>> = combine(
+        database.artistDao().getAllArtists(),
+        database.videoContainsArtistDao().getAllVideoContainsArtists()
+    ) { artistEntities, associationEntities ->
+        val artists = artistEntities.map { ArtistMapper.toDomain(it) }
+        val associations = associationEntities.map { VideoContainsArtistMapper.toDomain(it) }
+
+        associations.groupBy { it.videoId }
+            .mapValues { (_, assocs) ->
+                assocs.mapNotNull { assoc ->
+                    artists.find { it.id == assoc.artistId }
+                }
+            }
+    }.catch { e ->
+        Log.e(TAG, "Failed to build video-artists map", e)
+        emptyMap<Int, List<Artist>>()   // 🔁 Explicit type arguments
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = emptyMap()       // ✅ This one is fine because initialValue is part of stateIn and type is already known from the flow's type parameter
+    )
+
+    val albumArtistsMap: StateFlow<Map<Int, List<AlbumArtistInfo>>> = combine(
+        database.artistDao().getAllArtists(),
+        database.albumContainsArtistDao().getAllAlbumContainsArtists()
+    ) { artistEntities, associationEntities ->
+        val artists = artistEntities.map { ArtistMapper.toDomain(it) }
+        val associations = associationEntities.map { AlbumContainsArtistMapper.toDomain(it) }
+
+        associations.groupBy { it.albumId }
+            .mapValues { (_ , assocs) ->
+                assocs.mapNotNull { assoc ->
+                    val artist = artists.find { it.id == assoc.artistId }
+                    artist?.let {
+                        AlbumArtistInfo(artist, assoc.isMain == 1)
+                    }
+
+                }
+            }
+    }.catch { e ->
+        Log.e(TAG, "Failed to build album-artists map", e)
+        emptyMap<Int, List<AlbumArtistInfo>>()
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = emptyMap()
+    )
 
     data class HistoryGroupItem(
         val filterPathId: Int,
@@ -272,6 +327,8 @@ class MainViewModel @Inject constructor(
     }
 
     private fun loadInitialData() {
+        //buildVideoArtistsMap()
+
         viewModelScope.launch {
             // Launch separate coroutines for each data type to collect concurrently
             val jobs = listOf(
