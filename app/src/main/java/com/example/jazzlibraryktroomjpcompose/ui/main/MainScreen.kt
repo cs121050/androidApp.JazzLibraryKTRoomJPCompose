@@ -1367,7 +1367,9 @@ private fun VideoListContent(
                 ) { video ->
                     // 🔁 Pass only isPlayerVisible – no per‑card toggle callback
                     VideoCard(
-                        video = video,
+                        thumbnailUrl = video.getThumbnailUrl(),
+                        mediaTitle = video.name,
+                        youtubeVideoId = video.locationId,
                         isPlayerVisible = isPlayerVisible,
                         isActive = video.locationId == playerUiState.activeCardId,
                         onActiveCardBoundsChanged = { cardId, position, size ->
@@ -1411,7 +1413,10 @@ private fun VideoListContent(
 
 @Composable
 fun VideoCard(
-    video: Video,
+    mediaTitle: String,
+    youtubeVideoId: String,
+    thumbnailUrl: String?,
+
     isPlayerVisible: Boolean,
     isActive: Boolean, // true if this card is the currently active one
     onActiveCardBoundsChanged: (String, IntOffset, IntSize) -> Unit,
@@ -1422,12 +1427,6 @@ fun VideoCard(
     artists: List<Artist>,              // new parameter
     onArtistClick: (Artist) -> Unit     // callback to apply filter
 ) {
-    val context = LocalContext.current
-
-
-// Get the thumbnail URL from the video object
-    val videoId = remember(video.path) { extractYouTubeVideoId(video.path) }
-    val thumbnailUrl = video.getThumbnailUrl() // now defined here
     Card(
         modifier = modifier.fillMaxWidth(),
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
@@ -1448,7 +1447,7 @@ fun VideoCard(
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = video.name,
+                        text = mediaTitle,
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         maxLines = 2,
@@ -1472,7 +1471,7 @@ fun VideoCard(
                             if (isActive) {
                                 Modifier.onPlaced { coordinates ->
                                     onActiveCardBoundsChanged(
-                                        video.locationId,
+                                        youtubeVideoId,
                                         IntOffset(
                                             x = coordinates.positionInRoot().x.roundToInt(),
                                             y = coordinates.positionInRoot().y.roundToInt()
@@ -1537,8 +1536,6 @@ fun VideoCard(
 //                        )
 //                    }
                 }
-
-
             }
 
 
