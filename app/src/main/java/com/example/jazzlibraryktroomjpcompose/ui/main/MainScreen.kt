@@ -211,8 +211,6 @@ fun MainScreen(
 
     val view = LocalView.current
 
-    val navBarHeight = WindowInsets.navigationBars.getBottom(LocalDensity.current).dp
-
     val listState = rememberLazyListState()
 
     val currentFilterPathId by viewModel.currentFilterPathId.collectAsState()
@@ -577,18 +575,6 @@ fun MainScreen(
                                 if (playerUiState.isInMiniMode) {
                                     dragOffsetY.snapTo(0f)
                                 }
-                            }
-
-                            // Compute max offsets based on actual player size
-                            val maxLeftOffset = remember(playerSize, screenWidthPx) {
-                                if (playerSize.width > 0) {
-                                    -(screenWidthPx - playerSize.width - marginPx)
-                                } else -Float.MAX_VALUE
-                            }
-                            val maxUpOffset = remember(playerSize, screenHeightPx) {
-                                if (playerSize.height > 0) {
-                                    -(screenHeightPx - playerSize.height - marginPx)
-                                } else -Float.MAX_VALUE
                             }
 
                             // --- Compute modifier based on fullscreen, mini, or attached ---
@@ -2584,20 +2570,6 @@ fun SingleArtistView(
                     mediaAvailability = 1,     // video not available
                     modifier = Modifier.fillMaxWidth()
                 )
-//            } else {
-//                // No albums available at all – show message
-//                Box(
-//                    modifier = Modifier
-//                        .fillMaxWidth()
-//                        .padding(16.dp),
-//                    contentAlignment = Alignment.Center
-//                ) {
-//                    Text(
-//                        text = "No albums",
-//                        style = MaterialTheme.typography.bodyMedium,
-//                        color = MaterialTheme.colorScheme.onSurfaceVariant
-//                    )
-//                }
             } else {            Log.d("SingleArtistView", "⏸️ No video card rendered (no album selected)")}
         }
     }
@@ -3006,65 +2978,6 @@ private fun parseWikipediaData(jsonString: String?): List<Pair<String, String>> 
     } catch (e: Exception) {
         e.printStackTrace()
         emptyList()
-    }
-}
-
-@Composable
-fun PlayerControlsOverlay(
-    isVisible: Boolean,
-    isFullscreen: Boolean,
-    isMiniMode: Boolean,
-    miniPlayerHeight: Dp,
-    onPrevious: () -> Unit,
-    onNext: () -> Unit,
-    onClose: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    if (!isVisible) return
-
-    val density = LocalDensity.current
-    val navbarHeight = WindowInsets.navigationBars.getBottom(density).dp
-    val hasNavBar = navbarHeight > 0.dp
-
-    // Determine the bottom padding (for horizontal mode)
-    val bottomPadding = when {
-        isFullscreen -> 0.dp          // vertical mode uses no bottom padding
-        isMiniMode && miniPlayerHeight > 0.dp -> miniPlayerHeight + 6.dp
-        else -> if (hasNavBar) navbarHeight else 48.dp  // fallback when no navbar
-    }
-
-    // Icon color – use a light, semi‑transparent color to match system style
-    val iconColor = Color.White.copy(alpha = 0.8f)
-
-    Box(
-        modifier = modifier
-            .fillMaxSize()
-            .zIndex(10f)          // ensures it stays on top
-    ) {
-        if (isFullscreen) {
-            // Vertical buttons on the right side, centered
-            Column(
-                modifier = Modifier
-                    .align(Alignment.CenterEnd)
-                    .padding(end = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                IconButton(onClick = onClose) {
-                    Icon(Icons.Default.Close, contentDescription = "Close", tint = iconColor)
-                }
-                IconButton(onClick = onPrevious) {
-                    Icon(
-                        Icons.Default.SkipPrevious,
-                        contentDescription = "Previous",
-                        tint = iconColor
-                    )
-                }
-                IconButton(onClick = onNext) {
-                    Icon(Icons.Default.SkipNext, contentDescription = "Next", tint = iconColor)
-                }
-            }
-
-        }
     }
 }
 
