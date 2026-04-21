@@ -246,6 +246,7 @@ fun MainScreen(
 
     val scrollToAlbumsTrigger = remember { mutableStateOf(0) }
 
+
     LaunchedEffect(currentFilterPathId) {
         Log.d("MainScreen", "currentFilterPathId changed to: $currentFilterPathId")
     }
@@ -556,6 +557,8 @@ fun MainScreen(
                                             scrollToAlbumsTrigger.value++
                                         },
                                         scrollToAlbumsTrigger = scrollToAlbumsTrigger,
+                                        albumArtistsMap = viewModel.albumArtistsMap.collectAsState().value,
+                                        playerViewModel = playerViewModel,
                                         viewModel = viewModel
                                     )
 
@@ -1414,19 +1417,24 @@ private fun VideoListContent(
 @Composable
 fun VideoCard(
     mediaTitle: String,
-    youtubeVideoId: String,
+    youtubeVideoId: String?,
     thumbnailUrl: String?,
-
+    calledFromMedia: Int = 0,      // 0 = video, 1 = album
+    mediaAvailability: Int = 1,    // 1 = available, 0 = not available
     isPlayerVisible: Boolean,
-    isActive: Boolean, // true if this card is the currently active one
+    isActive: Boolean,
     onActiveCardBoundsChanged: (String, IntOffset, IntSize) -> Unit,
-    onCardClicked: () -> Unit, // called when user taps to load video
+    onCardClicked: () -> Unit,
     modifier: Modifier = Modifier,
     cardState: CardUiState,
     onCardTitleClick: () -> Unit,
-    artists: List<Artist>,              // new parameter
-    onArtistClick: (Artist) -> Unit     // callback to apply filter
+    artists: List<Artist>,
+    onArtistClick: (Artist) -> Unit
 ) {
+    // Determine if we should show the album placeholder (no video)
+    val showAlbumPlaceholder = (calledFromMedia == 1 && mediaAvailability == 0)
+    val hasValidVideo = youtubeVideoId != null && !showAlbumPlaceholder
+
     Card(
         modifier = modifier.fillMaxWidth(),
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
@@ -1437,7 +1445,7 @@ fun VideoCard(
                 .fillMaxWidth()
                 .padding(16.dp)
         ) {
-            // --- Video info row ---
+            // --- Video info row (unchanged) ---
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1457,34 +1465,47 @@ fun VideoCard(
                 }
             }
 
-            // --- Placeholder / thumbnail area (always visible) / Video area ---
-            if (isPlayerVisible || cardState.showVideo) {
-                Spacer(modifier = Modifier.height(12.dp))
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(200.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(MaterialTheme.colorScheme.surfaceVariant)
-                        .clickable(enabled = thumbnailUrl != null) { onCardClicked() }   // start video only on placeholder tap
-                        .then(
-                            if (isActive) {
-                                Modifier.onPlaced { coordinates ->
-                                    onActiveCardBoundsChanged(
-                                        youtubeVideoId,
-                                        IntOffset(
-                                            x = coordinates.positionInRoot().x.roundToInt(),
-                                            y = coordinates.positionInRoot().y.roundToInt()
-                                        ),
-                                        IntSize(coordinates.size.width, coordinates.size.height)
-                                    )
-                                }
-                            } else {
-                                Modifier
+            // --- Thumbnail / placeholder area ---
+            Spacer(modifier = Modifier.height(12.dp))
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(200.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                    .clickable(enabled = hasValidVideo) {
+                        if (hasValidVideo) onCardClicked()
+                        // else: optionally show a toast or do nothing
+                    }
+                    .then(
+                        if (isActive && hasValidVideo) {
+                            Modifier.onPlaced { coordinates ->
+                                onActiveCardBoundsChanged(
+                                    youtubeVideoId ?: "",
+                                    IntOffset(
+                                        x = coordinates.positionInRoot().x.roundToInt(),
+                                        y = coordinates.positionInRoot().y.roundToInt()
+                                    ),
+                                    IntSize(coordinates.size.width, coordinates.size.height)
+                                )
                             }
+                        } else {
+                            Modifier
+                        }
+                    )
+            ) {
+                when {
+                    // Show album icon for albums without video OR without thumbnail
+                    calledFromMedia == 1 && (mediaAvailability == 0 || thumbnailUrl == null) -> {
+                        Icon(
+                            Icons.Default.Album,
+                            contentDescription = "Album cover",
+                            modifier = Modifier
+                                .align(Alignment.Center),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                ) {
-                    if (thumbnailUrl != null) {
+                    }
+                    thumbnailUrl != null -> {
                         AsyncImage(
                             model = ImageRequest.Builder(LocalContext.current)
                                 .data(thumbnailUrl)
@@ -1495,8 +1516,9 @@ fun VideoCard(
                             contentScale = ContentScale.Crop,
                             error = painterResource(id = R.drawable.ic_error)
                         )
-                    } else {
-                        // Fallback when URL is invalid
+                    }
+                    else -> {
+                        // Fallback when URL is invalid (non-album case)
                         Icon(
                             Icons.Default.BrokenImage,
                             contentDescription = "Invalid video",
@@ -1504,7 +1526,10 @@ fun VideoCard(
                             tint = MaterialTheme.colorScheme.error
                         )
                     }
-                    // Placeholder content (e.g., play icon, future thumbnail)
+                }
+
+                // Play icon overlay – only if we have a valid video
+                if (hasValidVideo) {
                     Icon(
                         Icons.Default.PlayArrow,
                         contentDescription = "Play video",
@@ -1513,8 +1538,9 @@ fun VideoCard(
                             .size(42.dp),
                         tint = MaterialTheme.colorScheme.primary
                     )
+                }
 
-                     // Optional: keep the fullscreen button (opens YouTube app)
+                // Optional: keep the fullscreen button (opens YouTube app)
 //                    IconButton(
 //                        onClick = {
 //                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(video.path))
@@ -1535,11 +1561,11 @@ fun VideoCard(
 //                            tint = Color.White
 //                        )
 //                    }
-                }
+
             }
 
 
-                // Artists row – show only if there are artists
+            // Artists row (unchanged)
             if (artists.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(8.dp))
                 Row(
@@ -1549,7 +1575,6 @@ fun VideoCard(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     artists.forEach { artist ->
-                        // Chip with identicon and artist name
                         Surface(
                             shape = RoundedCornerShape(16.dp),
                             color = MaterialTheme.colorScheme.surfaceVariant,
@@ -1683,8 +1708,36 @@ fun ArtistContent(
     currentFilterPathId: Int?,
     minimiseMaximiseToggle: Boolean,
     viewModel: MainViewModel,
+    playerViewModel: PlayerViewModel,
+    albumArtistsMap: Map<Int, List<MainViewModel.AlbumArtistInfo>>,
     currentMediaEntryTypeOfMedia: Int?
 ) {
+    Log.d("ArtistContent", "🎨 ArtistContent recompose: filterPath=$filterPath")
+    Log.d("ArtistContent", "📀 albumsDisplay size=${albumsDisplay.size}, first 3 titles=${albumsDisplay.take(3).joinToString { it.title ?: "null" }}")
+
+
+    // State to remember which album was clicked from the multi-artist grid
+    var selectedAlbum by remember { mutableStateOf<Album?>(null) }
+    Log.d("ArtistContent", "selectedAlbum initialized as ${selectedAlbum?.title}")
+
+
+    // Clear selected album when no artist filter is active (so you don't see old album later)
+    LaunchedEffect(filterPath) {
+        Log.d("ArtistContent", "🔍 filterPath changed: $filterPath")
+        if (filterPath.none { it.categoryId == FilterPath.CATEGORY_ARTIST }) {
+            Log.d("ArtistContent", "🧹 Clearing selectedAlbum (no artist filter)")
+            selectedAlbum = null
+        } else {            Log.d("ArtistContent", "✅ Artist filter present, keeping selectedAlbum=${selectedAlbum?.title}") }
+    }
+
+    // Wrap the original onAlbumSelected to also remember the clicked album
+    val handleAlbumSelected: (Album) -> Unit = { album ->
+        Log.d("ArtistContent", "🖱️ handleAlbumSelected called with album: ${album.title} (id=${album.albumId})")
+        selectedAlbum = album
+        onAlbumSelected(album)  // this adds the artist filter and triggers scroll
+    }
+
+
     // Check if there's an artist filter
     val selectedArtist = filterPath
         .firstOrNull { it.categoryId == FilterPath.CATEGORY_ARTIST }
@@ -1695,6 +1748,8 @@ fun ArtistContent(
 
     if (selectedArtist != null) {
         // Single artist view
+
+        Log.d("ArtistContent", "🎤 Single artist mode: ${selectedArtist.fullName}, passing initialSelectedAlbum=${selectedAlbum?.title}")
         SingleArtistView(
             artist = selectedArtist,
             filteredAlbums = filteredAlbums,
@@ -1705,8 +1760,12 @@ fun ArtistContent(
             minimiseMaximiseToggle = minimiseMaximiseToggle,
             scrollToAlbumsTrigger = scrollToAlbumsTrigger,
             viewModel = viewModel,
+            albumArtistsMap = albumArtistsMap,
+            playerViewModel = playerViewModel,
+            initialSelectedAlbum = selectedAlbum,
             modifier = modifier
         )
+        Log.d("ArtistContent", "Calling SingleArtistView with initialSelectedAlbum = ${selectedAlbum?.title}")
         return
     }
 
@@ -1729,6 +1788,8 @@ fun ArtistContent(
             minimiseMaximiseToggle = minimiseMaximiseToggle,
             scrollToAlbumsTrigger = scrollToAlbumsTrigger,
             viewModel = viewModel,
+            albumArtistsMap = albumArtistsMap,
+            playerViewModel = playerViewModel,
             modifier = modifier
         )
         return
@@ -1836,13 +1897,15 @@ fun ArtistContent(
 
         // 2. 👇 NEW: Album grid below the artists
         item {
+            Log.d("ArtistContent", "📦 Rendering bottom AlbumsSection with albumsDisplay size=${albumsDisplay.size}")
+
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(460.dp)   // ✅ provide finite height
             ) {
                 AlbumsSection(
-                    onAlbumSelected = onAlbumSelected,
+                    onAlbumSelected = handleAlbumSelected,
                     currentMediaEntryTypeOfMedia = currentMediaEntryTypeOfMedia,
                     albumsDisplay = albumsDisplay,
                     currentFilterPathId = currentFilterPathId,
@@ -2267,10 +2330,68 @@ fun SingleArtistView(
     currentFilterPathId:  Int?,
     minimiseMaximiseToggle: Boolean,
     viewModel: MainViewModel,
+    playerViewModel: PlayerViewModel,
+    initialSelectedAlbum: Album? = null,
+    albumArtistsMap: Map<Int, List<MainViewModel.AlbumArtistInfo>>,
     modifier: Modifier = Modifier
 ) {
+    Log.d("SingleArtistView", "🎬 Entering for artist: ${artist.fullName}")
+    Log.d("SingleArtistView", "📀 albumsDisplay size=${albumsDisplay.size}, first 3 titles=${albumsDisplay.take(3).joinToString { it.title ?: "null" }}")
+    Log.d("SingleArtistView", "🎯 initialSelectedAlbum = ${initialSelectedAlbum?.title} (id=${initialSelectedAlbum?.albumId})")
+
     val context = LocalContext.current
     var showFullscreenImage by remember { mutableStateOf(false) }
+
+    // State to hold the selected album for the video card
+    var selectedAlbum by remember { mutableStateOf<Album?>(null) }
+    var isDefaultSelection by remember { mutableStateOf(true) } // true until user picks an album
+
+
+// Automatically select the first album from albumsDisplay when available
+    LaunchedEffect(albumsDisplay, initialSelectedAlbum) {
+        Log.d("SingleArtistView", "🔄 Default selection effect triggered")
+        Log.d("SingleArtistView", "   isDefaultSelection=$isDefaultSelection, selectedAlbum=${selectedAlbum?.title}")
+        Log.d("SingleArtistView", "   initialSelectedAlbum=${initialSelectedAlbum?.title}")
+
+        when {
+            initialSelectedAlbum != null && albumsDisplay.any { it.albumId == initialSelectedAlbum.albumId } -> {
+                Log.d("SingleArtistView", "✅ Using initialSelectedAlbum: ${initialSelectedAlbum.title}")
+                selectedAlbum = initialSelectedAlbum
+                isDefaultSelection = false
+            }
+            selectedAlbum == null && albumsDisplay.isNotEmpty() && isDefaultSelection -> {
+                val firstAlbum = albumsDisplay.first()
+                Log.d("SingleArtistView", "🎯 Setting default album to FIRST: ${firstAlbum.title} (id=${firstAlbum.albumId})")
+                selectedAlbum = firstAlbum
+                // isDefaultSelection remains true
+            }
+            else -> {
+                Log.d("SingleArtistView", "⚠️ No default set. Reasons: selectedAlbum=${selectedAlbum?.title}, albumsDisplay.isEmpty=${albumsDisplay.isEmpty()}, isDefaultSelection=$isDefaultSelection")
+            }
+        }
+    }
+
+    LaunchedEffect(albumsDisplay) {
+        Log.d("SingleArtistView", "🔄 albumsDisplay changed (for default update check)")
+        if (isDefaultSelection && albumsDisplay.isNotEmpty()) {
+            val newFirst = albumsDisplay.first()
+            Log.d("SingleArtistView", "🆙 Updating default selection to new first album: ${newFirst.title} (was ${selectedAlbum?.title})")
+            selectedAlbum = newFirst
+        } else if (isDefaultSelection && albumsDisplay.isEmpty()) {
+            Log.d("SingleArtistView", "❌ albumsDisplay empty, clearing selectedAlbum")
+            selectedAlbum = null
+        } else {
+            Log.d("SingleArtistView", "⏸️ No update: isDefaultSelection=$isDefaultSelection, albumsDisplay.isEmpty=${albumsDisplay.isEmpty()}")
+        }
+    }
+
+// Wrap the original onAlbumSelected to update our state
+    val handleAlbumSelected: (Album) -> Unit = { album ->
+        Log.d("SingleArtistView", "🖱️ handleAlbumSelected called with album: ${album.title} (id=${album.albumId})")
+        selectedAlbum = album
+        isDefaultSelection = false   // user took control
+        onAlbumSelected(album)
+    }
 
     // Determine if we have a real thumbnail
     val hasThumbnail = artist.thumbnailUrl != null
@@ -2370,38 +2491,82 @@ fun SingleArtistView(
         // 4. Albums section
         // Inside SingleArtistView, replace the item for AlbumsSection with:
         item {
+            Log.d("SingleArtistView", "📦 Rendering AlbumsSection (inside SingleArtistView) with albumsDisplay size=${albumsDisplay.size}")
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(460.dp)   // ✅ provide finite height
             ) {
                 AlbumsSection(
-                    onAlbumSelected = onAlbumSelected,
+                    onAlbumSelected = handleAlbumSelected,
                     currentMediaEntryTypeOfMedia = currentMediaEntryTypeOfMedia,
                     albumsDisplay = albumsDisplay,
                     currentFilterPathId = currentFilterPathId,
                     minimiseMaximiseToggle = minimiseMaximiseToggle,
                     showMainAndFeaturedChips = true,
-                    albumArtistsMap = viewModel.albumArtistsMap.collectAsState().value,
+                    albumArtistsMap = albumArtistsMap,
                     modifier = Modifier.fillMaxSize()
                 )
             }
         }
 
-        // 5. Horizontal albums row placeholder
+        // 5. Video card or placeholder
         item {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(200.dp)
-                    .padding(horizontal = 16.dp)
-            ) {
-                Text(
-                    text = "Album cards will be placed here",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+            Log.d("SingleArtistView", "🎬 Video card item: albumsDisplay.isNotEmpty()=${albumsDisplay.isNotEmpty()}, selectedAlbum=${selectedAlbum?.title}")
+
+            if (albumsDisplay.isNotEmpty() && selectedAlbum != null) {
+                val album = selectedAlbum!!
+                Log.d("SingleArtistView", "▶️ Rendering VideoCard for album: ${album.title} (id=${album.albumId})")
+                val youtubeVideoId = album.youtubeVideoIdForThumbnail // adjust property name if needed
+                val mediaTitle = album.title ?: "Untitled Album"
+                val thumbnailUrl = if (album.youtubeVideoIdForThumbnail != null) album.getThumbnailUrl() else null
+                val artistsForAlbum = albumArtistsMap[album.albumId]
+                    ?.mapNotNull { it.artist }
+                    ?: emptyList()
+
+                VideoCard(
+                    mediaTitle = mediaTitle,
+                    youtubeVideoId = youtubeVideoId,
+                    thumbnailUrl = thumbnailUrl,
+                    isPlayerVisible = minimiseMaximiseToggle,
+                    isActive = false,
+                    onActiveCardBoundsChanged = { _, _, _ -> },
+                    onCardClicked = {
+                        if (youtubeVideoId != null) {
+                            playerViewModel.loadVideo(
+                                videoId = youtubeVideoId,
+                                cardId = "album_${album.albumId}",
+                                currentFilterPath = null,
+                                startInMiniMode = true,
+                                mediaDbId = null,
+                                filterPathId = currentFilterPathId,
+                                typeOfMedia = currentMediaEntryTypeOfMedia
+                            )
+                        }
+                    },
+                    cardState = CardUiState(),
+                    onCardTitleClick = {},
+                    artists = artistsForAlbum,
+                    onArtistClick = {},
+                    calledFromMedia = 1,      // indicates this is an album
+                    mediaAvailability = 1,     // video not available
+                    modifier = Modifier.fillMaxWidth()
                 )
-            }
+//            } else {
+//                // No albums available at all – show message
+//                Box(
+//                    modifier = Modifier
+//                        .fillMaxWidth()
+//                        .padding(16.dp),
+//                    contentAlignment = Alignment.Center
+//                ) {
+//                    Text(
+//                        text = "No albums",
+//                        style = MaterialTheme.typography.bodyMedium,
+//                        color = MaterialTheme.colorScheme.onSurfaceVariant
+//                    )
+//                }
+            } else {            Log.d("SingleArtistView", "⏸️ No video card rendered (no album selected)")}
         }
     }
 
@@ -2954,12 +3119,6 @@ fun AlbumGridView(
         }
     }
 
-    // Helper to move null-thumbnail albums to the end while preserving order within groups
-    fun List<Album>.moveNullThumbnailsToEnd(): List<Album> {
-        val (withThumb, withoutThumb) = partition { it.youtubeVideoIdForThumbnail != null }
-        return withThumb + withoutThumb
-    }
-
     // Sorted albums: priority rating > year > alphabetical
     val sortedAlbums = remember(filteredByTab, yearSort, ratingSort, isAlphabeticalMode) {
         Log.d(TAG, "🔄 Sorted albums recalculated, new size=${filteredByTab.size}")
@@ -2981,7 +3140,7 @@ fun AlbumGridView(
                 if (isAlphabeticalMode) {
                     filteredByTab.sortedWith(compareBy { it.title?.lowercase() ?: "" })
                 } else {
-                    filteredByTab.moveNullThumbnailsToEnd()
+                    filteredByTab
                 }
             }
         }
@@ -3063,7 +3222,7 @@ fun AlbumGridView(
         group.coerceIn(0, dotCount - 1)
     }
 
-        fun scrollToDot(dotIdx: Int) {
+    fun scrollToDot(dotIdx: Int) {
         val targetIndex = (dotIdx * albumsPerDot).coerceAtMost(sortedAlbums.lastIndex)
         coroutineScope.launch {
             gridState.scrollToItem(targetIndex)
@@ -3130,12 +3289,16 @@ fun AlbumGridView(
         // Horizontal grid with floating note
         Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
             if (sortedAlbums.isEmpty()) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text("No albums to display")
-                }
+
+                Text(
+                    text = "No albums to display",
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp)
+                )
+
+
             } else {
                 val fixedGridCells = if (minimiseMaximiseToggle) 2 else 1
 
@@ -3150,6 +3313,7 @@ fun AlbumGridView(
                     val cardWidth = if (minimiseMaximiseToggle) 120.dp else 250.dp
 
                     items(sortedAlbums) { album ->
+                        Log.d("AlbumGridView", "🖼️ Rendering album card: ${album.title} (id=${album.albumId})")
                         AlbumCard(
                             album = album,
                             artistName = getArtistDisplayName(album),  // ← computed from map
@@ -3219,7 +3383,7 @@ fun AlbumGridView(
                 activeDotIndex = activeDotIndex,
                 onDotClick = { dotIdx -> onDotClicked(dotIdx) },
                 onDotDrag = { dotIdx, isDragging ->
-                        onDotHover(dotIdx, isDragging)
+                    onDotHover(dotIdx, isDragging)
                 },
                 modifier = Modifier
                     .fillMaxWidth()
