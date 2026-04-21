@@ -27,7 +27,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.foundation.layout.Box
-import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.ViewList
 import androidx.compose.material.icons.filled.ViewModule
 import androidx.compose.material3.Text
@@ -58,7 +57,6 @@ import androidx.compose.ui.unit.IntOffset
 import com.example.jazzlibraryktroomjpcompose.domain.models.FilterPath
 import kotlin.math.roundToInt
 import android.os.Build
-import android.webkit.WebView
 import androidx.activity.ComponentActivity
 import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -77,7 +75,6 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.unit.IntSize
@@ -115,53 +112,32 @@ import android.util.Log
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Toast
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
-import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
 import com.google.accompanist.systemuicontroller.rememberSystemUiController
 import androidx.compose.ui.platform.LocalView
-import kotlin.math.abs
 
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.navigationBars
-import androidx.compose.foundation.layout.windowInsetsBottomHeight
-import androidx.compose.foundation.layout.imePadding
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Cast
-import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Share
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Surface
 import androidx.compose.ui.unit.Dp
 import com.example.jazzlibraryktroomjpcompose.domain.models.Album
-import kotlinx.coroutines.flow.map
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.LazyHorizontalGrid
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.material.icons.filled.Album
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
-import androidx.compose.material.ripple.rememberRipple
 import androidx.compose.material3.*
-import androidx.compose.runtime.*
-import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.dp
-import com.example.jazzlibraryktroomjpcompose.ui.main.util.instrumentColor
 import java.text.DecimalFormat
-
-import androidx.compose.animation.AnimatedVisibility as CoreAnimatedVisibility
 
 enum class AlbumGridTab { MAIN, FEATURED }
 enum class SortDirection { ASC, DESC }
@@ -529,6 +505,14 @@ fun MainScreen(
                                         albumsDisplay = uiState.availableAlbumsDisplay,
                                         filterPath = filterState.currentFilterPath, // pass filter path
                                         onRefresh = { viewModel.shuffleArtists() },
+                                        onActiveCardBoundsChanged = { cardId, rootPosition, size ->
+                                            if (cardId == playerUiState.activeCardId) {
+                                                val relativePos = rootPosition - contentBoxRootPosition
+                                                activeCardRelativePosition = relativePos
+                                                activeCardSize = size
+                                            }
+                                        },
+                                        playerUiState = playerUiState,
                                         onArtistSelected = { artist ->
                                             viewModel.handleChipSelection(
                                                 FilterPath.CATEGORY_ARTIST,
@@ -1419,7 +1403,7 @@ fun VideoCard(
     mediaTitle: String,
     youtubeVideoId: String?,
     thumbnailUrl: String?,
-    calledFromMedia: Int = 0,      // 0 = video, 1 = album
+    mediaType: Int = 0,      // 0 = video, 1 = album
     mediaAvailability: Int = 1,    // 1 = available, 0 = not available
     isPlayerVisible: Boolean,
     isActive: Boolean,
@@ -1432,7 +1416,7 @@ fun VideoCard(
     onArtistClick: (Artist) -> Unit
 ) {
     // Determine if we should show the album placeholder (no video)
-    val showAlbumPlaceholder = (calledFromMedia == 1 && mediaAvailability == 0)
+    val showAlbumPlaceholder = (mediaType == 1 && mediaAvailability == 0)
     val hasValidVideo = youtubeVideoId != null && !showAlbumPlaceholder
 
     Card(
@@ -1480,6 +1464,15 @@ fun VideoCard(
                     .then(
                         if (isActive && hasValidVideo) {
                             Modifier.onPlaced { coordinates ->
+
+                                Log.d("VideoCard", "onPlaced called for cardId=$youtubeVideoId, isActive=$isActive")
+                                if (isActive && hasValidVideo) {
+                                    Log.d(
+                                        "VideoCard",
+                                        "Reporting bounds: position=${coordinates.positionInRoot()}, size=${coordinates.size}"
+                                    )
+
+
                                 onActiveCardBoundsChanged(
                                     youtubeVideoId ?: "",
                                     IntOffset(
@@ -1488,6 +1481,7 @@ fun VideoCard(
                                     ),
                                     IntSize(coordinates.size.width, coordinates.size.height)
                                 )
+                                    }
                             }
                         } else {
                             Modifier
@@ -1496,7 +1490,7 @@ fun VideoCard(
             ) {
                 when {
                     // Show album icon for albums without video OR without thumbnail
-                    calledFromMedia == 1 && (mediaAvailability == 0 || thumbnailUrl == null) -> {
+                    mediaType == 1 && (mediaAvailability == 0 || thumbnailUrl == null) -> {
                         Icon(
                             Icons.Default.Album,
                             contentDescription = "Album cover",
@@ -1700,7 +1694,9 @@ fun ArtistContent(
     artistsBase: List<Artist>,
     filteredAlbums: List<Album>,
     albumsDisplay: List<Album>,
+    playerUiState: PlayerUiState,
     onRefresh: () -> Unit = {},
+    onActiveCardBoundsChanged: (String, IntOffset, IntSize) -> Unit,
     filterPath: List<FilterPath>, // new parameter
     onArtistSelected: (Artist) -> Unit = {},
     onAlbumSelected: (Album) -> Unit = {},
@@ -1715,6 +1711,13 @@ fun ArtistContent(
     Log.d("ArtistContent", "🎨 ArtistContent recompose: filterPath=$filterPath")
     Log.d("ArtistContent", "📀 albumsDisplay size=${albumsDisplay.size}, first 3 titles=${albumsDisplay.take(3).joinToString { it.title ?: "null" }}")
 
+    // Check if there's an artist filter
+    val selectedArtist = filterPath
+        .firstOrNull { it.categoryId == FilterPath.CATEGORY_ARTIST }
+        ?.let { filter ->
+            // Find the artist in the base list (or shuffled) by ID
+            artistsBase.find { it.id == filter.entityId }
+        }
 
     // State to remember which album was clicked from the multi-artist grid
     var selectedAlbum by remember { mutableStateOf<Album?>(null) }
@@ -1730,6 +1733,13 @@ fun ArtistContent(
         } else {            Log.d("ArtistContent", "✅ Artist filter present, keeping selectedAlbum=${selectedAlbum?.title}") }
     }
 
+    LaunchedEffect(selectedArtist) {
+        if (selectedArtist == null) {
+            // Exited single artist view, minimize player
+            playerViewModel.minimizePlayer()
+        }
+    }
+
     // Wrap the original onAlbumSelected to also remember the clicked album
     val handleAlbumSelected: (Album) -> Unit = { album ->
         Log.d("ArtistContent", "🖱️ handleAlbumSelected called with album: ${album.title} (id=${album.albumId})")
@@ -1738,13 +1748,7 @@ fun ArtistContent(
     }
 
 
-    // Check if there's an artist filter
-    val selectedArtist = filterPath
-        .firstOrNull { it.categoryId == FilterPath.CATEGORY_ARTIST }
-        ?.let { filter ->
-            // Find the artist in the base list (or shuffled) by ID
-            artistsBase.find { it.id == filter.entityId }
-        }
+
 
     if (selectedArtist != null) {
         // Single artist view
@@ -1764,6 +1768,8 @@ fun ArtistContent(
             playerViewModel = playerViewModel,
             currentFilterPath = filterPath,
             initialSelectedAlbum = selectedAlbum,
+            playerUiState = playerUiState,
+            onActiveCardBoundsChanged = onActiveCardBoundsChanged,
             modifier = modifier
         )
         Log.d("ArtistContent", "Calling SingleArtistView with initialSelectedAlbum = ${selectedAlbum?.title}")
@@ -1792,6 +1798,8 @@ fun ArtistContent(
             albumArtistsMap = albumArtistsMap,
             playerViewModel = playerViewModel,
             currentFilterPath = filterPath,
+            onActiveCardBoundsChanged = onActiveCardBoundsChanged,
+            playerUiState = playerUiState,
             modifier = modifier
         )
         return
@@ -2336,8 +2344,11 @@ fun SingleArtistView(
     playerViewModel: PlayerViewModel,
     initialSelectedAlbum: Album? = null,
     albumArtistsMap: Map<Int, List<MainViewModel.AlbumArtistInfo>>,
+    onActiveCardBoundsChanged: (String, IntOffset, IntSize) -> Unit,
+    playerUiState: PlayerUiState,
     modifier: Modifier = Modifier
 ) {
+
 
     val handleArtistClick: (Artist) -> Unit = { clickedArtist ->
         val alreadyFiltered = currentFilterPath.any {
@@ -2528,6 +2539,7 @@ fun SingleArtistView(
             }
         }
 
+
         // 5. Video card or placeholder
         item {
             Log.d("SingleArtistView", "🎬 Video card item: albumsDisplay.isNotEmpty()=${albumsDisplay.isNotEmpty()}, selectedAlbum=${selectedAlbum?.title}")
@@ -2547,15 +2559,17 @@ fun SingleArtistView(
                     youtubeVideoId = youtubeVideoId,
                     thumbnailUrl = thumbnailUrl,
                     isPlayerVisible = minimiseMaximiseToggle,
-                    isActive = false,
-                    onActiveCardBoundsChanged = { _, _, _ -> },
+                    isActive = playerUiState.activeCardId == "album_${album.albumId}",   // ✅ dynamic
+                    onActiveCardBoundsChanged = { _, position, size ->                  // ✅ ignore video ID
+                        onActiveCardBoundsChanged("album_${album.albumId}", position, size)
+                    },
                     onCardClicked = {
                         if (youtubeVideoId != null) {
                             playerViewModel.loadVideo(
                                 videoId = youtubeVideoId,
                                 cardId = "album_${album.albumId}",
                                 currentFilterPath = null,
-                                startInMiniMode = true,
+                                startInMiniMode = false,
                                 mediaDbId = null,
                                 filterPathId = currentFilterPathId,
                                 typeOfMedia = currentMediaEntryTypeOfMedia
@@ -2566,7 +2580,7 @@ fun SingleArtistView(
                     onCardTitleClick = {},
                     artists = artistsForAlbum,
                     onArtistClick = handleArtistClick,
-                    calledFromMedia = 1,      // indicates this is an album
+                    mediaType = 1,      // indicates this is an album
                     mediaAvailability = 1,     // video not available
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -2587,6 +2601,39 @@ fun SingleArtistView(
             } else {            Log.d("SingleArtistView", "⏸️ No video card rendered (no album selected)")}
         }
     }
+
+    // 👇 ADD THIS HERE
+    val playerUiState by playerViewModel.uiState.collectAsState()
+    val videoCardIndex = 4  // because the video card is the 5th item (0-based index)
+
+
+    LaunchedEffect(selectedAlbum) {
+        playerViewModel.minimizePlayer()
+    }
+
+
+
+    LaunchedEffect(
+        listState.firstVisibleItemIndex,
+        listState.layoutInfo,
+        playerUiState.activeCardId,
+        playerUiState.isVisible,
+        playerUiState.isInMiniMode
+    ) {
+        if (playerUiState.isVisible && selectedAlbum != null) {
+            val cardId = "album_${selectedAlbum!!.albumId}"
+            if (playerUiState.activeCardId == cardId) {
+                val visibleItems = listState.layoutInfo.visibleItemsInfo
+                val isCardVisible = visibleItems.any { it.index == videoCardIndex }
+                when {
+                    isCardVisible && playerUiState.isInMiniMode -> playerViewModel.restoreFullMode()
+                    !isCardVisible && !playerUiState.isInMiniMode -> playerViewModel.minimizePlayer()
+                }
+            }
+        }
+    }
+
+
 
     // Fullscreen image dialog (unchanged, scales to fit)
     if (showFullscreenImage) {
