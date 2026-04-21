@@ -1762,6 +1762,7 @@ fun ArtistContent(
             viewModel = viewModel,
             albumArtistsMap = albumArtistsMap,
             playerViewModel = playerViewModel,
+            currentFilterPath = filterPath,
             initialSelectedAlbum = selectedAlbum,
             modifier = modifier
         )
@@ -1790,6 +1791,7 @@ fun ArtistContent(
             viewModel = viewModel,
             albumArtistsMap = albumArtistsMap,
             playerViewModel = playerViewModel,
+            currentFilterPath = filterPath,
             modifier = modifier
         )
         return
@@ -2327,6 +2329,7 @@ fun SingleArtistView(
     onAlbumSelected: (Album) -> Unit,
     scrollToAlbumsTrigger: MutableState<Int>,
     currentMediaEntryTypeOfMedia: Int?,
+    currentFilterPath: List<FilterPath>,
     currentFilterPathId:  Int?,
     minimiseMaximiseToggle: Boolean,
     viewModel: MainViewModel,
@@ -2335,6 +2338,21 @@ fun SingleArtistView(
     albumArtistsMap: Map<Int, List<MainViewModel.AlbumArtistInfo>>,
     modifier: Modifier = Modifier
 ) {
+
+    val handleArtistClick: (Artist) -> Unit = { clickedArtist ->
+        val alreadyFiltered = currentFilterPath.any {
+            it.categoryId == FilterPath.CATEGORY_ARTIST && it.entityId == clickedArtist.id
+        }
+        if (!alreadyFiltered && clickedArtist.id != null) {
+            viewModel.handleChipSelection(
+                FilterPath.CATEGORY_ARTIST,
+                clickedArtist.id,
+                clickedArtist.fullName ?: "Unknown Artist",
+                true
+            )
+        }
+    }
+
     Log.d("SingleArtistView", "🎬 Entering for artist: ${artist.fullName}")
     Log.d("SingleArtistView", "📀 albumsDisplay size=${albumsDisplay.size}, first 3 titles=${albumsDisplay.take(3).joinToString { it.title ?: "null" }}")
     Log.d("SingleArtistView", "🎯 initialSelectedAlbum = ${initialSelectedAlbum?.title} (id=${initialSelectedAlbum?.albumId})")
@@ -2547,7 +2565,7 @@ fun SingleArtistView(
                     cardState = CardUiState(),
                     onCardTitleClick = {},
                     artists = artistsForAlbum,
-                    onArtistClick = {},
+                    onArtistClick = handleArtistClick,
                     calledFromMedia = 1,      // indicates this is an album
                     mediaAvailability = 1,     // video not available
                     modifier = Modifier.fillMaxWidth()
