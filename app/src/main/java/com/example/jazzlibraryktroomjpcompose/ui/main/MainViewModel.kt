@@ -460,7 +460,7 @@ class MainViewModel @Inject constructor(
             }.collect { (filteredData, shouldRandomise) ->
 
                 val finalVideos = if (shouldRandomise) filteredData.videos.shuffled() else filteredData.videos
-                val displayAlbums = filteredData.albums.shuffled()
+                val displayAlbums = filteredData.albums.shuffleWithNullThumbnailsAtEnd()
 
                 _uiState.update { uiState ->
                     uiState.copy(
@@ -752,7 +752,7 @@ class MainViewModel @Inject constructor(
     fun shuffleAlbums() {
         viewModelScope.launch {
             val current = _uiState.value.availableAlbumsDisplay
-            val shuffled = current.shuffled()
+            val shuffled = current.shuffleWithNullThumbnailsAtEnd()
             _uiState.update { it.copy(availableAlbumsDisplay = shuffled) }
         }
     }
@@ -764,6 +764,15 @@ class MainViewModel @Inject constructor(
             // Small delay to show the spinner (optional)
 
         }
+    }
+
+    /**
+     * Shuffles the list but ensures that any album with a null thumbnail
+     * moves to the end, preserving the relative order among null-thumbnail albums.
+     */
+    fun List<Album>.shuffleWithNullThumbnailsAtEnd(): List<Album> {
+        val (withThumb, withoutThumb) = partition { it.getThumbnailUrl() != null }
+        return withThumb.shuffled() + withoutThumb
     }
 
     private suspend fun ensureInitialFilterPath(): Int? {
