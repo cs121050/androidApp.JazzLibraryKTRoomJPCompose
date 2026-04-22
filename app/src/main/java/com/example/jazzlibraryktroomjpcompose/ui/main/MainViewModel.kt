@@ -12,8 +12,19 @@ import com.example.jazzlibraryktroomjpcompose.data.local.db.entities.FilterPathR
 import com.example.jazzlibraryktroomjpcompose.data.mappers.*
 import com.example.jazzlibraryktroomjpcompose.data.repository.JazzRepositoryImpl
 import com.example.jazzlibraryktroomjpcompose.domain.models.Album
+import com.example.jazzlibraryktroomjpcompose.domain.models.AlbumContainsArtist
 import com.example.jazzlibraryktroomjpcompose.domain.models.Artist
+import com.example.jazzlibraryktroomjpcompose.domain.models.FilterHistoryEntry
 import com.example.jazzlibraryktroomjpcompose.domain.models.Video
+import com.example.jazzlibraryktroomjpcompose.domain.models.VideoContainsArtist
+import com.example.jazzlibraryktroomjpcompose.domain.repository.AlbumRepository
+import com.example.jazzlibraryktroomjpcompose.domain.repository.ArtistRepository
+import com.example.jazzlibraryktroomjpcompose.domain.repository.AssociationRepository
+import com.example.jazzlibraryktroomjpcompose.domain.repository.DurationRepository
+import com.example.jazzlibraryktroomjpcompose.domain.repository.FilterPathRepository
+import com.example.jazzlibraryktroomjpcompose.domain.repository.InstrumentRepository
+import com.example.jazzlibraryktroomjpcompose.domain.repository.TypeRepository
+import com.example.jazzlibraryktroomjpcompose.domain.repository.VideoRepository
 import com.example.jazzlibraryktroomjpcompose.ui.settings.SettingsRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
@@ -24,7 +35,14 @@ import javax.inject.Inject
 
 @HiltViewModel
 class MainViewModel @Inject constructor(
-    private val database: JazzDatabase,
+    private val videoRepository: VideoRepository,
+    private val artistRepository: ArtistRepository,
+    private val instrumentRepository: InstrumentRepository,
+    private val albumRepository: AlbumRepository,
+    private val durationRepository: DurationRepository,
+    private val typeRepository: TypeRepository,
+    private val associationRepository: AssociationRepository,
+    private val filterPathRepository: FilterPathRepository,
     private val filterManager: FilterManager,
     private val jazzRepository: JazzRepositoryImpl,
     private val settingsRepository: SettingsRepository
@@ -76,9 +94,6 @@ class MainViewModel @Inject constructor(
     private val _currentTab = MutableStateFlow(MainTab.VIDEOS)
     val currentTab: StateFlow<MainTab> = _currentTab.asStateFlow()
 
-    // Add these variables in MainViewModel
-    private val _historyEntries = MutableStateFlow<List<FilterPathRoomEntity>>(emptyList())
-    val historyEntries: StateFlow<List<FilterPathRoomEntity>> = _historyEntries.asStateFlow()
 
     // Keep the current filter path as list for easy use
     private val _currentFilterPath = MutableStateFlow<List<FilterPath>>(emptyList())
@@ -96,12 +111,9 @@ class MainViewModel @Inject constructor(
     )
 
     val videoArtistsMap: StateFlow<Map<Int, List<Artist>>> = combine(
-        database.artistDao().getAllArtists(),
-        database.videoContainsArtistDao().getAllVideoContainsArtists()
-    ) { artistEntities, associationEntities ->
-        val artists = artistEntities.map { ArtistMapper.toDomain(it) }
-        val associations = associationEntities.map { VideoContainsArtistMapper.toDomain(it) }
-
+        artistRepository.getAllArtists(),
+        associationRepository.getAllVideoContainsArtists()
+    ) { artists: List<Artist>, associations: List<VideoContainsArtist> ->
         associations.groupBy { it.videoId }
             .mapValues { (_, assocs) ->
                 assocs.mapNotNull { assoc ->
@@ -110,28 +122,22 @@ class MainViewModel @Inject constructor(
             }
     }.catch { e ->
         Log.e(TAG, "Failed to build video-artists map", e)
-        emptyMap<Int, List<Artist>>()   // 🔁 Explicit type arguments
+        emptyMap<Int, List<Artist>>()
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
-        initialValue = emptyMap()       // ✅ This one is fine because initialValue is part of stateIn and type is already known from the flow's type parameter
+        initialValue = emptyMap<Int, List<Artist>>()
     )
 
     val albumArtistsMap: StateFlow<Map<Int, List<AlbumArtistInfo>>> = combine(
-        database.artistDao().getAllArtists(),
-        database.albumContainsArtistDao().getAllAlbumContainsArtists()
-    ) { artistEntities, associationEntities ->
-        val artists = artistEntities.map { ArtistMapper.toDomain(it) }
-        val associations = associationEntities.map { AlbumContainsArtistMapper.toDomain(it) }
-
+        artistRepository.getAllArtists(),
+        associationRepository.getAllAlbumContainsArtists()
+    ) { artists: List<Artist>, associations: List<AlbumContainsArtist> ->
         associations.groupBy { it.albumId }
-            .mapValues { (_ , assocs) ->
+            .mapValues { (_, assocs) ->
                 assocs.mapNotNull { assoc ->
-                    val artist = artists.find { it.id == assoc.artistId }
-                    artist?.let {
-                        AlbumArtistInfo(artist, assoc.isMain == 1)
-                    }
-
+                    artists.find { it.id == assoc.artistId }
+                        ?.let { AlbumArtistInfo(it, assoc.isMain == 1) }
                 }
             }
     }.catch { e ->
@@ -158,18 +164,18 @@ class MainViewModel @Inject constructor(
     }
 
     fun hasPreviousHistory(): Boolean {
-        val entries = _historyEntries.value
+        val entries = enrichedHistory.value
         val currentIndex = entries.indexOfFirst { it.timestamp == currentStateTimestamp }
         return currentIndex != -1 && currentIndex < entries.size - 1
     }
 
     fun goBack() {
         viewModelScope.launch {
-            val entries = _historyEntries.value
+            val entries = enrichedHistory.value
             val currentIndex = entries.indexOfFirst { it.timestamp == currentStateTimestamp }
             if (currentIndex != -1 && currentIndex < entries.size - 1) {
-                val previous = entries[currentIndex + 1] // list is descending
-                restoreHistoryState(previous)
+                val previousGroup = entries[currentIndex + 1]  // HistoryGroupItem
+                restoreFilterPathFromGroupItem(previousGroup)  // already exists
             }
         }
     }
@@ -179,17 +185,17 @@ class MainViewModel @Inject constructor(
             if (filter.entityName.isNotEmpty()) return@map filter
             val name = when (filter.categoryId) {
                 FilterPath.CATEGORY_INSTRUMENT -> {
-                    database.instrumentDao().getInstrumentById(filter.entityId).firstOrNull()?.name ?: ""
+                    instrumentRepository.getInstrumentById(filter.entityId).firstOrNull()?.name ?: ""
                 }
                 FilterPath.CATEGORY_ARTIST -> {
-                    val artist = database.artistDao().getArtistById(filter.entityId).firstOrNull()
+                    val artist = artistRepository.getArtistById(filter.entityId).firstOrNull()
                     if (artist != null) "${artist.name} ${artist.surname}" else ""
                 }
                 FilterPath.CATEGORY_DURATION -> {
-                    database.durationDao().getDurationById(filter.entityId).firstOrNull()?.name ?: ""
+                    durationRepository.getDurationById(filter.entityId).firstOrNull()?.name ?: ""
                 }
                 FilterPath.CATEGORY_TYPE -> {
-                    database.typeDao().getTypeById(filter.entityId).firstOrNull()?.name ?: ""
+                    typeRepository.getTypeById(filter.entityId).firstOrNull()?.name ?: ""
                 }
                 else -> ""
             }
@@ -226,12 +232,12 @@ class MainViewModel @Inject constructor(
 
     // NEW: Check if any of the main tables has data
     private suspend fun checkIfDatabaseHasData(): Boolean {
-        // Check a representative table (videos or instruments)
-        val instrumentCount = database.instrumentDao().getInstrumentCount()
+        // Use repository to get instrument count
+        val instrumentCount = instrumentRepository.getInstrumentCount()
 
         println("DEBUG: Database check - Instruments: $instrumentCount")
 
-        // Return true if we have at least some data in either table
+        // Return true if we have at least some data
         return instrumentCount > 0
     }
 
@@ -330,93 +336,74 @@ class MainViewModel @Inject constructor(
     }
 
     private fun loadInitialData() {
-        //buildVideoArtistsMap()
-
         viewModelScope.launch {
-            // Launch separate coroutines for each data type to collect concurrently
             val jobs = listOf(
                 launch {
                     combine(
-                        database.videoDao().getAllVideos()
-                            .map { entities -> entities.map { VideoMapper.toDomain(it) } },
+                        videoRepository.getAllVideos(),
                         settingsRepository.randomiseVideoList,
-                        refreshTrigger   // <-- new
+                        refreshTrigger
                     ) { videos, shouldRandomise, _ ->
-                        // The third parameter is the trigger – we ignore its value,
-                        // but its emission causes the lambda to run again.
                         if (shouldRandomise) videos.shuffled() else videos
                     }.collect { randomisedVideos ->
                         _uiState.update { it.copy(videos = randomisedVideos) }
                     }
                 },
                 launch {
-                    database.albumDao().getAllAlbums()
-                        .map { entities -> entities.map { AlbumMapper.toDomain(it) } }
-                        .collect { albums ->
-                            _uiState.update { it.copy(albums = albums) }
-                            Log.d("AlbumDebug", "Initial load: albums = ${albums.size}")
-                        }
+                    albumRepository.getAllAlbums().collect { albums ->
+                        _uiState.update { it.copy(albums = albums) }
+                        Log.d("AlbumDebug", "Initial load: albums = ${albums.size}")
+                    }
                 },
                 launch {
-                    database.instrumentDao().getAllInstrumentsWithArtistCount()
-                        .map { entities -> entities.map { InstrumentMapper.toDomainWithCount(it) } }
-                        .collect { instruments ->
-                            _uiState.update { it.copy(
+                    instrumentRepository.getAllInstrumentsWithArtistCount().collect { instruments ->
+                        _uiState.update {
+                            it.copy(
                                 allInstruments = instruments,
                                 availableInstruments = instruments
-                            ) }
-                            println("DEBUG: Loaded ${instruments.size} instruments")
+                            )
                         }
+                        println("DEBUG: Loaded ${instruments.size} instruments")
+                    }
                 },
                 launch {
-                    database.artistDao().getAllArtistsWithVideoCount()
-                        .map { entities -> entities.map { ArtistMapper.toDomainWithCount(it) } }
-                        .collect { artists ->
-                            _uiState.update {
-                                it.copy(availableArtists = artists,
-                                availableArtistsDisplay = artists)
-                            }
-                            println("DEBUG: Loaded ${artists.size} artists")
+                    artistRepository.getAllArtistsWithVideoCount().collect { artists ->
+                        _uiState.update {
+                            it.copy(
+                                availableArtists = artists,
+                                availableArtistsDisplay = artists
+                            )
                         }
+                        println("DEBUG: Loaded ${artists.size} artists")
+                    }
                 },
                 launch {
-                    database.typeDao().getAllTypesWithCount()
-                        .map { entities -> entities.map { TypeMapper.toDomainWithCount(it) } }
-                        .collect { types ->
-                            _uiState.update { it.copy(availableTypes = types) }
-                            println("DEBUG: Loaded ${types.size} types")
-                        }
+                    typeRepository.getAllTypesWithCount().collect { types ->
+                        _uiState.update { it.copy(availableTypes = types) }
+                        println("DEBUG: Loaded ${types.size} types")
+                    }
                 },
                 launch {
-                    database.durationDao().getAllDurationsWithCount()
-                        .map { entities -> entities.map { DurationMapper.toDomainWithCount(it) } }
-                        .collect { durations ->
-                            _uiState.update { it.copy(availableDurations = durations) }
-                            println("DEBUG: Loaded ${durations.size} durations")
-                        }
+                    durationRepository.getAllDurationsWithCount().collect { durations ->
+                        _uiState.update { it.copy(availableDurations = durations) }
+                        println("DEBUG: Loaded ${durations.size} durations")
+                    }
                 },
                 launch {
-                    database.videoContainsArtistDao().getAllVideoContainsArtists()
-                        .map { entities -> entities.map { VideoContainsArtistMapper.toDomain(it) } }
-                        .collect { videoContainsArtists ->
-                            _uiState.update { it.copy(availableVideoContainsArtists = videoContainsArtists) }
-                            println("DEBUG: Loaded ${videoContainsArtists.size} video-artist associations")
-                        }
+                    associationRepository.getAllVideoContainsArtists().collect { videoContainsArtists ->
+                        _uiState.update { it.copy(availableVideoContainsArtists = videoContainsArtists) }
+                        println("DEBUG: Loaded ${videoContainsArtists.size} video-artist associations")
+                    }
                 },
                 launch {
-                    database.albumContainsArtistDao().getAllAlbumContainsArtists()
-                        .map { entities -> entities.map { AlbumContainsArtistMapper.toDomain(it) } }
-                        .collect { albumContainsArtists ->
-                            _uiState.update { it.copy(availableAlbumContainsArtists = albumContainsArtists) }
-                            println("DEBUG: Loaded ${albumContainsArtists.size} album-artist associations")
-                        }
+                    associationRepository.getAllAlbumContainsArtists().collect { albumContainsArtists ->
+                        _uiState.update { it.copy(availableAlbumContainsArtists = albumContainsArtists) }
+                        println("DEBUG: Loaded ${albumContainsArtists.size} album-artist associations")
+                    }
                 }
             )
 
-            // Wait for all coroutines to complete their initial collection
             jobs.forEach { it.join() }
-
-            // Update loading state
             _uiState.update { it.copy(isLoading = false) }
             println("DEBUG: Finished loading all data")
         }
@@ -424,27 +411,21 @@ class MainViewModel @Inject constructor(
 
     private fun loadFilterPath() {
         viewModelScope.launch {
-            val latest = database.filterPathDao().getLatestFilterPath()
-            if (latest != null) {
-                val filters = FilterPathMapper.toDomain(latest)
-                val enriched = enrichFilterPathNames(filters)
+            val latestMeta = filterPathRepository.getLatestFilterPathWithMeta()
+            if (latestMeta != null) {
+                val enriched = enrichFilterPathNames(latestMeta.filters)
                 _currentFilterPath.value = enriched
-                currentStateTimestamp = latest.timestamp
+                currentStateTimestamp = latestMeta.timestamp
                 applyFiltersFromPath(enriched)
-
-                _currentFilterPathId.value = latest.id
+                _currentFilterPathId.value = latestMeta.id
             } else {
-                // No history, start with empty filters
                 _currentFilterPath.value = emptyList()
                 currentStateTimestamp = 0L
                 applyFiltersFromPath(emptyList())
-
                 _currentFilterPathId.value = null
             }
-            // Load all history for the History tab
-            database.filterPathDao().getAllFilterPaths().collect { entries ->
-                _historyEntries.value = entries
-            }
+            // Load enriched history (used for back navigation and history tab)
+            loadEnrichedHistory()
         }
     }
 
@@ -500,48 +481,40 @@ class MainViewModel @Inject constructor(
         isSelected: Boolean
     ) {
         viewModelScope.launch {
-            // Use the current filter path from the state we are on
-            val currentFilterPath = _currentFilterPath.value
-
-            val newFilterPath = if (isSelected) {
-                filterManager.handleChipSelection(
-                    currentFilterPath,
-                    categoryId,
-                    entityId,
-                    entityName
-                )
+            val currentPath = _currentFilterPath.value
+            val newPath = if (isSelected) {
+                filterManager.handleChipSelection(currentPath, categoryId, entityId, entityName)
             } else {
-                filterManager.handleChipDeselection(
-                    currentFilterPath,
-                    categoryId,
-                    entityId
-                )
+                filterManager.handleChipDeselection(currentPath, categoryId, entityId)
             }
+            if (newPath == currentPath) return@launch
 
-            // No change? Exit.
-            if (newFilterPath == currentFilterPath) return@launch
-
-            val serial = FilterPathMapper.serialize(newFilterPath)
-            val timestamp = System.currentTimeMillis()
-
-            // Delete any forward history (entries newer than the current state)
+            // Delete forward history entries (newer than current state)
             if (currentStateTimestamp > 0L) {
-                database.filterPathDao().deleteAllNewerThan(currentStateTimestamp)
+                filterPathRepository.deleteAllNewerThan(currentStateTimestamp)
             }
 
-            // Insert the new entry
-            val newEntry = FilterPathMapper.toEntity(serial, timestamp)
-            val insertedId = database.filterPathDao().insertFilterPathAndGetId(newEntry) // returns Long
-            _currentFilterPathId.value = insertedId.toInt()
+            // Insert the new path and get its ID
+            val newId = filterPathRepository.insertFilterPathAndGetId(newPath)
 
-            //make sure the history tab list reload real tiome if it is open
+            // Retrieve the full metadata of the latest path (to get timestamp)
+            val latestMeta = filterPathRepository.getLatestFilterPathWithMeta()
+            if (latestMeta != null) {
+                _currentFilterPathId.value = latestMeta.id
+                currentStateTimestamp = latestMeta.timestamp
+            } else {
+                // Fallback: use the returned ID and current time
+                _currentFilterPathId.value = newId.toInt()
+                currentStateTimestamp = System.currentTimeMillis()
+            }
+
+            // Update UI state
+            _currentFilterPath.value = newPath
+            applyFiltersFromPath(newPath)
+            _filterState.update { it.copy(currentFilterPath = newPath) }
+
+            // Refresh history
             loadEnrichedHistory()
-
-            // Update local state
-            _currentFilterPath.value = newFilterPath
-            currentStateTimestamp = timestamp
-            applyFiltersFromPath(newFilterPath)
-            _filterState.update { it.copy(currentFilterPath = newFilterPath) }
         }
     }
 
@@ -550,13 +523,11 @@ class MainViewModel @Inject constructor(
         viewModelScope.launch {
             // Delete any forward history (entries newer than the current state)
             if (currentStateTimestamp > 0L) {
-                database.filterPathDao().deleteAllNewerThan(currentStateTimestamp)
+                filterPathRepository.deleteAllNewerThan(currentStateTimestamp)
             }
 
-            val serial = ""
             val timestamp = System.currentTimeMillis()
-            val newEntry = FilterPathMapper.toEntity(serial, timestamp)
-            val insertedId = database.filterPathDao().insertFilterPathAndGetId(newEntry)
+            val insertedId = filterPathRepository.insertFilterPathAndGetId(emptyList())
             _currentFilterPathId.value = insertedId.toInt()
 
             _currentFilterPath.value = emptyList()
@@ -663,29 +634,35 @@ class MainViewModel @Inject constructor(
 
     fun loadEnrichedHistory() {
         viewModelScope.launch {
-            val rawEntries = database.filterPathDao().getAllHistoryEntries()
-            // Group by filterPathId
+            // Get all history entries from repository (returns List<FilterHistoryEntry>)
+            val rawEntries = filterPathRepository.getAllHistoryEntries()
+
+            // Group by filterPathId (each path corresponds to one filter_path row)
             val grouped = rawEntries.groupBy { it.filterPathId }
             val result = mutableListOf<HistoryGroupItem>()
+
             for ((filterPathId, entries) in grouped) {
                 val first = entries.first()
-                // Deserialize filter paths and enrich names
+                // Deserialize the serialized filter list and enrich names (uses repositories internally)
                 val filterPaths = FilterPathMapper.deserialize(first.serialNumber)
                 val enrichedPaths = enrichFilterPathNames(filterPaths)
-                // Collect videos (distinct by videoId)
+
+                // Collect videos associated with this filter path (distinct by videoId)
                 val videos = entries.mapNotNull { entry ->
                     entry.videoId?.let { videoId ->
-                        // Fetch full Video domain object from database
-                        val videoEntity = database.videoDao().getVideoById(videoId).firstOrNull()
-                        videoEntity?.let { VideoMapper.toDomain(it) }
+                        // Use videoRepository to fetch the full Video domain object
+                        videoRepository.getVideoById(videoId).firstOrNull()
                     }
                 }.distinctBy { it.id }
-                result.add(HistoryGroupItem(
-                    filterPathId = filterPathId,
-                    timestamp = first.timestamp,
-                    filterPaths = enrichedPaths,
-                    videos = videos
-                ))
+
+                result.add(
+                    HistoryGroupItem(
+                        filterPathId = filterPathId,
+                        timestamp = first.timestamp,
+                        filterPaths = enrichedPaths,
+                        videos = videos
+                    )
+                )
             }
             _enrichedHistory.value = result.sortedByDescending { it.timestamp }
         }
@@ -707,28 +684,38 @@ class MainViewModel @Inject constructor(
     fun clearHistory() {
         viewModelScope.launch {
             // 1. Delete all rows from filter_path table
-            database.filterPathDao().deleteAll()
+            filterPathRepository.deleteAll()
 
-            // 2. Insert a new empty filter path (serialNumber = "") as the current state
-            val emptyEntry = FilterPathRoomEntity(
-                serialNumber = "",
-                timestamp = System.currentTimeMillis()
-            )
-            val newId = database.filterPathDao().insertFilterPathAndGetId(emptyEntry)
-            _currentFilterPathId.value = newId.toInt()
+            // 2. Insert a new empty filter path (serializes to empty string)
+            filterPathRepository.insertFilterPathAndGetId(emptyList())
+            val latestMeta = filterPathRepository.getLatestFilterPathWithMeta()
+            if (latestMeta != null) {
+                _currentFilterPathId.value = latestMeta.id
+                currentStateTimestamp = latestMeta.timestamp
+            } else {
+                // Fallback (should never happen after insertion)
+                _currentFilterPathId.value = null
+                currentStateTimestamp = System.currentTimeMillis()
+            }
 
-            // 3. Reset the UI state to empty filters
+            // 3. Reset UI state to empty filters
             _currentFilterPath.value = emptyList()
-            currentStateTimestamp = emptyEntry.timestamp
             applyFiltersFromPath(emptyList())
 
             // 4. Refresh the history UI (enriched list)
             loadEnrichedHistory()
 
-            // 5. Also refresh the raw history entries flow (if used elsewhere)
-            database.filterPathDao().getAllFilterPaths().collect { entries ->
-                _historyEntries.value = entries
-            }
+            // 5. If you still use _historyEntries (raw entities), consider removing it.
+            //    The original code collected a flow of Room entities; with the repository,
+            //    you would need to expose that flow – but it's better to rely on enrichedHistory.
+            //    For now, we skip step 5 to keep the repository boundary clean.
+
+            /*
+            _currentFilterPath.value = emptyList()
+            currentStateTimestamp = emptyEntry.timestamp
+            applyFiltersFromPath(emptyList())
+             */
+
         }
     }
 
@@ -779,18 +766,13 @@ class MainViewModel @Inject constructor(
     }
 
     private suspend fun ensureInitialFilterPath(): Int? {
-        val count = database.filterPathDao().getCount()
+        val count = filterPathRepository.getCount()
         return if (count == 0) {
-            val emptyEntry = FilterPathRoomEntity(
-                serialNumber = "",
-                timestamp = System.currentTimeMillis()
-            )
-            //Inserted empty filter path with id
-            val id = database.filterPathDao().insertFilterPathAndGetId(emptyEntry)
+            // Insert an empty path (list of filters) – serializes to empty string
+            val id = filterPathRepository.insertFilterPathAndGetId(emptyList())
             id.toInt()
         } else {
-            // Get the latest entry's ID
-            database.filterPathDao().getLatestFilterPath()?.id
+            filterPathRepository.getLatestFilterPathId()
         }
     }
 

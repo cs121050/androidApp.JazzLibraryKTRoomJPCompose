@@ -6,6 +6,7 @@ import com.example.jazzlibraryktroomjpcompose.data.mappers.FilterPathMapper
 import com.example.jazzlibraryktroomjpcompose.domain.models.FilterHistoryEntry
 import com.example.jazzlibraryktroomjpcompose.domain.models.FilterPath
 import com.example.jazzlibraryktroomjpcompose.domain.repository.FilterPathRepository
+import com.example.jazzlibraryktroomjpcompose.domain.repository.FilterPathWithMeta
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
@@ -16,16 +17,36 @@ class FilterPathRepositoryImpl @Inject constructor(
     private val database: JazzDatabase
 ) : FilterPathRepository {
 
-    // Insert a single filter as a new path entry (list of one)
-    override suspend fun insertFilterPath(filterPath: FilterPath) {
-        val serialized = FilterPathMapper.serialize(listOf(filterPath))
-        val timestamp = System.currentTimeMillis()
+    // Insert a path (list of filters)
+    override suspend fun insertFilterPath(filterPath: List<FilterPath>) {
+        val serialized = FilterPathMapper.serialize(filterPath)
         val entity = FilterPathRoomEntity(
-            id = 0,
             serialNumber = serialized,
-            timestamp = timestamp
+            timestamp = System.currentTimeMillis()
         )
-        database.filterPathDao().insertFilterPath(entity)   // ✅ now valid
+        database.filterPathDao().insertFilterPath(entity)
+    }
+
+    // Insert a path and return its ID
+    override suspend fun insertFilterPathAndGetId(filterPath: List<FilterPath>): Long {
+        val serialized = FilterPathMapper.serialize(filterPath)
+        val entity = FilterPathRoomEntity(
+            serialNumber = serialized,
+            timestamp = System.currentTimeMillis()
+        )
+        return database.filterPathDao().insertFilterPathAndGetId(entity)
+    }
+
+    // Get the latest path (full list)
+    override suspend fun getLatestFilterPath(): List<FilterPath>? {
+        val entity = database.filterPathDao().getLatestFilterPath()
+        return entity?.let { FilterPathMapper.toDomain(it) }
+    }
+
+    // Get previous path
+    override suspend fun getPreviousFilterPath(timestamp: Long): List<FilterPath>? {
+        val entity = database.filterPathDao().getPreviousFilterPath(timestamp)
+        return entity?.let { FilterPathMapper.toDomain(it) }
     }
 
     // Get all individual filters from all stored paths (flattened)
@@ -33,44 +54,12 @@ class FilterPathRepositoryImpl @Inject constructor(
         database.filterPathDao().getAllFilterPaths()
             .map { entities ->
                 entities.flatMap { entity ->
-                    FilterPathMapper.toDomain(entity)  // returns List<FilterPath>
+                    FilterPathMapper.toDomain(entity)
                 }
             }
 
-    // Get the first filter of the latest path (or null if empty)
-    override suspend fun getLatestFilterPath(): FilterPath? {
-        val latestEntity = database.filterPathDao().getLatestFilterPath()
-        return latestEntity?.let { entity ->
-            FilterPathMapper.toDomain(entity).firstOrNull()
-        }
-    }
-
-    override suspend fun deleteFilterPathsAfter(timestamp: Long) {
-        database.filterPathDao().deleteFilterPathsAfter(timestamp)
-    }
-
-    // Get the first filter of the previous path relative to given timestamp
-    override suspend fun getPreviousFilterPath(timestamp: Long): FilterPath? {
-        val previousEntity = database.filterPathDao().getPreviousFilterPath(timestamp)
-        return previousEntity?.let { entity ->
-            FilterPathMapper.toDomain(entity).firstOrNull()
-        }
-    }
-
     override suspend fun deleteAllNewerThan(timestamp: Long) {
         database.filterPathDao().deleteAllNewerThan(timestamp)
-    }
-
-    // Insert a single filter as a new path and return its auto-generated ID
-    override suspend fun insertFilterPathAndGetId(filterPath: FilterPath): Long {
-        val serialized = FilterPathMapper.serialize(listOf(filterPath))
-        val timestamp = System.currentTimeMillis()
-        val entity = FilterPathRoomEntity(
-            id = 0,
-            serialNumber = serialized,
-            timestamp = timestamp
-        )
-        return database.filterPathDao().insertFilterPathAndGetId(entity)
     }
 
     override suspend fun getAllHistoryEntries(): List<FilterHistoryEntry> {
@@ -93,4 +82,24 @@ class FilterPathRepositoryImpl @Inject constructor(
     }
 
     override suspend fun getCount(): Int = database.filterPathDao().getCount()
+
+    override suspend fun getLatestFilterPathWithMeta(): FilterPathWithMeta? {
+        val entity = database.filterPathDao().getLatestFilterPath() ?: return null
+        return FilterPathWithMeta(
+            id = entity.id,
+            filters = FilterPathMapper.toDomain(entity),
+            timestamp = entity.timestamp
+        )
+    }
+
+    override suspend fun getLatestFilterPathId(): Int? {
+        return database.filterPathDao().getLatestFilterPath()?.id
+    }
+
+    override suspend fun getLatestFilterPathTimestamp(): Long? {
+        return database.filterPathDao().getLatestFilterPath()?.timestamp
+    }
+
+
+
 }

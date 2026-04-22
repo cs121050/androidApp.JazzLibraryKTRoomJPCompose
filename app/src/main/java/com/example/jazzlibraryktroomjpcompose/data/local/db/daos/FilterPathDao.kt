@@ -59,4 +59,5 @@ interface FilterPathDao {
 
     @Query("SELECT COUNT(*) FROM filter_path")
     suspend fun getCount(): Int
+
 }
