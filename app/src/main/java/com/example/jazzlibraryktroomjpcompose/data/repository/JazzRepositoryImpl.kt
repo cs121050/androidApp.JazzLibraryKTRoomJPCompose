@@ -38,10 +38,9 @@ class JazzRepositoryImpl(
 
     suspend fun checkApiConnectivity(): Boolean {
         return try {
-            // Try to make a lightweight API call
-            val response = apiService.getApiStatus()
-
-            response.isSuccessful
+            // Call the lightweight endpoint – if it succeeds without exception, API is reachable
+            apiService.getApiStatus()
+            true
         } catch (e: Exception) {
             println("API connectivity check failed: ${e.message}")
             false
@@ -50,9 +49,12 @@ class JazzRepositoryImpl(
 
     suspend fun loadBootstrapData(): Result<Unit> = withContext(Dispatchers.IO) {
         try {
+            Log.d("JazzRepo", "loadBootstrapData: Starting API call")
             val response = apiService.getBootstrapData()
+            Log.d("JazzRepo", "Response code: ${response.code()}, isSuccessful: ${response.isSuccessful}")
 
             if (response.isSuccessful && response.body() != null) {
+                Log.d("JazzRepo", "Body received, size: ...")
                 val bootstrapData = response.body()!!
 
                 // Convert remote models to Room entities
@@ -86,9 +88,11 @@ class JazzRepositoryImpl(
 
                 Result.success(Unit)
             } else {
+                Log.e("JazzRepo", "API error: ${response.code()} ${response.message()}")
                 Result.failure(Exception("Failed to load data: ${response.code()} ${response.message()}"))
             }
         } catch (e: Exception) {
+            Log.e("JazzRepo", "Exception in loadBootstrapData", e)
             Result.failure(e)
         }
     }

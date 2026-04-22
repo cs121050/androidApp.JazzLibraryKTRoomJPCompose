@@ -299,8 +299,11 @@ class MainViewModel @Inject constructor(
 
     private suspend fun checkApiAvailability(): Boolean {
         return try {
-            jazzRepository.checkApiConnectivity()
+            val result = jazzRepository.checkApiConnectivity()
+            Log.d("MainVM", "API connectivity check: $result")
+            result
         } catch (e: Exception) {
+            Log.e("MainVM", "API connectivity exception", e)
             false
         }
     }
