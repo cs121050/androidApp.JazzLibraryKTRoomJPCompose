@@ -1,4 +1,3 @@
-// di/RepositoryModule.kt
 package com.example.jazzlibraryktroomjpcompose.di
 
 import android.util.Log
@@ -49,8 +48,13 @@ abstract class RepositoryModule {
     @Singleton
     abstract fun bindFilterPathRepository(impl: FilterPathRepositoryImpl): FilterPathRepository
 
+    // NEW: Bind FilterRepository (domain interface) to JazzRepositoryImpl
+    @Binds
+    @Singleton
+    abstract fun bindFilterRepository(impl: JazzRepositoryImpl): FilterRepository
+
     companion object {
-        // JazzRepositoryImpl has no interface; provide it as a concrete class
+        // Provide JazzRepositoryImpl as a concrete class for bootstrap operations
         @Provides
         @Singleton
         fun provideJazzRepository(database: JazzDatabase): JazzRepositoryImpl {

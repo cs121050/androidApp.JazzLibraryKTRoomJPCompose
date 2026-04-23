@@ -1,7 +1,6 @@
 package com.example.jazzlibraryktroomjpcompose.data.repository.impl
 
 import com.example.jazzlibraryktroomjpcompose.data.local.db.JazzDatabase
-import com.example.jazzlibraryktroomjpcompose.data.local.db.entities.AlbumWithIsMainFlag
 import com.example.jazzlibraryktroomjpcompose.data.mappers.AlbumMapper
 import com.example.jazzlibraryktroomjpcompose.domain.models.Album
 import com.example.jazzlibraryktroomjpcompose.domain.repository.AlbumRepository
@@ -11,7 +10,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
-class FilterPathContainsMediaRepositoryImpl @Inject constructor(
+class AlbumRepositoryImpl @Inject constructor(
     private val database: JazzDatabase
 ) : AlbumRepository {
 
