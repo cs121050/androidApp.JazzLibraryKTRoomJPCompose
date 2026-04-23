@@ -123,6 +123,20 @@ class MainViewModel @Inject constructor(
     private val _albumSongs = MutableStateFlow<List<Song>>(emptyList())
     val albumSongs: StateFlow<List<Song>> = _albumSongs.asStateFlow()
 
+    private val _isCurrentAlbumCardVisible = MutableStateFlow(false)
+    val isCurrentAlbumCardVisible: StateFlow<Boolean> = _isCurrentAlbumCardVisible.asStateFlow()
+
+    private val _currentAlbumId = MutableStateFlow<Int?>(null)
+    val currentAlbumId: StateFlow<Int?> = _currentAlbumId.asStateFlow()
+
+    fun setCurrentAlbumId(albumId: Int?) {
+        _currentAlbumId.value = albumId
+    }
+
+    fun setCurrentAlbumCardVisible(visible: Boolean) {
+        _isCurrentAlbumCardVisible.value = visible
+    }
+
     fun loadAlbumSongs(albumId: Int) {
         viewModelScope.launch {
             songRepository.getSongsByAlbumId(albumId).collect { songs ->
