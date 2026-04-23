@@ -1,5 +1,6 @@
 package com.example.jazzlibraryktroomjpcompose.ui.main
 
+import android.app.Activity
 import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.BackHandler
@@ -173,7 +174,6 @@ fun MainScreen(
 
     val bottomSheetState by viewModel.bottomSheetState.collectAsState()
     val context = LocalContext.current
-    var backPressTime by remember { mutableLongStateOf(0L) }
     val isRefreshing by viewModel.isRefreshing.collectAsState()
 
     val playerUiState by playerViewModel.uiState.collectAsState()
@@ -204,7 +204,7 @@ fun MainScreen(
 
     // --- System UI control for fullscreen ---
     val systemUiController = rememberSystemUiController()
-    var showBars by remember { mutableStateOf(false) }
+    val showBars by viewModel.showBars.collectAsState()
 
     val density = LocalDensity.current
     val topTapThresholdPx = remember { with(density) { 80.dp.toPx() } }
@@ -220,6 +220,9 @@ fun MainScreen(
 
     val scrollToAlbumsTrigger = remember { mutableStateOf(0) }
 
+    LaunchedEffect(isLandscape, playerUiState.isVisible) {
+        viewModel.setFullscreen(isLandscape && playerUiState.isVisible)
+    }
 
     LaunchedEffect(currentFilterPathId) {
         Log.d("MainScreen", "currentFilterPathId changed to: $currentFilterPathId")
@@ -230,12 +233,8 @@ fun MainScreen(
         Log.d("Fullscreen", "isFullscreen: $isFullscreen, isLandscape: $isLandscape, playerVisible: ${playerUiState.isVisible}")
     }
 
-    // Auto‑hide bars after 3 seconds when they become visible
     LaunchedEffect(showBars, isFullscreen) {
-        if (isFullscreen && showBars) {
-            delay(3000)
-            showBars = false
-        }
+        viewModel.startAutoHideTimer()
     }
 
     // Apply system UI visibility and colors based on fullscreen state
@@ -263,37 +262,10 @@ fun MainScreen(
         }
     }
 
-// Auto‑hide timer (unchanged)
-    LaunchedEffect(showBars, isFullscreen) {
-        if (isFullscreen && showBars) {
-            Log.d("Fullscreen", "Bars visible, starting auto-hide timer")
-            delay(3000)
-            Log.d("Fullscreen", "Auto-hiding bars")
-            showBars = false
-        }
-    }
-
     // BackHandler (unchanged)
-    BackHandler(
-        enabled = true,
-        onBack = {
-            if (bottomSheetState != BottomSheetState.HIDDEN) {
-                viewModel.setBottomSheetState(BottomSheetState.HIDDEN)
-                return@BackHandler
-            }
-            if (viewModel.hasPreviousHistory()) {
-                viewModel.goBack()
-                return@BackHandler
-            }
-            // Otherwise, handle app exit
-            val currentTime = System.currentTimeMillis()
-            if (currentTime - backPressTime > 500) {
-                backPressTime = currentTime
-            } else {
-                (context as? android.app.Activity)?.finish()
-            }
-        }
-    )
+    BackHandler {
+        viewModel.handleBackPress { (context as? Activity)?.finish() }
+    }
 
     if (loadingState == LoadingState.LOADING && uiState.videos.isEmpty()) {
         LoadingScreen()
@@ -563,7 +535,7 @@ fun MainScreen(
                                         detectTapGestures { offset ->
                                             if (offset.y < topTapThresholdPx) {
                                                 Log.d("Fullscreen", "Top edge tap detected, showing bars")
-                                                showBars = true
+                                                viewModel.setShowBars(true)
                                             }
                                         }
                                     }

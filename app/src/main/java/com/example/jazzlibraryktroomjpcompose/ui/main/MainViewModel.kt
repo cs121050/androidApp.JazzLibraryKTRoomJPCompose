@@ -46,6 +46,8 @@ class MainViewModel @Inject constructor(
     private val settingsRepository: SettingsRepository
 ) : ViewModel() {
 
+    private var lastBackPressTime = 0L
+
     // UI State
     private val _uiState = MutableStateFlow(MainUiState())
     val uiState: StateFlow<MainUiState> = _uiState.asStateFlow()
@@ -107,6 +109,56 @@ class MainViewModel @Inject constructor(
         val artist: Artist,
         val isMain: Boolean
     )
+
+    // Fullscreen state (derived from orientation + player visibility)
+    private val _isFullscreen = MutableStateFlow(false)
+    val isFullscreen: StateFlow<Boolean> = _isFullscreen.asStateFlow()
+
+    private val _showBars = MutableStateFlow(false)
+    val showBars: StateFlow<Boolean> = _showBars.asStateFlow()
+
+
+    fun setFullscreen(fullscreen: Boolean) {
+        _isFullscreen.value = fullscreen
+    }
+
+    fun setShowBars(show: Boolean) {
+        _showBars.value = show
+    }
+
+    // Auto‑hide timer logic (called from UI after showing bars)
+    fun startAutoHideTimer() {
+        viewModelScope.launch {
+            if (_isFullscreen.value && _showBars.value) {
+                delay(3000)
+                _showBars.value = false
+            }
+        }
+    }
+
+    fun handleBackPress(onExit: () -> Unit) {
+        val now = System.currentTimeMillis()
+        val elapsed = now - lastBackPressTime
+
+        // Double back detected within 500ms → exit regardless
+        if (elapsed <= 350) {
+            Log.d("BackHandler", "Double back detected, exiting app")
+            onExit()
+            return
+        }
+
+        lastBackPressTime = now
+
+        when {
+            _bottomSheetState.value != BottomSheetState.HIDDEN -> {
+                setBottomSheetState(BottomSheetState.HIDDEN)
+            }
+            hasPreviousHistory() -> {
+                goBack()
+            }
+            //else nothing
+        }
+    }
 
     val videoArtistsMap: StateFlow<Map<Int, List<Artist>>> = combine(
         artistRepository.getAllArtists(),
