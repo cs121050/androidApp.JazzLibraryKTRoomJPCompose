@@ -46,6 +46,10 @@ abstract class RepositoryModule {
 
     @Binds
     @Singleton
+    abstract fun bindSongRepository(impl: SongRepositoryImpl): SongRepository
+
+    @Binds
+    @Singleton
     abstract fun bindFilterPathRepository(impl: FilterPathRepositoryImpl): FilterPathRepository
 
     // NEW: Bind FilterRepository (domain interface) to JazzRepositoryImpl
