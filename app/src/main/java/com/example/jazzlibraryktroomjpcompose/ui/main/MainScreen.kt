@@ -230,12 +230,6 @@ fun MainScreen(
         Log.d("Fullscreen", "isFullscreen: $isFullscreen, isLandscape: $isLandscape, playerVisible: ${playerUiState.isVisible}")
     }
 
-    LaunchedEffect(playerUiState.currentVideoId) {
-        if (playerUiState.currentVideoId != null) {
-            viewModel.loadEnrichedHistory()
-        }
-    }
-
     // Auto‑hide bars after 3 seconds when they become visible
     LaunchedEffect(showBars, isFullscreen) {
         if (isFullscreen && showBars) {
@@ -278,15 +272,6 @@ fun MainScreen(
             showBars = false
         }
     }
-
-
-    // Monitor tab changes and minimize player when leaving Videos tab
-    LaunchedEffect(currentTab) {
-        if (playerUiState.isVisible && !playerUiState.isInMiniMode) {
-            playerViewModel.minimizePlayer()
-        }
-    }
-
 
     // BackHandler (unchanged)
     BackHandler(
@@ -342,20 +327,8 @@ fun MainScreen(
                 uiState.filteredVideos
             }
 
-            // Update player playlist when the video list changes
             LaunchedEffect(videosToShow) {
                 playerViewModel.updatePlaylist(videosToShow)
-            }
-
-            // Keep the player's current index in sync (e.g., after a load via card tap)
-            LaunchedEffect(playerUiState.currentVideoId) {
-                val videoId = playerUiState.currentVideoId
-                if (videoId != null) {
-                    val index = videosToShow.indexOfFirst { extractYouTubeVideoId(it.path) == videoId }
-                    if (index != -1 && playerUiState.currentIndex != index) {
-                        playerViewModel.updateCurrentIndex(index)
-                    }
-                }
             }
 
             // ----- CHIPS ROW (fixed) -----
@@ -440,7 +413,10 @@ fun MainScreen(
                                 artistCount = artistCount,
                                 historyCount = historyCount,
                                 currentTab = currentTab,
-                                onTabSelected = { viewModel.setCurrentTab(it) },
+                                onTabSelected = { tab ->
+                                    viewModel.setCurrentTab(tab)          // MainViewModel
+                                    playerViewModel.setCurrentTab(tab)    // PlayerViewModel (new)
+                                },
                                 isPlayerVisible = isPlayerVisible,
                                 onPrevious = { playerViewModel.previousVideo() },
                                 onNext = { playerViewModel.nextVideo() },
@@ -2070,6 +2046,12 @@ fun HistoryContent(
     val currentPlayingDbId by playerViewModel.currentVideoDbIdState.collectAsState()
 
     // Load data when this screen appears
+    LaunchedEffect(Unit) {
+        playerViewModel.videoChangedEvent.collect {
+            viewModel.loadEnrichedHistory()
+        }
+    }
+
     LaunchedEffect(Unit) {
         viewModel.loadEnrichedHistory()
     }

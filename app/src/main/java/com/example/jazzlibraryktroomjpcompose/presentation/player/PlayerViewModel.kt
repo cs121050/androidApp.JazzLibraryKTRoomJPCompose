@@ -11,6 +11,7 @@ import com.example.jazzlibraryktroomjpcompose.data.player.YouTubePlayerControlle
 import com.example.jazzlibraryktroomjpcompose.domain.models.FilterPath
 import com.example.jazzlibraryktroomjpcompose.domain.models.Video
 import com.example.jazzlibraryktroomjpcompose.domain.player.VideoPlayerController
+import com.example.jazzlibraryktroomjpcompose.ui.main.MainTab
 import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.YouTubePlayer
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
@@ -47,6 +48,23 @@ class PlayerViewModel @Inject constructor(
     // Add a new StateFlow
     private val _currentFilterPathMedia = MutableStateFlow<FilterPathContainsMediaRoomEntity?>(null)
     val currentFilterPathMedia: StateFlow<FilterPathContainsMediaRoomEntity?> = _currentFilterPathMedia.asStateFlow()
+
+    // ========== 1. Tab change auto‑minimize ==========
+    private val _currentTab = MutableStateFlow(MainTab.VIDEOS)
+    val currentTab: StateFlow<MainTab> = _currentTab.asStateFlow()
+
+    fun setCurrentTab(tab: MainTab) {
+        _currentTab.value = tab
+        // Auto‑minimize player when leaving Videos tab
+        if (tab != MainTab.VIDEOS && _uiState.value.isVisible && !_uiState.value.isInMiniMode) {
+            minimizePlayer()
+        }
+    }
+
+    // ========== 2. Event when a new video is loaded (for history refresh) ==========
+    private val _videoChangedEvent = MutableSharedFlow<Unit>()
+    val videoChangedEvent: SharedFlow<Unit> = _videoChangedEvent.asSharedFlow()
+
 
     init {
         viewModelScope.launch {
@@ -118,6 +136,11 @@ class PlayerViewModel @Inject constructor(
                 filterPathContainsMediaDao.insert(entry)
                 _currentFilterPathMedia.value = entry
             }
+        }
+
+        // ✅ NEW: Emit event so MainScreen can refresh history
+        viewModelScope.launch {
+            _videoChangedEvent.emit(Unit)
         }
     }
 

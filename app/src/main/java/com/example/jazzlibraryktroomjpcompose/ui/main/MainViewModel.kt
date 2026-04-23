@@ -5,7 +5,6 @@ import android.content.ContentValues.TAG
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.jazzlibraryktroomjpcompose.domain.FilterManager
 import com.example.jazzlibraryktroomjpcompose.domain.models.FilterPath
 import com.example.jazzlibraryktroomjpcompose.data.local.db.entities.FilterPathRoomEntity
 import com.example.jazzlibraryktroomjpcompose.data.mappers.*
