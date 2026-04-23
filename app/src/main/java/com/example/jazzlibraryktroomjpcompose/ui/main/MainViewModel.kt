@@ -120,21 +120,23 @@ class MainViewModel @Inject constructor(
     private val _showBars = MutableStateFlow(false)
     val showBars: StateFlow<Boolean> = _showBars.asStateFlow()
 
+    private val _currentAlbumId = MutableStateFlow<Int?>(null)
+    val currentAlbumId: StateFlow<Int?> = _currentAlbumId.asStateFlow()
+
     private val _albumSongs = MutableStateFlow<List<Song>>(emptyList())
     val albumSongs: StateFlow<List<Song>> = _albumSongs.asStateFlow()
 
     private val _isCurrentAlbumCardVisible = MutableStateFlow(false)
     val isCurrentAlbumCardVisible: StateFlow<Boolean> = _isCurrentAlbumCardVisible.asStateFlow()
 
-    private val _currentAlbumId = MutableStateFlow<Int?>(null)
-    val currentAlbumId: StateFlow<Int?> = _currentAlbumId.asStateFlow()
-
-    fun setCurrentAlbumId(albumId: Int?) {
-        _currentAlbumId.value = albumId
-    }
-
+    // This is used in SingleArtistView to track whether the album card is visible on screen, which influences startInMiniMode logic (whether to start in mini mode or full mode when playing a song from the album card).
     fun setCurrentAlbumCardVisible(visible: Boolean) {
         _isCurrentAlbumCardVisible.value = visible
+    }
+
+    // This is called from SingleArtistView when an album is selected or a song is played, so the player knows which album card to attach to. Without it, currentAlbumId never updates from null, causing the player to use "album_null" as the card ID, which never matches the album card’s ID ("album_123").
+    fun setCurrentAlbumId(albumId: Int?) {
+        _currentAlbumId.value = albumId
     }
 
     fun loadAlbumSongs(albumId: Int) {
@@ -144,6 +146,7 @@ class MainViewModel @Inject constructor(
             }
         }
     }
+
 
     fun setFullscreen(fullscreen: Boolean) {
         _isFullscreen.value = fullscreen
