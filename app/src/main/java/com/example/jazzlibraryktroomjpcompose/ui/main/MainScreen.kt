@@ -138,6 +138,7 @@ import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material3.*
 import androidx.compose.ui.text.style.TextAlign
+import androidx.lifecycle.ViewModel
 import com.example.jazzlibraryktroomjpcompose.domain.models.Song
 import java.text.DecimalFormat
 
@@ -183,7 +184,6 @@ fun MainScreen(
     var contentBoxRootPosition by remember { mutableStateOf(IntOffset.Zero) }
 
 
-
     //i have made the isPlayerVisible global (placed it in the viewmodel) so to access it independently
     val isPlayerVisible by viewModel.isPlayerVisible.collectAsState()
 
@@ -194,7 +194,8 @@ fun MainScreen(
     val artistCount = if (hasArtistFilter) 1 else uiState.availableArtists.size
     val historyCount = 0 // Placeholder – you can later replace with a real count
 
-    val scrollLockState = remember { ScrollLockState() }   // That is for the singleartistvie's wikidatacard scrolling, it locks the scrolling in order for items to consume the whole scrolling gesture
+    val scrollLockState =
+        remember { ScrollLockState() }   // That is for the singleartistvie's wikidatacard scrolling, it locks the scrolling in order for items to consume the whole scrolling gesture
 
     //orientation detection
     val configuration = LocalConfiguration.current
@@ -221,6 +222,24 @@ fun MainScreen(
 
     val scrollToAlbumsTrigger = remember { mutableStateOf(0) }
 
+    val currentAlbumSongs by viewModel.albumSongs.collectAsState()
+    val currentPlayingSongId by playerViewModel.currentVideoDbIdState.collectAsState()
+
+    val onLoadSong: (Song, String, Boolean) -> Unit = { song, _, startInMiniMode ->
+        song.ytVideoId?.let { videoId ->
+            playerViewModel.loadVideo(
+                videoId = videoId,
+                cardId = "album_${viewModel.currentAlbumId.value}",   // ✅ uses current album ID
+                currentFilterPath = filterState.currentFilterPath,
+                startInMiniMode = startInMiniMode,
+                mediaDbId = song.songId,
+                filterPathId = currentFilterPathId,
+                typeOfMedia = 1
+            )
+        }
+    }
+
+
     LaunchedEffect(isLandscape, playerUiState.isVisible) {
         viewModel.setFullscreen(isLandscape && playerUiState.isVisible)
     }
@@ -231,7 +250,10 @@ fun MainScreen(
 
     //DEBUGLOG
     LaunchedEffect(isFullscreen) {
-        Log.d("Fullscreen", "isFullscreen: $isFullscreen, isLandscape: $isLandscape, playerVisible: ${playerUiState.isVisible}")
+        Log.d(
+            "Fullscreen",
+            "isFullscreen: $isFullscreen, isLandscape: $isLandscape, playerVisible: ${playerUiState.isVisible}"
+        )
     }
 
     LaunchedEffect(showBars, isFullscreen) {
@@ -279,7 +301,10 @@ fun MainScreen(
 
             val nestedScrollConnection = remember(scrollLockState) {
                 object : NestedScrollConnection {
-                    override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                    override fun onPreScroll(
+                        available: Offset,
+                        source: NestedScrollSource
+                    ): Offset {
                         // If the wiki card is locked, do NOT move the toolbar
                         if (scrollLockState.isLocked) {
                             return Offset.Zero
@@ -324,11 +349,8 @@ fun MainScreen(
             }
 
 
-
-
             // LOCK all the scrolling gestures to ensure that a nested item consume all of it
             CompositionLocalProvider(LocalScrollLock provides scrollLockState) {
-
 
 
                 // ----- PULL TO REFRESH + CONTENT -----
@@ -393,12 +415,18 @@ fun MainScreen(
                                 isPlayerVisible = isPlayerVisible,
                                 onPrevious = { playerViewModel.previousVideo() },
                                 onNext = { playerViewModel.nextVideo() },
-                                onClose = { playerViewModel.closePlayer(currentFilterPathId)},
+                                onClose = { playerViewModel.closePlayer(currentFilterPathId) },
                                 playerViewModel = playerViewModel,
                                 videos = videosToShow,
                                 listState = listState,
                                 currentFilterPath = filterState.currentFilterPath,
                                 currentFilterPathId = currentFilterPathId,
+                                viewModel = viewModel,
+                                currentAlbumSongs = currentAlbumSongs,
+                                currentPlayingSongId = currentPlayingSongId,
+                                onLoadSong = onLoadSong,
+                                currentAlbumId = viewModel.currentAlbumId.value,
+                                currentMediaEntryTypeOfMedia = currentMediaEntryTypeOfMedia,
                                 onTogglePlayerVisibility = { viewModel.togglePlayerVisibility() }
                             )
                         }
@@ -425,7 +453,8 @@ fun MainScreen(
                                         onRefresh = { viewModel.safeRefreshDataFromAPI() },
                                         onActiveCardBoundsChanged = { cardId, rootPosition, size ->
                                             if (cardId == playerUiState.activeCardId) {
-                                                val relativePos = rootPosition - contentBoxRootPosition
+                                                val relativePos =
+                                                    rootPosition - contentBoxRootPosition
                                                 activeCardRelativePosition = relativePos
                                                 activeCardSize = size
                                             }
@@ -454,7 +483,8 @@ fun MainScreen(
                                         onRefresh = { viewModel.shuffleArtists() },
                                         onActiveCardBoundsChanged = { cardId, rootPosition, size ->
                                             if (cardId == playerUiState.activeCardId) {
-                                                val relativePos = rootPosition - contentBoxRootPosition
+                                                val relativePos =
+                                                    rootPosition - contentBoxRootPosition
                                                 activeCardRelativePosition = relativePos
                                                 activeCardSize = size
                                             }
@@ -473,9 +503,10 @@ fun MainScreen(
                                         currentFilterPathId = currentFilterPathId,
                                         minimiseMaximiseToggle = isPlayerVisible,
                                         onAlbumSelected = { album ->
-                                            val alreadyFiltered = filterState.currentFilterPath.any {
-                                                it.categoryId == FilterPath.CATEGORY_ARTIST && it.entityId == album.artistId
-                                            }
+                                            val alreadyFiltered =
+                                                filterState.currentFilterPath.any {
+                                                    it.categoryId == FilterPath.CATEGORY_ARTIST && it.entityId == album.artistId
+                                                }
                                             if (!alreadyFiltered && album.artistId != null) {
                                                 viewModel.handleChipSelection(
                                                     FilterPath.CATEGORY_ARTIST,
@@ -515,8 +546,10 @@ fun MainScreen(
 
                             // Player size for boundary calculations
                             var playerSize by remember { mutableStateOf(IntSize.Zero) }
-                            val screenWidthPx = with(density) { configuration.screenWidthDp.dp.toPx() }
-                            val screenHeightPx = with(density) { configuration.screenHeightDp.dp.toPx() }
+                            val screenWidthPx =
+                                with(density) { configuration.screenWidthDp.dp.toPx() }
+                            val screenHeightPx =
+                                with(density) { configuration.screenHeightDp.dp.toPx() }
                             val marginPx = with(density) { 6.dp.toPx() }
 
                             // Reset offset when entering mini mode
@@ -535,14 +568,20 @@ fun MainScreen(
                                     .pointerInput(Unit) {
                                         detectTapGestures { offset ->
                                             if (offset.y < topTapThresholdPx) {
-                                                Log.d("Fullscreen", "Top edge tap detected, showing bars")
+                                                Log.d(
+                                                    "Fullscreen",
+                                                    "Top edge tap detected, showing bars"
+                                                )
                                                 viewModel.setShowBars(true)
                                             }
                                         }
                                     }
 
                                 playerUiState.isInMiniMode -> Modifier
-                                    .size(width = 235.dp, height = 200.dp)  // IMPORTANT : change this to 205 to 205 to comply with youtube rules!
+                                    .size(
+                                        width = 235.dp,
+                                        height = 200.dp
+                                    )  // IMPORTANT : change this to 205 to 205 to comply with youtube rules!
                                     .padding(bottom = 6.dp, end = 6.dp)
                                     .align(Alignment.BottomEnd)
                                     .zIndex(5f)
@@ -570,7 +609,8 @@ fun MainScreen(
                             Row(
                                 modifier = playerModifier
                                     .onGloballyPositioned { coordinates ->
-                                        miniPlayerHeight = with(density) { coordinates.size.height.toDp() }
+                                        miniPlayerHeight =
+                                            with(density) { coordinates.size.height.toDp() }
                                         Log.d("Fullscreen", "Player box size: ${coordinates.size}")
                                     }
                             ) {
@@ -612,7 +652,7 @@ fun MainScreen(
                                         .fillMaxHeight()
                                 )
 
-                                if (isFullscreen ) {
+                                if (isFullscreen) {
                                     FullscreenControlsColumn(
                                         onShare = { /* TODO */ },
                                         onCast = { /* TODO */ },
@@ -637,7 +677,7 @@ fun MainScreen(
                 isOpen = leftDrawerState == DrawerState.OPEN,
                 onClose = { viewModel.toggleLeftDrawer() },
                 onRefreshClick = { viewModel.safeRefreshDataFromAPI() },
-                onClearHistoryClick = {viewModel.clearHistory() },
+                onClearHistoryClick = { viewModel.clearHistory() },
                 modifier = Modifier
                     .fillMaxHeight()
                     .width(280.dp)
@@ -760,7 +800,13 @@ fun toolbarBox(
     currentFilterPath: List<FilterPath>,
     listState: LazyListState,
     currentFilterPathId: Int?,
-    onTogglePlayerVisibility: () -> Unit
+    viewModel: MainViewModel,
+    onTogglePlayerVisibility: () -> Unit,
+    currentAlbumSongs: List<Song>,
+    currentPlayingSongId: Int?,
+    currentAlbumId: Int?,
+    currentMediaEntryTypeOfMedia: Int?,
+    onLoadSong: (Song, String, Boolean) -> Unit
 ) {
     SearchBar(
         onFilterClick = onFilterClick,
@@ -785,6 +831,12 @@ fun toolbarBox(
         listState = listState,
         currentFilterPath = currentFilterPath,
         currentFilterPathId = currentFilterPathId,
+        isAlbumCardVisible = { viewModel.isCurrentAlbumCardVisible.value },
+        currentAlbumSongs = currentAlbumSongs,
+        currentPlayingSongId = currentPlayingSongId,
+        onLoadSong = onLoadSong,
+        currentAlbumId = currentAlbumId,
+        currentMediaEntryTypeOfMedia = currentMediaEntryTypeOfMedia,
         modifier = Modifier.fillMaxWidth()
     )
 }
@@ -797,7 +849,8 @@ fun ActiveFilterChipsRow(
     modifier: Modifier = Modifier
 ) {
     Row(
-        modifier = modifier.fillMaxWidth()
+        modifier = modifier
+            .fillMaxWidth()
             .padding(bottom = 4.dp, top = 4.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
@@ -851,21 +904,30 @@ fun VideoStatsRow(
     listState: LazyListState,
     currentFilterPath: List<FilterPath>,
     currentFilterPathId: Int?,
+    currentAlbumSongs: List<Song>,           // songs of the currently selected album (empty if none)
+    currentPlayingSongId: Int?,              // from playerViewModel.currentVideoDbIdState
+    onLoadSong: (song: Song, cardId: String, startInMiniMode: Boolean) -> Unit, // callback to play a song
+    isAlbumCardVisible: () -> Boolean,
+    currentAlbumId: Int?,
+    currentMediaEntryTypeOfMedia: Int?,
     modifier: Modifier = Modifier
 ) {
+
+
     val playerUiState by playerViewModel.uiState.collectAsState()
     val isVideoPlaying = playerUiState.isVisible && playerUiState.currentVideoId != null
     val controlsAccessible = isPlayerVisible && isVideoPlaying
 
     val pagerState = rememberPagerState(
         initialPage = if (controlsAccessible) 1 else 2,
-        pageCount = { 3 }
+        pageCount = { 5 }   // now 5 pages (0..4)
     )
     val coroutineScope = rememberCoroutineScope()
     val context = LocalContext.current
 
     // Type of media: null by default, becomes 0 when (page 0 or 1) are visible
     var currentTypeOfMedia by remember { mutableStateOf<Int?>(null) }
+
 
     // Keep pager on minimise page when controls become inaccessible
     LaunchedEffect(controlsAccessible) {
@@ -874,9 +936,15 @@ fun VideoStatsRow(
         }
     }
 
+    val isOnAlbumPages = pagerState.currentPage == 3 || pagerState.currentPage == 4
+
     LaunchedEffect(isVideoPlaying) {
-        if (controlsAccessible && pagerState.currentPage != 1) {
-            pagerState.animateScrollToPage(1)
+        if (isOnAlbumPages) {
+            if (controlsAccessible && pagerState.currentPage != 3)
+                pagerState.animateScrollToPage(3)
+        } else {
+            if (controlsAccessible && pagerState.currentPage != 1)
+                pagerState.animateScrollToPage(1)
         }
         Log.d("VIDEOSTATROW", "controlsAccessible: $controlsAccessible")
     }
@@ -885,7 +953,7 @@ fun VideoStatsRow(
     LaunchedEffect(pagerState.currentPage) {
         when (pagerState.currentPage) {
             0, 1 -> currentTypeOfMedia = 0 // educational media controls
-            3, 4 -> currentTypeOfMedia = 0 // album media controls
+            3, 4 -> currentTypeOfMedia = 1 // album media controls
         }
     }
 
@@ -894,6 +962,20 @@ fun VideoStatsRow(
             val visibleIndices = listState.layoutInfo.visibleItemsInfo.map { it.index }
             index in visibleIndices
         } else false
+    }
+
+
+    // Function to load the first song (similar to loadFirstVideo)
+    fun loadFirstSong() {
+        if (currentAlbumSongs.isNotEmpty()) {
+            val firstSong = currentAlbumSongs.first()
+            val startInMiniMode = when {
+                currentTab != MainTab.ARTISTS -> true
+                else -> !isAlbumCardVisible()
+            }
+            onLoadSong(firstSong, "album_${currentAlbumId ?: return}", startInMiniMode)
+            //                                  ^^^^^^^^^^^^^^^ correct card ID
+        }
     }
 
     val loadFirstVideo: () -> Unit = {
@@ -920,11 +1002,30 @@ fun VideoStatsRow(
 
 // In LaunchedEffect that triggers when pagerState.currentPage == 0
     LaunchedEffect(pagerState.currentPage) {
-        if (pagerState.currentPage == 1 && !playerUiState.isVisible) {
+        if (pagerState.currentPage == 1 && !playerUiState.isVisible && videos.isNotEmpty()) {
             loadFirstVideo()
+        }
+
+        if (pagerState.currentPage == 1 && playerUiState.isVisible && currentMediaEntryTypeOfMedia != 0) {
+            loadFirstVideo()
+        }
+
+        if (pagerState.currentPage == 3 && !playerUiState.isVisible && currentAlbumSongs.isNotEmpty()) {
+            loadFirstSong()
+        }
+
+        if (pagerState.currentPage == 3 && playerUiState.isVisible && currentMediaEntryTypeOfMedia != 1) {
+            loadFirstSong()
         }
     }
 
+
+// Auto‑load the first song when page 3 becomes active
+    LaunchedEffect(pagerState.currentPage) {
+        if (pagerState.currentPage == 3 && !playerUiState.isVisible && currentAlbumSongs.isNotEmpty()) {
+            loadFirstSong()
+        }
+    }
 
     val onNextClick: () -> Unit = {
         val currentVideoId = playerUiState.currentVideoId
@@ -1023,31 +1124,38 @@ fun VideoStatsRow(
                         horizontalArrangement = Arrangement.spacedBy(0.dp)
                     ) {
                         IconButton(onClick = {
-                            Toast.makeText(context, "Share - to be implemented", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, "Share - to be implemented", Toast.LENGTH_SHORT)
+                                .show()
                         }) {
                             Icon(Icons.Default.Share, contentDescription = "Share")
                         }
                         IconButton(onClick = {
-                            Toast.makeText(context, "Cast - to be implemented", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, "Cast - to be implemented", Toast.LENGTH_SHORT)
+                                .show()
                         }) {
                             Icon(Icons.Default.Cast, contentDescription = "Cast")
                         }
                         IconButton(onClick = {
-                            Toast.makeText(context, "Back - to be implemented", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, "Back - to be implemented", Toast.LENGTH_SHORT)
+                                .show()
                         }) {
                             Icon(Icons.Default.ArrowBack, contentDescription = "Back")
                         }
                     }
                 }
+
                 1 -> {
+                    val currentVideoIndex = playerUiState.currentIndex ?: -1
+                    val canGoPrevVideo = currentVideoIndex > 0
+                    val canGoNextVideo = currentVideoIndex in 0 until videos.size - 1
                     // Playback controls (previous, next, close)
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(0.dp)
                     ) {
-                        IconButton(onClick = onPreviousClick) {
+                        IconButton(onClick = onPreviousClick, enabled = canGoPrevVideo) {
                             Icon(Icons.Default.SkipPrevious, contentDescription = "Previous")
                         }
-                        IconButton(onClick = onNextClick) {
+                        IconButton(onClick = onNextClick, enabled = canGoNextVideo) {
                             Icon(Icons.Default.SkipNext, contentDescription = "Next")
                         }
                         IconButton(onClick = {
@@ -1061,6 +1169,7 @@ fun VideoStatsRow(
                         }
                     }
                 }
+
                 2 -> {
                     // Global toggle (show/hide players)
                     Row(
@@ -1079,9 +1188,103 @@ fun VideoStatsRow(
                         }
                     }
                 }
+
+                3 -> {
+                    // Playback controls for album songs
+                    val currentIndex = getCurrentSongIndex(currentPlayingSongId, currentAlbumSongs)
+                    val canGoPrev = currentIndex > 0
+                    val canGoNext = currentIndex < currentAlbumSongs.size - 1
+
+                    val redWashed = Color(0xFFE8C0CE)
+
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(0.dp)
+                    ) {
+                        IconButton(
+                            onClick = {
+                                val newIndex = currentIndex - 1
+                                if (newIndex >= 0) {
+                                    val song = currentAlbumSongs[newIndex]
+                                    val startInMiniMode = when {
+                                        currentTab != MainTab.ARTISTS -> true
+                                        else -> !isAlbumCardVisible()
+                                    }
+                                    onLoadSong(
+                                        song,
+                                        "album_${currentAlbumId ?: return@IconButton}",
+                                        startInMiniMode
+                                    )
+                                }
+                            },
+                            enabled = currentIndex > 0
+                        ) {
+                            Icon(Icons.Default.SkipPrevious,
+                                contentDescription = "Previus Song",
+                                tint = redWashed )
+                        }
+
+                        IconButton(
+                            onClick = {
+                                if (canGoNext) {
+                                    val nextSong = currentAlbumSongs[currentIndex + 1]
+                                    val startInMiniMode = when {
+                                        currentTab != MainTab.ARTISTS -> true
+                                        else -> !isAlbumCardVisible()   // no index needed
+                                    }
+                                    onLoadSong(
+                                        nextSong,
+                                        "album_${currentAlbumId ?: return@IconButton}",
+                                        startInMiniMode
+                                    )
+                                }
+                            },
+                            enabled = canGoNext
+                        ) {
+                            Icon(Icons.Default.SkipNext,
+                                contentDescription = "Next Song",
+                                tint = redWashed )
+                        }
+
+                        IconButton(
+                            onClick = {
+                                // Close album player and go back to page 2
+                                coroutineScope.launch {
+                                    onClose()                     // close the player
+                                    pagerState.animateScrollToPage(2)
+                                }
+                            }
+                        ) {
+                            Icon(Icons.Default.Close,
+                                contentDescription = "Close Album Player",
+                                tint = redWashed )
+                        }
+                    }
+                }
+
+                4 -> {
+                    // Extra controls for album player (mirror page 0)
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(0.dp)
+                    ) {
+                        IconButton(onClick = { /* share - maybe share song link? */ }) {
+                            Icon(Icons.Default.Share, contentDescription = "Share")
+                        }
+                        IconButton(onClick = { /* cast */ }) {
+                            Icon(Icons.Default.Cast, contentDescription = "Cast")
+                        }
+                        IconButton(onClick = { /* back – could close player or navigate? */ }) {
+                            Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                        }
+                    }
+                }
             }
         }
     }
+}
+
+private fun getCurrentSongIndex(currentPlayingSongId: Int?, songs: List<Song>): Int {
+    if (currentPlayingSongId == null) return 0
+    return songs.indexOfFirst { it.songId == currentPlayingSongId }.coerceAtLeast(0)
 }
 
 @Composable
@@ -1160,7 +1363,8 @@ private fun VideoListContent(
         snapshotFlow { listState.firstVisibleItemIndex }
             .collect { firstVisible ->
                 // Preload the next 5 items ahead
-                val preloadRange = (firstVisible + 1)..(firstVisible + 5).coerceAtMost(videosToShow.lastIndex)
+                val preloadRange =
+                    (firstVisible + 1)..(firstVisible + 5).coerceAtMost(videosToShow.lastIndex)
 
                 for (index in preloadRange) {
                     val video = videosToShow.getOrNull(index) ?: continue
@@ -1512,13 +1716,13 @@ fun AlbumPlayerCard(
                         if (hasValidVideo) onAlbumClick()  // or trigger video playback
                     }
                     .then(
-                        if (isActive && hasValidVideo) {
+                        if (isActive) {
                             Modifier.onPlaced { coordinates ->
                                 onActiveCardBoundsChanged(
                                     "album_${album.albumId}",
                                     IntOffset(
-                                        x = coordinates.positionInRoot().x.roundToInt(),
-                                        y = coordinates.positionInRoot().y.roundToInt()
+                                        coordinates.positionInRoot().x.roundToInt(),
+                                        coordinates.positionInRoot().y.roundToInt()
                                     ),
                                     IntSize(coordinates.size.width, coordinates.size.height)
                                 )
@@ -1656,7 +1860,7 @@ private fun SongRow(
         )
         Spacer(modifier = Modifier.width(8.dp))
         Text(
-            text = song.songTitle?: "N/A",
+            text = song.songTitle ?: "N/A",
             style = MaterialTheme.typography.bodyMedium,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
@@ -1714,7 +1918,8 @@ private fun SongListItem(
 }
 
 private fun extractYouTubeVideoId(url: String): String? {
-    val pattern = "(?:youtube\\.com\\/watch\\?v=|youtu\\.be\\/|youtube\\.com\\/embed\\/)([a-zA-Z0-9_-]{11})"
+    val pattern =
+        "(?:youtube\\.com\\/watch\\?v=|youtu\\.be\\/|youtube\\.com\\/embed\\/)([a-zA-Z0-9_-]{11})"
     val regex = Regex(pattern)
     return regex.find(url)?.groupValues?.get(1)
 }
@@ -1825,7 +2030,12 @@ fun ArtistContent(
     currentMediaEntryTypeOfMedia: Int?
 ) {
     Log.d("ArtistContent", "🎨 ArtistContent recompose: filterPath=$filterPath")
-    Log.d("ArtistContent", "📀 albumsDisplay size=${albumsDisplay.size}, first 3 titles=${albumsDisplay.take(3).joinToString { it.title ?: "null" }}")
+    Log.d(
+        "ArtistContent",
+        "📀 albumsDisplay size=${albumsDisplay.size}, first 3 titles=${
+            albumsDisplay.take(3).joinToString { it.title ?: "null" }
+        }"
+    )
 
     // Check if there's an artist filter
     val selectedArtist = filterPath
@@ -1846,7 +2056,12 @@ fun ArtistContent(
         if (filterPath.none { it.categoryId == FilterPath.CATEGORY_ARTIST }) {
             Log.d("ArtistContent", "🧹 Clearing selectedAlbum (no artist filter)")
             selectedAlbum = null
-        } else {            Log.d("ArtistContent", "✅ Artist filter present, keeping selectedAlbum=${selectedAlbum?.title}") }
+        } else {
+            Log.d(
+                "ArtistContent",
+                "✅ Artist filter present, keeping selectedAlbum=${selectedAlbum?.title}"
+            )
+        }
     }
 
     LaunchedEffect(selectedArtist) {
@@ -1858,7 +2073,10 @@ fun ArtistContent(
 
     // Wrap the original onAlbumSelected to also remember the clicked album
     val handleAlbumSelected: (Album) -> Unit = { album ->
-        Log.d("ArtistContent", "🖱️ handleAlbumSelected called with album: ${album.title} (id=${album.albumId})")
+        Log.d(
+            "ArtistContent",
+            "🖱️ handleAlbumSelected called with album: ${album.title} (id=${album.albumId})"
+        )
         selectedAlbum = album
         onAlbumSelected(album)  // this adds the artist filter and triggers scroll
     }
@@ -1869,12 +2087,15 @@ fun ArtistContent(
     if (selectedArtist != null) {
         // Single artist view
 
-        Log.d("ArtistContent", "🎤 Single artist mode: ${selectedArtist.fullName}, passing initialSelectedAlbum=${selectedAlbum?.title}")
+        Log.d(
+            "ArtistContent",
+            "🎤 Single artist mode: ${selectedArtist.fullName}, passing initialSelectedAlbum=${selectedAlbum?.title}"
+        )
         SingleArtistView(
             artist = selectedArtist,
             filteredAlbums = filteredAlbums,
             onAlbumSelected = onAlbumSelected,
-            currentMediaEntryTypeOfMedia= currentMediaEntryTypeOfMedia,
+            currentMediaEntryTypeOfMedia = currentMediaEntryTypeOfMedia,
             albumsDisplay = albumsDisplay,
             currentFilterPathId = currentFilterPathId,
             minimiseMaximiseToggle = minimiseMaximiseToggle,
@@ -1888,7 +2109,10 @@ fun ArtistContent(
             onActiveCardBoundsChanged = onActiveCardBoundsChanged,
             modifier = modifier
         )
-        Log.d("ArtistContent", "Calling SingleArtistView with initialSelectedAlbum = ${selectedAlbum?.title}")
+        Log.d(
+            "ArtistContent",
+            "Calling SingleArtistView with initialSelectedAlbum = ${selectedAlbum?.title}"
+        )
         return
     }
 
@@ -1905,7 +2129,7 @@ fun ArtistContent(
             artist = artistsShuffled.first(),
             filteredAlbums = filteredAlbums,
             onAlbumSelected = onAlbumSelected,
-            currentMediaEntryTypeOfMedia= currentMediaEntryTypeOfMedia,
+            currentMediaEntryTypeOfMedia = currentMediaEntryTypeOfMedia,
             albumsDisplay = albumsDisplay,
             currentFilterPathId = currentFilterPathId,
             minimiseMaximiseToggle = minimiseMaximiseToggle,
@@ -1976,7 +2200,12 @@ fun ArtistContent(
                         ) {
                             for (row in 0 until 4) {
                                 val start = row * 2
-                                val rowArtists = pageArtists.slice(start until minOf(start + 2, pageArtists.size))
+                                val rowArtists = pageArtists.slice(
+                                    start until minOf(
+                                        start + 2,
+                                        pageArtists.size
+                                    )
+                                )
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -2023,7 +2252,10 @@ fun ArtistContent(
 
         // 2. 👇 NEW: Album grid below the artists
         item {
-            Log.d("ArtistContent", "📦 Rendering bottom AlbumsSection with albumsDisplay size=${albumsDisplay.size}")
+            Log.d(
+                "ArtistContent",
+                "📦 Rendering bottom AlbumsSection with albumsDisplay size=${albumsDisplay.size}"
+            )
 
             Box(
                 modifier = Modifier
@@ -2066,7 +2298,10 @@ fun FastScrollingDotsRow(
                     onDragStart = { offset ->
                         if (rowWidth > 0 && pageCount > 0) {
                             val x = offset.x.coerceIn(0f, rowWidth.toFloat())
-                            val pageIndex = ((x / rowWidth) * pageCount).toInt().coerceIn(0, pageCount - 1)
+                            val pageIndex =
+                                ((x / rowWidth) * pageCount)
+                                    .toInt()
+                                    .coerceIn(0, pageCount - 1)
                             onSwitchToAlphabeticalAndScrollTo(pageIndex)
                         }
                     },
@@ -2074,7 +2309,10 @@ fun FastScrollingDotsRow(
                         change.consume()
                         if (rowWidth > 0 && pageCount > 0) {
                             val x = change.position.x.coerceIn(0f, rowWidth.toFloat())
-                            val pageIndex = ((x / rowWidth) * pageCount).toInt().coerceIn(0, pageCount - 1)
+                            val pageIndex =
+                                ((x / rowWidth) * pageCount)
+                                    .toInt()
+                                    .coerceIn(0, pageCount - 1)
                             if (pageIndex != currentPage) {
                                 onSwitchToAlphabeticalAndScrollTo(pageIndex)
                             }
@@ -2086,7 +2324,10 @@ fun FastScrollingDotsRow(
                 detectTapGestures { offset ->
                     if (rowWidth > 0 && pageCount > 0) {
                         val x = offset.x.coerceIn(0f, rowWidth.toFloat())
-                        val pageIndex = ((x / rowWidth) * pageCount).toInt().coerceIn(0, pageCount - 1)
+                        val pageIndex =
+                            ((x / rowWidth) * pageCount)
+                                .toInt()
+                                .coerceIn(0, pageCount - 1)
                         onSwitchToAlphabeticalAndScrollTo(pageIndex)
                     }
                 }
@@ -2384,7 +2625,7 @@ fun HistoryVideoRow(
             .clickable { onClick() }
             .padding(4.dp)
             .background(
-                color = if (isCurrentlyPlaying ) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 1f)
+                color = if (isCurrentlyPlaying) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 1f)
                 else Color.Transparent // or any default color
             ),
         verticalAlignment = Alignment.CenterVertically,
@@ -2437,7 +2678,8 @@ fun ArtistImage(
     contentScale: ContentScale = ContentScale.Crop
 ) {
     // Generate on each composition – cheap enough
-    val fallbackPainter = BitmapPainter(generateIdenticon(artist.fullName, artist.instrumentId).asImageBitmap())
+    val fallbackPainter =
+        BitmapPainter(generateIdenticon(artist.fullName, artist.instrumentId).asImageBitmap())
 
     AsyncImage(
         model = ImageRequest.Builder(LocalContext.current)
@@ -2460,7 +2702,7 @@ fun SingleArtistView(
     scrollToAlbumsTrigger: MutableState<Int>,
     currentMediaEntryTypeOfMedia: Int?,
     currentFilterPath: List<FilterPath>,
-    currentFilterPathId:  Int?,
+    currentFilterPathId: Int?,
     minimiseMaximiseToggle: Boolean,
     viewModel: MainViewModel,
     playerViewModel: PlayerViewModel,
@@ -2487,8 +2729,16 @@ fun SingleArtistView(
     }
 
     Log.d("SingleArtistView", "🎬 Entering for artist: ${artist.fullName}")
-    Log.d("SingleArtistView", "📀 albumsDisplay size=${albumsDisplay.size}, first 3 titles=${albumsDisplay.take(3).joinToString { it.title ?: "null" }}")
-    Log.d("SingleArtistView", "🎯 initialSelectedAlbum = ${initialSelectedAlbum?.title} (id=${initialSelectedAlbum?.albumId})")
+    Log.d(
+        "SingleArtistView",
+        "📀 albumsDisplay size=${albumsDisplay.size}, first 3 titles=${
+            albumsDisplay.take(3).joinToString { it.title ?: "null" }
+        }"
+    )
+    Log.d(
+        "SingleArtistView",
+        "🎯 initialSelectedAlbum = ${initialSelectedAlbum?.title} (id=${initialSelectedAlbum?.albumId})"
+    )
 
     val context = LocalContext.current
     var showFullscreenImage by remember { mutableStateOf(false) }
@@ -2500,23 +2750,37 @@ fun SingleArtistView(
 // Automatically select the first album from albumsDisplay when available
     LaunchedEffect(albumsDisplay, initialSelectedAlbum) {
         Log.d("SingleArtistView", "🔄 Default selection effect triggered")
-        Log.d("SingleArtistView", "   isDefaultSelection=$isDefaultSelection, selectedAlbum=${selectedAlbum?.title}")
+        Log.d(
+            "SingleArtistView",
+            "   isDefaultSelection=$isDefaultSelection, selectedAlbum=${selectedAlbum?.title}"
+        )
         Log.d("SingleArtistView", "   initialSelectedAlbum=${initialSelectedAlbum?.title}")
 
         when {
             initialSelectedAlbum != null && albumsDisplay.any { it.albumId == initialSelectedAlbum.albumId } -> {
-                Log.d("SingleArtistView", "✅ Using initialSelectedAlbum: ${initialSelectedAlbum.title}")
+                Log.d(
+                    "SingleArtistView",
+                    "✅ Using initialSelectedAlbum: ${initialSelectedAlbum.title}"
+                )
                 selectedAlbum = initialSelectedAlbum
                 isDefaultSelection = false
             }
+
             selectedAlbum == null && albumsDisplay.isNotEmpty() && isDefaultSelection -> {
                 val firstAlbum = albumsDisplay.first()
-                Log.d("SingleArtistView", "🎯 Setting default album to FIRST: ${firstAlbum.title} (id=${firstAlbum.albumId})")
+                Log.d(
+                    "SingleArtistView",
+                    "🎯 Setting default album to FIRST: ${firstAlbum.title} (id=${firstAlbum.albumId})"
+                )
                 selectedAlbum = firstAlbum
                 // isDefaultSelection remains true
             }
+
             else -> {
-                Log.d("SingleArtistView", "⚠️ No default set. Reasons: selectedAlbum=${selectedAlbum?.title}, albumsDisplay.isEmpty=${albumsDisplay.isEmpty()}, isDefaultSelection=$isDefaultSelection")
+                Log.d(
+                    "SingleArtistView",
+                    "⚠️ No default set. Reasons: selectedAlbum=${selectedAlbum?.title}, albumsDisplay.isEmpty=${albumsDisplay.isEmpty()}, isDefaultSelection=$isDefaultSelection"
+                )
             }
         }
     }
@@ -2525,21 +2789,31 @@ fun SingleArtistView(
         Log.d("SingleArtistView", "🔄 albumsDisplay changed (for default update check)")
         if (isDefaultSelection && albumsDisplay.isNotEmpty()) {
             val newFirst = albumsDisplay.first()
-            Log.d("SingleArtistView", "🆙 Updating default selection to new first album: ${newFirst.title} (was ${selectedAlbum?.title})")
+            Log.d(
+                "SingleArtistView",
+                "🆙 Updating default selection to new first album: ${newFirst.title} (was ${selectedAlbum?.title})"
+            )
             selectedAlbum = newFirst
         } else if (isDefaultSelection && albumsDisplay.isEmpty()) {
             Log.d("SingleArtistView", "❌ albumsDisplay empty, clearing selectedAlbum")
             selectedAlbum = null
         } else {
-            Log.d("SingleArtistView", "⏸️ No update: isDefaultSelection=$isDefaultSelection, albumsDisplay.isEmpty=${albumsDisplay.isEmpty()}")
+            Log.d(
+                "SingleArtistView",
+                "⏸️ No update: isDefaultSelection=$isDefaultSelection, albumsDisplay.isEmpty=${albumsDisplay.isEmpty()}"
+            )
         }
     }
 
 // Wrap the original onAlbumSelected to update our state
     val handleAlbumSelected: (Album) -> Unit = { album ->
-        Log.d("SingleArtistView", "🖱️ handleAlbumSelected called with album: ${album.title} (id=${album.albumId})")
+        Log.d(
+            "SingleArtistView",
+            "🖱️ handleAlbumSelected called with album: ${album.title} (id=${album.albumId})"
+        )
         selectedAlbum = album
         isDefaultSelection = false   // user took control
+        viewModel.setCurrentAlbumId(album.albumId)
         onAlbumSelected(album)
     }
 
@@ -2548,6 +2822,13 @@ fun SingleArtistView(
     val imageHeight = if (hasThumbnail) 300.dp else 150.dp
 
     val listState = rememberLazyListState()     // lazy list state for scrolling
+
+    // SingleArtistView.kt – after listState is defined
+    LaunchedEffect(listState.layoutInfo) {
+        val visibleItems = listState.layoutInfo.visibleItemsInfo
+        val isVisible = visibleItems.any { it.index == 4 } // album card index
+        viewModel.setCurrentAlbumCardVisible(isVisible)
+    }
 
     // 👇 ADD THIS HERE
     val playerUiState by playerViewModel.uiState.collectAsState()
@@ -2592,7 +2873,12 @@ fun SingleArtistView(
                         modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center
                     ) {
-                        val fallbackPainter = BitmapPainter(generateIdenticon(artist.fullName, artist.instrumentId).asImageBitmap())
+                        val fallbackPainter = BitmapPainter(
+                            generateIdenticon(
+                                artist.fullName,
+                                artist.instrumentId
+                            ).asImageBitmap()
+                        )
                         Image(
                             painter = fallbackPainter,
                             contentDescription = artist.fullName,
@@ -2645,7 +2931,10 @@ fun SingleArtistView(
         // 4. Albums section
         // Inside SingleArtistView, replace the item for AlbumsSection with:
         item {
-            Log.d("SingleArtistView", "📦 Rendering AlbumsSection (inside SingleArtistView) with albumsDisplay size=${albumsDisplay.size}")
+            Log.d(
+                "SingleArtistView",
+                "📦 Rendering AlbumsSection (inside SingleArtistView) with albumsDisplay size=${albumsDisplay.size}"
+            )
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -2667,7 +2956,10 @@ fun SingleArtistView(
 
         // 5. Video card or placeholder
         item {
-            Log.d("SingleArtistView", "🎬 Video card item: albumsDisplay.isNotEmpty()=${albumsDisplay.isNotEmpty()}, selectedAlbum=${selectedAlbum?.title}")
+            Log.d(
+                "SingleArtistView",
+                "🎬 Video card item: albumsDisplay.isNotEmpty()=${albumsDisplay.isNotEmpty()}, selectedAlbum=${selectedAlbum?.title}"
+            )
 
             if (albumsDisplay.isNotEmpty() && selectedAlbum != null) {
                 val album = selectedAlbum!!
@@ -2700,6 +2992,7 @@ fun SingleArtistView(
                         }
                     },
                     onSongClick = { song ->
+                        viewModel.setCurrentAlbumId(album.albumId)
                         song.ytVideoId?.let { videoId ->
                             playerViewModel.loadVideo(
                                 videoId = videoId,
@@ -2749,7 +3042,10 @@ fun SingleArtistView(
 
 
     LaunchedEffect(selectedAlbum) {
-        playerViewModel.minimizePlayer()
+        selectedAlbum?.let {
+            viewModel.setCurrentAlbumId(it.albumId)
+            viewModel.loadAlbumSongs(it.albumId)
+        }
     }
 
 
@@ -2775,10 +3071,10 @@ fun SingleArtistView(
     }
 
 
-
     // Fullscreen image dialog (unchanged, scales to fit)
     if (showFullscreenImage) {
-        Dialog(onDismissRequest = { showFullscreenImage = false },
+        Dialog(
+            onDismissRequest = { showFullscreenImage = false },
             properties = DialogProperties(usePlatformDefaultWidth = false) // occupy all width and height
         ) {
             Box(
@@ -2798,7 +3094,12 @@ fun SingleArtistView(
                         contentScale = ContentScale.Fit
                     )
                 } else {
-                    val fallbackPainter = BitmapPainter(generateIdenticon(artist.fullName, artist.instrumentId).asImageBitmap())
+                    val fallbackPainter = BitmapPainter(
+                        generateIdenticon(
+                            artist.fullName,
+                            artist.instrumentId
+                        ).asImageBitmap()
+                    )
                     Image(
                         painter = fallbackPainter,
                         contentDescription = artist.fullName,
@@ -2899,20 +3200,32 @@ fun WikiInfoCard(
             ) {
                 when {
                     isLoading -> {
-                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
                             CircularProgressIndicator()
                         }
                     }
+
                     error != null -> {
-                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
                             Text(error, color = MaterialTheme.colorScheme.error)
                         }
                     }
+
                     allPages.isEmpty() -> {
-                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
                             Text("No Wikipedia data found", color = MaterialTheme.colorScheme.error)
                         }
                     }
+
                     else -> {
                         // Pager area takes remaining space
                         Box(
@@ -2973,7 +3286,8 @@ private fun ScrollableTextPage(
                         while (true) {
                             val event = awaitPointerEvent()
                             if (event.type == PointerEventType.Release ||
-                                event.type == PointerEventType.Exit) {
+                                event.type == PointerEventType.Exit
+                            ) {
                                 break
                             }
                         }
@@ -3041,7 +3355,10 @@ fun DotsRow(
                     onDragStart = { offset ->
                         if (rowWidth > 0 && pageCount > 0) {
                             val x = offset.x.coerceIn(0f, rowWidth.toFloat())
-                            val pageIndex = ((x / rowWidth) * pageCount).toInt().coerceIn(0, pageCount - 1)
+                            val pageIndex =
+                                ((x / rowWidth) * pageCount)
+                                    .toInt()
+                                    .coerceIn(0, pageCount - 1)
                             onPageSelected(pageIndex)
                         }
                     },
@@ -3049,7 +3366,10 @@ fun DotsRow(
                         change.consume()
                         if (rowWidth > 0 && pageCount > 0) {
                             val x = change.position.x.coerceIn(0f, rowWidth.toFloat())
-                            val pageIndex = ((x / rowWidth) * pageCount).toInt().coerceIn(0, pageCount - 1)
+                            val pageIndex =
+                                ((x / rowWidth) * pageCount)
+                                    .toInt()
+                                    .coerceIn(0, pageCount - 1)
                             if (pageIndex != currentPage) {
                                 onPageSelected(pageIndex)
                             }
@@ -3061,7 +3381,10 @@ fun DotsRow(
                 detectTapGestures { offset ->
                     if (rowWidth > 0 && pageCount > 0) {
                         val x = offset.x.coerceIn(0f, rowWidth.toFloat())
-                        val pageIndex = ((x / rowWidth) * pageCount).toInt().coerceIn(0, pageCount - 1)
+                        val pageIndex =
+                            ((x / rowWidth) * pageCount)
+                                .toInt()
+                                .coerceIn(0, pageCount - 1)
                         onPageSelected(pageIndex)
                     }
                 }
@@ -3275,14 +3598,18 @@ fun AlbumGridView(
                 val avgComparator = compareBy<Album, Double?>(nullsLast()) { it.ratingAverage }
                 val countComparator = compareBy<Album, Int?>(nullsLast()) { it.ratingCount }
                 val combined = avgComparator.then(countComparator)
-                val comparator = if (ratingSort == SortDirection.ASC) combined else combined.reversed()
+                val comparator =
+                    if (ratingSort == SortDirection.ASC) combined else combined.reversed()
                 filteredByTab.sortedWith(comparator)
             }
+
             yearSort != null -> {
                 val baseComparator = compareBy<Album, Int?>(nullsLast()) { it.year }
-                val comparator = if (yearSort == SortDirection.ASC) baseComparator else baseComparator.reversed()
+                val comparator =
+                    if (yearSort == SortDirection.ASC) baseComparator else baseComparator.reversed()
                 filteredByTab.sortedWith(comparator)
             }
+
             else -> {
                 if (isAlphabeticalMode) {
                     filteredByTab.sortedWith(compareBy { it.title?.lowercase() ?: "" })
@@ -3317,9 +3644,11 @@ fun AlbumGridView(
                 val avgStr = if (avg != null) DecimalFormat("#.##").format(avg) else "?"
                 "$avgStr ($count)"
             }
+
             yearSort != null -> {
                 album.year?.toString() ?: ""
             }
+
             else -> ""   // ← no note when no sort chip active
         }
     }
@@ -3328,7 +3657,10 @@ fun AlbumGridView(
     fun updateNoteFromAlbum(album: Album?) {
         if (album != null) {
             currentNoteText = getNoteText(album)
-            Log.d(TAG, "Note updated: mode=${if (ratingSort != null) "rating" else if (yearSort != null) "year" else "alpha"}, text=$currentNoteText, album=${album.title}")
+            Log.d(
+                TAG,
+                "Note updated: mode=${if (ratingSort != null) "rating" else if (yearSort != null) "year" else "alpha"}, text=$currentNoteText, album=${album.title}"
+            )
         } else {
             currentNoteText = ""
         }
@@ -3336,7 +3668,10 @@ fun AlbumGridView(
 
     // ========== GRID SCROLL STATE ==========
     val gridState = remember(currentFilterPathId, albumsDisplay.size) {
-        Log.d(TAG, "🔄 Creating NEW LazyGridState! filterPathId=$currentFilterPathId, size=${albumsDisplay.size}")
+        Log.d(
+            TAG,
+            "🔄 Creating NEW LazyGridState! filterPathId=$currentFilterPathId, size=${albumsDisplay.size}"
+        )
         LazyGridState()
     }
     val coroutineScope = rememberCoroutineScope()
@@ -3358,7 +3693,7 @@ fun AlbumGridView(
     // ========== DOT SCROLLBAR ==========
     val albumsPerDot = 6
     val dotCount = if (sortedAlbums.isEmpty()) 1 else {
-        (sortedAlbums.size + (albumsPerDot - 1) ) / albumsPerDot  // ceil division
+        (sortedAlbums.size + (albumsPerDot - 1)) / albumsPerDot  // ceil division
     }
 
     val activeDotIndex = if (sortedAlbums.isEmpty() || dotCount <= 1) {
@@ -3377,7 +3712,10 @@ fun AlbumGridView(
     }
 
     fun scrollToItemIndex(index: Int) {
-        Log.d(TAG, "scrollToItemIndex requested: index=$index, sortedAlbums.size=${sortedAlbums.size}")
+        Log.d(
+            TAG,
+            "scrollToItemIndex requested: index=$index, sortedAlbums.size=${sortedAlbums.size}"
+        )
         if (index in sortedAlbums.indices) {
             coroutineScope.launch {
                 Log.d(TAG, "Executing scrollToItem($index)")
@@ -3386,7 +3724,10 @@ fun AlbumGridView(
                 Log.d(TAG, "After scroll: firstVisibleItemIndex=${gridState.firstVisibleItemIndex}")
             }
         } else {
-            Log.w(TAG, "scrollToItemIndex: index $index out of bounds (0..${sortedAlbums.lastIndex})")
+            Log.w(
+                TAG,
+                "scrollToItemIndex: index $index out of bounds (0..${sortedAlbums.lastIndex})"
+            )
         }
     }
 
@@ -3434,7 +3775,9 @@ fun AlbumGridView(
         )
 
         // Horizontal grid with floating note
-        Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+        Box(modifier = Modifier
+            .weight(1f)
+            .fillMaxWidth()) {
             if (sortedAlbums.isEmpty()) {
 
                 Text(
@@ -3460,7 +3803,10 @@ fun AlbumGridView(
                     val cardWidth = if (minimiseMaximiseToggle) 120.dp else 250.dp
 
                     items(sortedAlbums) { album ->
-                        Log.d("AlbumGridView", "🖼️ Rendering album card: ${album.title} (id=${album.albumId})")
+                        Log.d(
+                            "AlbumGridView",
+                            "🖼️ Rendering album card: ${album.title} (id=${album.albumId})"
+                        )
                         AlbumCard(
                             album = album,
                             artistName = getArtistDisplayName(album),  // ← computed from map
@@ -3575,7 +3921,9 @@ fun DotScrollbar(
                         val event = awaitPointerEvent()
                         val position = event.changes.firstOrNull()?.position ?: continue
                         val dotWidth = size.width / dotCount
-                        val dotIndex = (position.x / dotWidth).toInt().coerceIn(0, dotCount - 1)
+                        val dotIndex = (position.x / dotWidth)
+                            .toInt()
+                            .coerceIn(0, dotCount - 1)
                         val isDragging = event.changes.any { it.pressed }
                         onDotDrag(dotIndex, isDragging)
                         if (isDragging && event.changes.all { !it.pressed }) {
