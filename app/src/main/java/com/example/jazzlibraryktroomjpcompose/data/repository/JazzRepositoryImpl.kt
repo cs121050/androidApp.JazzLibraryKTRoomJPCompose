@@ -1,63 +1,56 @@
 package com.example.jazzlibraryktroomjpcompose.data.repository
 
-
 import android.util.Log
 import androidx.room.withTransaction
 import com.example.jazzlibraryktroomjpcompose.data.local.db.JazzDatabase
-import com.example.jazzlibraryktroomjpcompose.data.local.db.entities.AlbumContainsArtistRoomEntity
-import com.example.jazzlibraryktroomjpcompose.data.local.db.entities.AlbumRoomEntity
-import com.example.jazzlibraryktroomjpcompose.data.local.db.entities.ArtistRoomEntity
-import com.example.jazzlibraryktroomjpcompose.data.local.db.entities.DurationRoomEntity
-import com.example.jazzlibraryktroomjpcompose.data.local.db.entities.InstrumentRoomEntity
-import com.example.jazzlibraryktroomjpcompose.data.local.db.entities.QuoteRoomEntity
-import com.example.jazzlibraryktroomjpcompose.data.local.db.entities.SongRoomEntity
-import com.example.jazzlibraryktroomjpcompose.data.local.db.entities.TypeRoomEntity
-import com.example.jazzlibraryktroomjpcompose.data.local.db.entities.VideoContainsArtistRoomEntity
-import com.example.jazzlibraryktroomjpcompose.data.local.db.entities.VideoRoomEntity
+import com.example.jazzlibraryktroomjpcompose.data.local.db.entities.*
+import com.example.jazzlibraryktroomjpcompose.data.mappers.*
 import com.example.jazzlibraryktroomjpcompose.data.mappers.RemoteToEntityMappers.toAlbumContainsArtistEntities
+import com.example.jazzlibraryktroomjpcompose.data.mappers.RemoteToEntityMappers.toAlbumEntities
 import com.example.jazzlibraryktroomjpcompose.data.mappers.RemoteToEntityMappers.toArtistEntities
 import com.example.jazzlibraryktroomjpcompose.data.mappers.RemoteToEntityMappers.toDurationEntities
 import com.example.jazzlibraryktroomjpcompose.data.mappers.RemoteToEntityMappers.toInstrumentEntities
 import com.example.jazzlibraryktroomjpcompose.data.mappers.RemoteToEntityMappers.toQuoteEntities
+import com.example.jazzlibraryktroomjpcompose.data.mappers.RemoteToEntityMappers.toSongEntities
 import com.example.jazzlibraryktroomjpcompose.data.mappers.RemoteToEntityMappers.toTypeEntities
 import com.example.jazzlibraryktroomjpcompose.data.mappers.RemoteToEntityMappers.toVideoContainsArtistEntities
 import com.example.jazzlibraryktroomjpcompose.data.mappers.RemoteToEntityMappers.toVideoEntities
-import com.example.jazzlibraryktroomjpcompose.data.mappers.RemoteToEntityMappers.toSongEntities
-import com.example.jazzlibraryktroomjpcompose.data.mappers.RemoteToEntityMappers.toAlbumEntities
 import com.example.jazzlibraryktroomjpcompose.data.remote.api.RetrofitClient
+import com.example.jazzlibraryktroomjpcompose.domain.models.*
+import com.example.jazzlibraryktroomjpcompose.domain.repository.FilterRepository
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.firstOrNull
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.withContext
 import javax.inject.Singleton
 
 @Singleton
 class JazzRepositoryImpl(
     private val database: JazzDatabase
-) {
+) : FilterRepository {
 
     private val apiService = RetrofitClient.jazzApiService
 
+    // ========== BOOTSTRAP & INITIALISATION (keep your existing code) ==========
+
     suspend fun checkApiConnectivity(): Boolean {
         return try {
-            // Call the lightweight endpoint – if it succeeds without exception, API is reachable
-            apiService.getApiStatus()
-            true
+            val response = apiService.getApiStatus()
+            response.isSuccessful
         } catch (e: Exception) {
-            println("API connectivity check failed: ${e.message}")
+            Log.e("JazzRepository", "API connectivity check failed", e)
             false
         }
     }
 
     suspend fun loadBootstrapData(): Result<Unit> = withContext(Dispatchers.IO) {
         try {
-            Log.d("JazzRepo", "loadBootstrapData: Starting API call")
             val response = apiService.getBootstrapData()
-            Log.d("JazzRepo", "Response code: ${response.code()}, isSuccessful: ${response.isSuccessful}")
-
             if (response.isSuccessful && response.body() != null) {
-                Log.d("JazzRepo", "Body received, size: ...")
                 val bootstrapData = response.body()!!
-
-                // Convert remote models to Room entities
+                // Convert to entities (use your existing mappers)
                 val instruments = bootstrapData.instrumentList.toInstrumentEntities()
                 val types = bootstrapData.typeList.toTypeEntities()
                 val durations = bootstrapData.durationList.toDurationEntities()
@@ -69,32 +62,26 @@ class JazzRepositoryImpl(
                 val songs = bootstrapData.songList.toSongEntities()
                 val albumContainsArtists = bootstrapData.albumContainsArtistList.toAlbumContainsArtistEntities()
 
-                // Use withTransaction which supports suspend functions
-                //    withTransaction: If any insert fails → ALL changes are rolled back
-                //    Prevents partial/corrupted data in database
                 database.withTransaction {
-                    // Clear existing data
                     clearAllTablesWithinTransaction()
-
-                    // Insert all data
                     insertAllDataWithinTransaction(
                         instruments, types, durations, videos,
                         artists, quotes, videoContainsArtists,
                         albums, songs, albumContainsArtists
                     )
-
                     updateArtistsEmbedableVideoCounts()
                 }
-
                 Result.success(Unit)
             } else {
-                Log.e("JazzRepo", "API error: ${response.code()} ${response.message()}")
                 Result.failure(Exception("Failed to load data: ${response.code()} ${response.message()}"))
             }
         } catch (e: Exception) {
-            Log.e("JazzRepo", "Exception in loadBootstrapData", e)
             Result.failure(e)
         }
+    }
+
+    suspend fun isDatabaseEmpty(): Boolean = withContext(Dispatchers.IO) {
+        database.videoDao().getCount() == 0
     }
 
     private suspend fun clearAllTablesWithinTransaction() {
@@ -134,11 +121,102 @@ class JazzRepositoryImpl(
         database.albumContainsArtistDao().insertAllAlbumContainsArtists(albumContainsArtists)
     }
 
-    suspend fun isDatabaseEmpty(): Boolean = withContext(Dispatchers.IO) {
-        database.videoDao().getCount() == 0
-    }
-
     private suspend fun updateArtistsEmbedableVideoCounts() {
         database.artistDao().updateAllEmbedableVideoCounts()
+    }
+
+    // ========== FILTER REPOSITORY IMPLEMENTATION ==========
+
+    override fun getFilteredDataFlow(filterPath: List<FilterPath>): Flow<FilterRepository.FilteredData> {
+        return flow {
+            val instrumentFilter = filterPath.find { it.categoryId == FilterPath.CATEGORY_INSTRUMENT }
+            val artistFilter = filterPath.find { it.categoryId == FilterPath.CATEGORY_ARTIST }
+            val durationFilter = filterPath.find { it.categoryId == FilterPath.CATEGORY_DURATION }
+            val typeFilter = filterPath.find { it.categoryId == FilterPath.CATEGORY_TYPE }
+
+            val videosFlow = database.videoDao().getVideosByMultipleFilters(
+                instrumentId = instrumentFilter?.entityId ?: 0,
+                artistId = artistFilter?.entityId ?: 0,
+                durationId = durationFilter?.entityId ?: 0,
+                typeId = typeFilter?.entityId ?: 0
+            )
+
+            val albumsFlow = if (artistFilter != null) {
+                database.albumDao().getAlbumsByArtistAndInstrumentWithMainFlag(
+                    artistId = artistFilter.entityId,
+                    instrumentId = instrumentFilter?.entityId ?: 0
+                )
+            } else {
+                database.albumDao().getAlbumByMultipleFilters(
+                    instrumentId = instrumentFilter?.entityId ?: 0,
+                    artistId = 0
+                )
+            }
+
+            val artistsFlowWithCount = database.artistDao().getArtistsWithVideoCountByMultipleFilters(
+                instrumentId = instrumentFilter?.entityId ?: 0,
+                typeId = typeFilter?.entityId ?: 0,
+                durationId = durationFilter?.entityId ?: 0
+            )
+
+            val instrumentsFlowWithCount = database.instrumentDao().getInstrumentsWithVideoCountByMultipleFilters(
+                typeId = typeFilter?.entityId ?: 0,
+                durationId = durationFilter?.entityId ?: 0
+            )
+
+            val durationsFlowWithCount = database.durationDao().getDurationsWithVideoCountByMultipleFilters(
+                typeId = typeFilter?.entityId ?: 0,
+                instrumentId = instrumentFilter?.entityId ?: 0,
+                artistId = artistFilter?.entityId ?: 0
+            )
+
+            val typesFlowWithCount = database.typeDao().getTypesWithVideoCountByMultipleFilters(
+                instrumentId = instrumentFilter?.entityId ?: 0,
+                artistId = artistFilter?.entityId ?: 0,
+                durationId = durationFilter?.entityId ?: 0
+            )
+
+            combine(
+                videosFlow,
+                albumsFlow,
+                artistsFlowWithCount,
+                instrumentsFlowWithCount,
+                durationsFlowWithCount,
+                typesFlowWithCount
+            ) { values ->
+                val videos = values[0] as List<VideoRoomEntity>
+                val albums = values[1] as List<AlbumWithIsMainFlag>
+                val artists = values[2] as List<ArtistWithVideoCount>
+                val instruments = values[3] as List<InstrumentWithVideoCount>
+                val durations = values[4] as List<DurationWithVideoCount>
+                val types = values[5] as List<TypeWithVideoCount>
+
+                FilterRepository.FilteredData(
+                    videos = videos.map { VideoMapper.toDomain(it) },
+                    albums = albums.map { AlbumMapper.toDomainWithIsMainFlag(it) },
+                    artists = artists.map { ArtistMapper.toDomainWithCount(it) },
+                    instruments = instruments.map { InstrumentMapper.toDomainWithCount(it) },
+                    durations = durations.map { DurationMapper.toDomainWithCount(it) },
+                    types = types.map { TypeMapper.toDomainWithCount(it) },
+                    filterPath = filterPath
+                )
+            }.collect { emit(it) }
+        }
+    }
+
+    override suspend fun getArtistInstrument(artistId: Int): Pair<Int, String>? = withContext(Dispatchers.IO) {
+        try {
+            val artist = database.artistDao().getArtistById(artistId).firstOrNull()
+            if (artist != null && artist.instrumentId != null && artist.instrumentId > 0) {
+                val instrument = database.instrumentDao().getInstrumentById(artist.instrumentId).firstOrNull()
+                if (instrument != null) {
+                    return@withContext Pair(artist.instrumentId, instrument.name)
+                }
+            }
+            null
+        } catch (e: Exception) {
+            Log.e("JazzRepository", "Error getting artist instrument", e)
+            null
+        }
     }
 }

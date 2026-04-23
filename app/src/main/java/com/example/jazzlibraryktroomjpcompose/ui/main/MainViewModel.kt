@@ -7,14 +7,13 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.jazzlibraryktroomjpcompose.domain.FilterManager
 import com.example.jazzlibraryktroomjpcompose.domain.models.FilterPath
-import com.example.jazzlibraryktroomjpcompose.data.local.db.JazzDatabase
 import com.example.jazzlibraryktroomjpcompose.data.local.db.entities.FilterPathRoomEntity
 import com.example.jazzlibraryktroomjpcompose.data.mappers.*
 import com.example.jazzlibraryktroomjpcompose.data.repository.JazzRepositoryImpl
+import com.example.jazzlibraryktroomjpcompose.domain.FilterOrchestrator
 import com.example.jazzlibraryktroomjpcompose.domain.models.Album
 import com.example.jazzlibraryktroomjpcompose.domain.models.AlbumContainsArtist
 import com.example.jazzlibraryktroomjpcompose.domain.models.Artist
-import com.example.jazzlibraryktroomjpcompose.domain.models.FilterHistoryEntry
 import com.example.jazzlibraryktroomjpcompose.domain.models.Video
 import com.example.jazzlibraryktroomjpcompose.domain.models.VideoContainsArtist
 import com.example.jazzlibraryktroomjpcompose.domain.repository.AlbumRepository
@@ -43,8 +42,8 @@ class MainViewModel @Inject constructor(
     private val typeRepository: TypeRepository,
     private val associationRepository: AssociationRepository,
     private val filterPathRepository: FilterPathRepository,
-    private val filterManager: FilterManager,
     private val jazzRepository: JazzRepositoryImpl,
+    private val filterOrchestrator: FilterOrchestrator,
     private val settingsRepository: SettingsRepository
 ) : ViewModel() {
 
@@ -429,6 +428,7 @@ class MainViewModel @Inject constructor(
         }
     }
 
+    // Replace filterManager with filterOrchestrator and adapt types
     private fun applyFiltersFromPath(filterPaths: List<FilterPath>) {
         // Cancel previous job to avoid multiple collectors
         filterJob?.cancel()
@@ -436,7 +436,7 @@ class MainViewModel @Inject constructor(
             _filterState.update { it.copy(isFiltering = true) }
 
             combine(
-                filterManager.getFilteredDataFlow(filterPaths),
+                filterOrchestrator.getFilteredDataFlow(filterPaths),  // was filterManager
                 settingsRepository.randomiseVideoList,
                 refreshTrigger
             ) { filteredData, shouldRandomise, _ ->
@@ -457,10 +457,8 @@ class MainViewModel @Inject constructor(
                         availableDurations = filteredData.durations,
                         availableTypes = filteredData.types
                     )
-
                 }
                 Log.d("AlbumDebug", "Filters applied: filterPath = $filterPaths, filteredAlbums size = ${filteredData.albums.size}")
-
 
                 _filterState.update { filterState ->
                     filterState.copy(
@@ -468,8 +466,6 @@ class MainViewModel @Inject constructor(
                         isFiltering = false
                     )
                 }
-
-                // Optional logging
             }
         }
     }
@@ -483,9 +479,9 @@ class MainViewModel @Inject constructor(
         viewModelScope.launch {
             val currentPath = _currentFilterPath.value
             val newPath = if (isSelected) {
-                filterManager.handleChipSelection(currentPath, categoryId, entityId, entityName)
+                filterOrchestrator.handleChipSelection(currentPath, categoryId, entityId, entityName)
             } else {
-                filterManager.handleChipDeselection(currentPath, categoryId, entityId)
+                filterOrchestrator.handleChipDeselection(currentPath, categoryId, entityId)
             }
             if (newPath == currentPath) return@launch
 
