@@ -13,6 +13,7 @@ import com.example.jazzlibraryktroomjpcompose.domain.FilterOrchestrator
 import com.example.jazzlibraryktroomjpcompose.domain.models.Album
 import com.example.jazzlibraryktroomjpcompose.domain.models.AlbumContainsArtist
 import com.example.jazzlibraryktroomjpcompose.domain.models.Artist
+import com.example.jazzlibraryktroomjpcompose.domain.models.Song
 import com.example.jazzlibraryktroomjpcompose.domain.models.Video
 import com.example.jazzlibraryktroomjpcompose.domain.models.VideoContainsArtist
 import com.example.jazzlibraryktroomjpcompose.domain.repository.AlbumRepository
@@ -21,6 +22,7 @@ import com.example.jazzlibraryktroomjpcompose.domain.repository.AssociationRepos
 import com.example.jazzlibraryktroomjpcompose.domain.repository.DurationRepository
 import com.example.jazzlibraryktroomjpcompose.domain.repository.FilterPathRepository
 import com.example.jazzlibraryktroomjpcompose.domain.repository.InstrumentRepository
+import com.example.jazzlibraryktroomjpcompose.domain.repository.SongRepository
 import com.example.jazzlibraryktroomjpcompose.domain.repository.TypeRepository
 import com.example.jazzlibraryktroomjpcompose.domain.repository.VideoRepository
 import com.example.jazzlibraryktroomjpcompose.ui.settings.SettingsRepository
@@ -39,6 +41,7 @@ class MainViewModel @Inject constructor(
     private val albumRepository: AlbumRepository,
     private val durationRepository: DurationRepository,
     private val typeRepository: TypeRepository,
+    private val songRepository: SongRepository,
     private val associationRepository: AssociationRepository,
     private val filterPathRepository: FilterPathRepository,
     private val jazzRepository: JazzRepositoryImpl,
@@ -117,6 +120,16 @@ class MainViewModel @Inject constructor(
     private val _showBars = MutableStateFlow(false)
     val showBars: StateFlow<Boolean> = _showBars.asStateFlow()
 
+    private val _albumSongs = MutableStateFlow<List<Song>>(emptyList())
+    val albumSongs: StateFlow<List<Song>> = _albumSongs.asStateFlow()
+
+    fun loadAlbumSongs(albumId: Int) {
+        viewModelScope.launch {
+            songRepository.getSongsByAlbumId(albumId).collect { songs ->
+                _albumSongs.value = songs
+            }
+        }
+    }
 
     fun setFullscreen(fullscreen: Boolean) {
         _isFullscreen.value = fullscreen
@@ -141,7 +154,7 @@ class MainViewModel @Inject constructor(
         val elapsed = now - lastBackPressTime
 
         // Double back detected within 500ms → exit regardless
-        if (elapsed <= 350) {
+        if (elapsed <= 250) {
             Log.d("BackHandler", "Double back detected, exiting app")
             onExit()
             return

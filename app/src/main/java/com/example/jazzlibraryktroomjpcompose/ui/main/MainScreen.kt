@@ -138,6 +138,7 @@ import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material3.*
 import androidx.compose.ui.text.style.TextAlign
+import com.example.jazzlibraryktroomjpcompose.domain.models.Song
 import java.text.DecimalFormat
 
 enum class AlbumGridTab { MAIN, FEATURED }
@@ -1288,15 +1289,10 @@ private fun VideoListContent(
                 ) { video ->
                     // 🔁 Pass only isPlayerVisible – no per‑card toggle callback
                     VideoCard(
-                        thumbnailUrl = video.getThumbnailUrl(),
-                        mediaTitle = video.name,
-                        youtubeVideoId = video.locationId,
-                        isPlayerVisible = isPlayerVisible,
+                        video = video,
                         isActive = video.locationId == playerUiState.activeCardId,
-                        onActiveCardBoundsChanged = { cardId, position, size ->
-                            onActiveCardBoundsChanged(cardId, position, size)
-                        },
-                        onCardClicked = {
+                        isPlayerVisible = isPlayerVisible,
+                        onCardClick = {
                             val videoId = extractYouTubeVideoId(video.path)
                             if (videoId != null) {
                                 playerViewModel.loadVideo(
@@ -1309,7 +1305,6 @@ private fun VideoListContent(
                                 )
                             }
                         },
-                        cardState = cardUiStates[video.locationId] ?: CardUiState(),
                         onCardTitleClick = { onCardTitleClick(video.locationId) },
                         artists = videoArtistsMap[video.id] ?: emptyList(),
                         onArtistClick = { artist ->
@@ -1324,6 +1319,9 @@ private fun VideoListContent(
                                     true
                                 )
                             }
+                        },
+                        onActiveCardBoundsChanged = { cardId, position, size ->
+                            onActiveCardBoundsChanged(cardId, position, size)
                         }
                     )
                 }
@@ -1334,24 +1332,142 @@ private fun VideoListContent(
 
 @Composable
 fun VideoCard(
-    mediaTitle: String,
-    youtubeVideoId: String?,
-    thumbnailUrl: String?,
-    mediaType: Int = 0,      // 0 = video, 1 = album
-    mediaAvailability: Int = 1,    // 1 = available, 0 = not available
-    isPlayerVisible: Boolean,
-    isActive: Boolean,
-    onActiveCardBoundsChanged: (String, IntOffset, IntSize) -> Unit,
-    onCardClicked: () -> Unit,
-    modifier: Modifier = Modifier,
-    cardState: CardUiState,
-    onCardTitleClick: () -> Unit,
-    artists: List<Artist>,
-    onArtistClick: (Artist) -> Unit
+    video: Video,
+    isActive: Boolean = false,
+    isPlayerVisible: Boolean = true,
+    onCardClick: () -> Unit,
+    onCardTitleClick: () -> Unit = {},
+    artists: List<Artist> = emptyList(),
+    onArtistClick: (Artist) -> Unit = {},
+    onActiveCardBoundsChanged: ((String, IntOffset, IntSize) -> Unit)? = null,
+    modifier: Modifier = Modifier
 ) {
-    // Determine if we should show the album placeholder (no video)
-    val showAlbumPlaceholder = (mediaType == 1 && mediaAvailability == 0)
-    val hasValidVideo = youtubeVideoId != null && !showAlbumPlaceholder
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        elevation = CardDefaults.cardElevation(4.dp),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+        ) {
+            // Title row
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onCardTitleClick() },
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = video.name,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Thumbnail (square or 16:9)
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(200.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                    .clickable { onCardClick() }
+                    .then(
+                        if (isActive && onActiveCardBoundsChanged != null) {
+                            Modifier.onPlaced { coordinates ->
+                                onActiveCardBoundsChanged(
+                                    video.locationId,
+                                    IntOffset(
+                                        coordinates.positionInRoot().x.roundToInt(),
+                                        coordinates.positionInRoot().y.roundToInt()
+                                    ),
+                                    IntSize(coordinates.size.width, coordinates.size.height)
+                                )
+                            }
+                        } else Modifier
+                    )
+            ) {
+                val thumbnailUrl = video.getThumbnailUrl()
+                if (thumbnailUrl != null) {
+                    AsyncImage(
+                        model = ImageRequest.Builder(LocalContext.current)
+                            .data(thumbnailUrl)
+                            .crossfade(true)
+                            .build(),
+                        contentDescription = "Video thumbnail",
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop,
+                        error = painterResource(R.drawable.ic_error)
+                    )
+                }
+                // Play overlay
+                Icon(
+                    Icons.Default.PlayArrow,
+                    contentDescription = "Play video",
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .size(42.dp),
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            }
+
+            // Artists row
+            if (artists.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    artists.forEach { artist ->
+                        Surface(
+                            shape = RoundedCornerShape(16.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant,
+                            modifier = Modifier.clickable { onArtistClick(artist) }
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                            ) {
+                                ArtistImage(artist, modifier = Modifier.size(20.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(artist.fullName, style = MaterialTheme.typography.labelMedium)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun AlbumPlayerCard(
+    album: Album,
+    songs: List<Song>,
+    isActive: Boolean,
+    isPlayerVisible: Boolean,
+    onAlbumClick: () -> Unit,
+    onSongClick: (Song) -> Unit,
+    onActiveCardBoundsChanged: (String, IntOffset, IntSize) -> Unit,
+    // 👇 new parameters to match VideoCard functionality
+    thumbnailUrl: String?,
+    youtubeVideoId: String?,     // e.g., first song's video ID or album promo video
+    artists: List<Artist>,       // artists featured on this album
+    onArtistClick: (Artist) -> Unit,
+    currentPlayingSongId: Int?,
+    modifier: Modifier = Modifier
+) {
+    val hasValidVideo = youtubeVideoId != null
 
     Card(
         modifier = modifier.fillMaxWidth(),
@@ -1363,17 +1479,17 @@ fun VideoCard(
                 .fillMaxWidth()
                 .padding(16.dp)
         ) {
-            // --- Video info row (unchanged) ---
+            // --- Title row (clickable on title) ---
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable { onCardTitleClick() },
+                    .clickable { onAlbumClick() },
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = mediaTitle,
+                        text = album.title,
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         maxLines = 2,
@@ -1383,8 +1499,9 @@ fun VideoCard(
                 }
             }
 
-            // --- Thumbnail / placeholder area ---
             Spacer(modifier = Modifier.height(12.dp))
+
+            // --- Thumbnail + video player area ---
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1392,108 +1509,58 @@ fun VideoCard(
                     .clip(RoundedCornerShape(8.dp))
                     .background(MaterialTheme.colorScheme.surfaceVariant)
                     .clickable(enabled = hasValidVideo) {
-                        if (hasValidVideo) onCardClicked()
-                        // else: optionally show a toast or do nothing
+                        if (hasValidVideo) onAlbumClick()  // or trigger video playback
                     }
                     .then(
                         if (isActive && hasValidVideo) {
                             Modifier.onPlaced { coordinates ->
-
-                                Log.d("VideoCard", "onPlaced called for cardId=$youtubeVideoId, isActive=$isActive")
-                                if (isActive && hasValidVideo) {
-                                    Log.d(
-                                        "VideoCard",
-                                        "Reporting bounds: position=${coordinates.positionInRoot()}, size=${coordinates.size}"
-                                    )
-
-
                                 onActiveCardBoundsChanged(
-                                    youtubeVideoId ?: "",
+                                    "album_${album.albumId}",
                                     IntOffset(
                                         x = coordinates.positionInRoot().x.roundToInt(),
                                         y = coordinates.positionInRoot().y.roundToInt()
                                     ),
                                     IntSize(coordinates.size.width, coordinates.size.height)
                                 )
-                                    }
                             }
-                        } else {
-                            Modifier
-                        }
+                        } else Modifier
                     )
             ) {
-                when {
-                    // Show album icon for albums without video OR without thumbnail
-                    mediaType == 1 && (mediaAvailability == 0 || thumbnailUrl == null) -> {
-                        Icon(
-                            Icons.Default.Album,
-                            contentDescription = "Album cover",
-                            modifier = Modifier
-                                .align(Alignment.Center),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    thumbnailUrl != null -> {
-                        AsyncImage(
-                            model = ImageRequest.Builder(LocalContext.current)
-                                .data(thumbnailUrl)
-                                .crossfade(true)
-                                .build(),
-                            contentDescription = "Video thumbnail",
-                            modifier = Modifier.fillMaxSize(),
-                            contentScale = ContentScale.Crop,
-                            error = painterResource(id = R.drawable.ic_error)
-                        )
-                    }
-                    else -> {
-                        // Fallback when URL is invalid (non-album case)
-                        Icon(
-                            Icons.Default.BrokenImage,
-                            contentDescription = "Invalid video",
-                            modifier = Modifier.align(Alignment.Center),
-                            tint = MaterialTheme.colorScheme.error
-                        )
-                    }
+                // Thumbnail
+                if (thumbnailUrl != null) {
+                    AsyncImage(
+                        model = ImageRequest.Builder(LocalContext.current)
+                            .data(thumbnailUrl)
+                            .crossfade(true)
+                            .build(),
+                        contentDescription = album.title,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop,
+                        error = painterResource(id = R.drawable.ic_error)
+                    )
+                } else {
+                    Icon(
+                        Icons.Default.Album,
+                        contentDescription = "Album cover",
+                        modifier = Modifier.align(Alignment.Center),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
 
-                // Play icon overlay – only if we have a valid video
+                // Play icon overlay
                 if (hasValidVideo) {
                     Icon(
                         Icons.Default.PlayArrow,
                         contentDescription = "Play video",
                         modifier = Modifier
                             .align(Alignment.Center)
-                            .size(42.dp),
+                            .size(48.dp),
                         tint = MaterialTheme.colorScheme.primary
                     )
                 }
-
-                // Optional: keep the fullscreen button (opens YouTube app)
-//                    IconButton(
-//                        onClick = {
-//                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(video.path))
-//                            context.startActivity(intent)
-//                        },
-//                        modifier = Modifier
-//                            .align(Alignment.BottomEnd)
-//                            .padding(8.dp)
-//                            .size(48.dp)
-//                            .background(
-//                                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.7f),
-//                                shape = RoundedCornerShape(24.dp)
-//                            )
-//                    ) {
-//                        Icon(
-//                            Icons.Default.Fullscreen,
-//                            contentDescription = "Open in YouTube app",
-//                            tint = Color.White
-//                        )
-//                    }
-
             }
 
-
-            // Artists row (unchanged)
+            // --- Artist chips (same as VideoCard) ---
             if (artists.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(8.dp))
                 Row(
@@ -1527,7 +1594,122 @@ fun VideoCard(
                     }
                 }
             }
+
+            // --- Song list (fixed height, non‑scrollable) ---
+            // Song list with highlighting
+            if (songs.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(12.dp))
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(250.dp)
+                ) {
+                    songs.take(5).forEach { song ->
+                        SongRow(
+                            song = song,
+                            isCurrentlyPlaying = song.songId == currentPlayingSongId,  // 👈 highlight condition
+                            onClick = { onSongClick(song) }
+                        )
+                        if (song != songs.lastOrNull()) {
+                            Divider(
+                                modifier = Modifier.padding(vertical = 4.dp),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f)
+                            )
+                        }
+                    }
+                    if (songs.size > 5) {
+                        TextButton(
+                            onClick = { /* expand logic if needed */ },
+                            modifier = Modifier.align(Alignment.End)
+                        ) {
+                            Text("+ ${songs.size - 5} more")
+                        }
+                    }
+                }
+            }
         }
+    }
+}
+
+@Composable
+private fun SongRow(
+    song: Song,
+    isCurrentlyPlaying: Boolean,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() }
+            .padding(vertical = 8.dp)
+            .background(
+                color = if (isCurrentlyPlaying) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                else Color.Transparent
+            ),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            Icons.Default.PlayArrow,
+            contentDescription = null,
+            modifier = Modifier.size(20.dp),
+            tint = if (isCurrentlyPlaying) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+        )
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(
+            text = song.songTitle?: "N/A",
+            style = MaterialTheme.typography.bodyMedium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+            color = if (isCurrentlyPlaying) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+        )
+    }
+}
+
+//// Helper to format duration (optional)
+//private fun formatDuration(seconds: Int): String {
+//    val minutes = seconds / 60
+//    val remainingSeconds = seconds % 60
+//    return String.format("%d:%02d", minutes, remainingSeconds)
+//}
+
+@Composable
+private fun SongListItem(
+    song: Song,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() }
+            .padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        val thumbnailUrl = song.getThumbnailUrl()
+        AsyncImage(
+            model = ImageRequest.Builder(LocalContext.current)
+                .data(thumbnailUrl)
+                .crossfade(true)
+                .build(),
+            contentDescription = song.songTitle,
+            modifier = Modifier.size(48.dp, 36.dp),
+            contentScale = ContentScale.Crop,
+            error = painterResource(R.drawable.ic_error)
+        )
+        Text(
+            text = song.songTitle ?: "Untitled",
+            style = MaterialTheme.typography.bodyMedium,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f)
+        )
+        Icon(
+            Icons.Default.PlayArrow,
+            contentDescription = "Play song",
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(24.dp)
+        )
     }
 }
 
@@ -2315,7 +2497,6 @@ fun SingleArtistView(
     var selectedAlbum by remember { mutableStateOf<Album?>(null) }
     var isDefaultSelection by remember { mutableStateOf(true) } // true until user picks an album
 
-
 // Automatically select the first album from albumsDisplay when available
     LaunchedEffect(albumsDisplay, initialSelectedAlbum) {
         Log.d("SingleArtistView", "🔄 Default selection effect triggered")
@@ -2367,6 +2548,10 @@ fun SingleArtistView(
     val imageHeight = if (hasThumbnail) 300.dp else 150.dp
 
     val listState = rememberLazyListState()     // lazy list state for scrolling
+
+    // 👇 ADD THIS HERE
+    val playerUiState by playerViewModel.uiState.collectAsState()
+    val currentPlayingSongId by playerViewModel.currentVideoDbIdState.collectAsState()
 
     // Scroll to albums section (index 3) when trigger changes
     LaunchedEffect(scrollToAlbumsTrigger.value) {
@@ -2486,50 +2671,80 @@ fun SingleArtistView(
 
             if (albumsDisplay.isNotEmpty() && selectedAlbum != null) {
                 val album = selectedAlbum!!
-                Log.d("SingleArtistView", "▶️ Rendering VideoCard for album: ${album.title} (id=${album.albumId})")
-                val youtubeVideoId = album.youtubeVideoIdForThumbnail // adjust property name if needed
-                val mediaTitle = album.title ?: "Untitled Album"
-                val thumbnailUrl = if (album.youtubeVideoIdForThumbnail != null) album.getThumbnailUrl() else null
-                val artistsForAlbum = albumArtistsMap[album.albumId]
-                    ?.mapNotNull { it.artist }
-                    ?: emptyList()
+                val songs by viewModel.albumSongs.collectAsState()
 
-                VideoCard(
-                    mediaTitle = mediaTitle,
-                    youtubeVideoId = youtubeVideoId,
-                    thumbnailUrl = thumbnailUrl,
+                // Prepare data for the enhanced card
+                val thumbnailUrl = album.getThumbnailUrl()
+                // Get the first song's YouTube video ID (or any representative video)
+                val youtubeVideoId = songs.firstOrNull()?.ytVideoId
+                // Get artists for this album (e.g., from albumArtistsMap)
+                val albumArtists = albumArtistsMap[album.albumId]?.map { it.artist } ?: emptyList()
+
+                AlbumPlayerCard(
+                    album = album,
+                    songs = songs,
+                    isActive = playerUiState.activeCardId == "album_${album.albumId}",
                     isPlayerVisible = minimiseMaximiseToggle,
-                    isActive = playerUiState.activeCardId == "album_${album.albumId}",   // ✅ dynamic
-                    onActiveCardBoundsChanged = { _, position, size ->                  // ✅ ignore video ID
-                        onActiveCardBoundsChanged("album_${album.albumId}", position, size)
-                    },
-                    onCardClicked = {
-                        if (youtubeVideoId != null) {
+                    onAlbumClick = {
+                        // Optional: expand album or play first song
+                        youtubeVideoId?.let { videoId ->
                             playerViewModel.loadVideo(
-                                videoId = youtubeVideoId,
+                                videoId = videoId,
                                 cardId = "album_${album.albumId}",
                                 currentFilterPath = null,
                                 startInMiniMode = false,
-                                mediaDbId = null,
+                                mediaDbId = album.albumId,
                                 filterPathId = currentFilterPathId,
-                                typeOfMedia = currentMediaEntryTypeOfMedia
+                                typeOfMedia = 1
                             )
                         }
                     },
-                    cardState = CardUiState(),
-                    onCardTitleClick = {},
-                    artists = artistsForAlbum,
-                    onArtistClick = handleArtistClick,
-                    mediaType = 1,      // indicates this is an album
-                    mediaAvailability = 1,     // video not available
+                    onSongClick = { song ->
+                        song.ytVideoId?.let { videoId ->
+                            playerViewModel.loadVideo(
+                                videoId = videoId,
+                                cardId = "album_${album.albumId}",   // ✅ always use album card ID
+                                currentFilterPath = null,
+                                startInMiniMode = false,
+                                mediaDbId = song.songId,             // keep song ID for playback tracking
+                                filterPathId = currentFilterPathId,
+                                typeOfMedia = 1
+                            )
+                        }
+                    },
+                    onActiveCardBoundsChanged = { cardId, position, size ->
+                        onActiveCardBoundsChanged(cardId, position, size)
+                    },
+                    thumbnailUrl = thumbnailUrl,
+                    youtubeVideoId = youtubeVideoId,
+                    artists = albumArtists,
+                    onArtistClick = { artist ->
+                        val alreadyFiltered = currentFilterPath.any {
+                            it.categoryId == FilterPath.CATEGORY_ARTIST && it.entityId == artist.id
+                        }
+                        if (!alreadyFiltered && artist.id != null) {
+                            viewModel.handleChipSelection(
+                                FilterPath.CATEGORY_ARTIST,
+                                artist.id,
+                                artist.fullName ?: "Unknown Artist",
+                                true
+                            )
+                        }
+                    },
+                    currentPlayingSongId = currentPlayingSongId,
                     modifier = Modifier.fillMaxWidth()
                 )
-            } else {            Log.d("SingleArtistView", "⏸️ No video card rendered (no album selected)")}
+
+                LaunchedEffect(album.albumId) {
+                    viewModel.loadAlbumSongs(album.albumId)
+                }
+            } else {
+                Log.d("SingleArtistView", "⏸️ No video card rendered (no album selected)")
+            }
         }
     }
 
-    // 👇 ADD THIS HERE
-    val playerUiState by playerViewModel.uiState.collectAsState()
+
     val videoCardIndex = 4  // because the video card is the 5th item (0-based index)
 
 

@@ -17,4 +17,7 @@ interface SongDao {
 
     @Query("DELETE FROM songs")
     suspend fun deleteAllSongs()
+
+    @Query("SELECT * FROM songs WHERE album_id = :albumId")
+    fun getSongsByAlbumId(albumId: Int): Flow<List<SongRoomEntity>>
 }

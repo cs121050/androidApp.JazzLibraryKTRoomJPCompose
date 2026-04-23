@@ -30,4 +30,8 @@ class SongRepositoryImpl @Inject constructor(
     override suspend fun deleteAllSongs() {
         database.songDao().deleteAllSongs()
     }
+
+    override fun getSongsByAlbumId(albumId: Int): Flow<List<Song>> =
+        database.songDao().getSongsByAlbumId(albumId)
+            .map { entities -> entities.map { SongMapper.toDomain(it) } }
 }
