@@ -115,6 +115,8 @@ import android.view.ViewGroup
 import android.widget.Toast
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.ScrollState
+import androidx.compose.foundation.gestures.FlingBehavior
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
 import com.google.accompanist.systemuicontroller.rememberSystemUiController
@@ -140,6 +142,21 @@ import androidx.compose.material3.*
 import androidx.compose.ui.text.style.TextAlign
 import com.example.jazzlibraryktroomjpcompose.domain.models.Song
 import java.text.DecimalFormat
+
+import androidx.compose.foundation.gestures.ScrollScope
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Divider
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.coroutineScope
+
+import androidx.compose.ui.unit.Velocity
+import kotlinx.coroutines.Job
+import kotlin.coroutines.cancellation.CancellationException
 
 enum class AlbumGridTab { MAIN, FEATURED }
 enum class SortDirection { ASC, DESC }
@@ -535,14 +552,20 @@ fun MainScreen(
                                     .pointerInput(Unit) {
                                         detectTapGestures { offset ->
                                             if (offset.y < topTapThresholdPx) {
-                                                Log.d("Fullscreen", "Top edge tap detected, showing bars")
+                                                Log.d(
+                                                    "Fullscreen",
+                                                    "Top edge tap detected, showing bars"
+                                                )
                                                 viewModel.setShowBars(true)
                                             }
                                         }
                                     }
 
                                 playerUiState.isInMiniMode -> Modifier
-                                    .size(width = 235.dp, height = 200.dp)  // IMPORTANT : change this to 205 to 205 to comply with youtube rules!
+                                    .size(
+                                        width = 235.dp,
+                                        height = 200.dp
+                                    )  // IMPORTANT : change this to 205 to 205 to comply with youtube rules!
                                     .padding(bottom = 6.dp, end = 6.dp)
                                     .align(Alignment.BottomEnd)
                                     .zIndex(5f)
@@ -797,7 +820,8 @@ fun ActiveFilterChipsRow(
     modifier: Modifier = Modifier
 ) {
     Row(
-        modifier = modifier.fillMaxWidth()
+        modifier = modifier
+            .fillMaxWidth()
             .padding(bottom = 4.dp, top = 4.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
@@ -1450,6 +1474,7 @@ fun VideoCard(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun AlbumPlayerCard(
     album: Album,
@@ -1459,15 +1484,41 @@ fun AlbumPlayerCard(
     onAlbumClick: () -> Unit,
     onSongClick: (Song) -> Unit,
     onActiveCardBoundsChanged: (String, IntOffset, IntSize) -> Unit,
-    // 👇 new parameters to match VideoCard functionality
     thumbnailUrl: String?,
-    youtubeVideoId: String?,     // e.g., first song's video ID or album promo video
-    artists: List<Artist>,       // artists featured on this album
+    youtubeVideoId: String?,
+    artists: List<Artist>,
     onArtistClick: (Artist) -> Unit,
     currentPlayingSongId: Int?,
     modifier: Modifier = Modifier
 ) {
     val hasValidVideo = youtubeVideoId != null
+    val scrollLockState = LocalScrollLock.current   // from composition
+
+    // ─── Horizontal Pager ─────────────────────────────────────────
+    val pageCount = 2   // 0: song list, 1: dummy (can be extended)
+    val pagerState = rememberPagerState(
+        initialPage = 0,
+        pageCount = { pageCount }
+    )
+    val coroutineScope = rememberCoroutineScope()
+
+    // ─── Nested scroll connection (consumes when locked) ──────────
+    val nestedScrollConnection = remember(scrollLockState) {
+        object : NestedScrollConnection {
+            override fun onPostScroll(
+                consumed: Offset,
+                available: Offset,
+                source: NestedScrollSource
+            ): Offset {
+                return if (scrollLockState.isLocked) {
+                    // Swallow any remaining vertical scroll
+                    Offset(0f, available.y)
+                } else {
+                    Offset.Zero
+                }
+            }
+        }
+    }
 
     Card(
         modifier = modifier.fillMaxWidth(),
@@ -1479,11 +1530,10 @@ fun AlbumPlayerCard(
                 .fillMaxWidth()
                 .padding(16.dp)
         ) {
-            // --- Title row (clickable on title) ---
+            // --- Title row (same as before) ---
             Row(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { onAlbumClick() },
+                    .fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -1495,13 +1545,12 @@ fun AlbumPlayerCard(
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis
                     )
-                    Spacer(modifier = Modifier.height(4.dp))
                 }
             }
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // --- Thumbnail + video player area ---
+            // --- Thumbnail / video area (unchanged) ---
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1509,7 +1558,7 @@ fun AlbumPlayerCard(
                     .clip(RoundedCornerShape(8.dp))
                     .background(MaterialTheme.colorScheme.surfaceVariant)
                     .clickable(enabled = hasValidVideo) {
-                        if (hasValidVideo) onAlbumClick()  // or trigger video playback
+                        if (hasValidVideo) onAlbumClick()
                     }
                     .then(
                         if (isActive && hasValidVideo) {
@@ -1526,7 +1575,7 @@ fun AlbumPlayerCard(
                         } else Modifier
                     )
             ) {
-                // Thumbnail
+                // thumbnail & play overlay (unchanged)
                 if (thumbnailUrl != null) {
                     AsyncImage(
                         model = ImageRequest.Builder(LocalContext.current)
@@ -1546,8 +1595,6 @@ fun AlbumPlayerCard(
                         tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-
-                // Play icon overlay
                 if (hasValidVideo) {
                     Icon(
                         Icons.Default.PlayArrow,
@@ -1560,7 +1607,7 @@ fun AlbumPlayerCard(
                 }
             }
 
-            // --- Artist chips (same as VideoCard) ---
+            // --- Artist chips (unchanged) ---
             if (artists.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(8.dp))
                 Row(
@@ -1579,55 +1626,168 @@ fun AlbumPlayerCard(
                                 verticalAlignment = Alignment.CenterVertically,
                                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
                             ) {
-                                ArtistImage(
-                                    artist = artist,
-                                    modifier = Modifier.size(20.dp),
-                                    contentScale = ContentScale.Crop
-                                )
+                                ArtistImage(artist, modifier = Modifier.size(20.dp))
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    text = artist.fullName,
-                                    style = MaterialTheme.typography.labelMedium
-                                )
+                                Text(artist.fullName, style = MaterialTheme.typography.labelMedium)
                             }
                         }
                     }
                 }
             }
 
-            // --- Song list (fixed height, non‑scrollable) ---
-            // Song list with highlighting
+            // ─── NEW: PAGER AREA (replaces the old fixed song list) ───
             if (songs.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(12.dp))
-                Column(
+
+                // Fixed height container for the pager
+                Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(250.dp)
+                        .nestedScroll(nestedScrollConnection)   // 👈 consumes scroll when locked
                 ) {
-                    songs.take(5).forEach { song ->
-                        SongRow(
-                            song = song,
-                            isCurrentlyPlaying = song.songId == currentPlayingSongId,  // 👈 highlight condition
-                            onClick = { onSongClick(song) }
-                        )
-                        if (song != songs.lastOrNull()) {
-                            Divider(
-                                modifier = Modifier.padding(vertical = 4.dp),
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f)
+                    HorizontalPager(
+                        state = pagerState,
+                        modifier = Modifier.fillMaxSize()
+                    ) { page ->
+                        when (page) {
+                            0 -> SongListPage(
+                                songs = songs,
+                                currentPlayingSongId = currentPlayingSongId,
+                                onSongClick = onSongClick,
+                                scrollLockState = scrollLockState
                             )
-                        }
-                    }
-                    if (songs.size > 5) {
-                        TextButton(
-                            onClick = { /* expand logic if needed */ },
-                            modifier = Modifier.align(Alignment.End)
-                        ) {
-                            Text("+ ${songs.size - 5} more")
+                            else -> DummyPageContent(page = page)
                         }
                     }
                 }
+
+                // Dots row for pager navigation (same as in WikiInfoCard)
+                DotsRow(
+                    pageCount = pageCount,
+                    currentPage = pagerState.currentPage,
+                    onPageSelected = { pageIndex ->
+                        coroutineScope.launch {
+                            pagerState.animateScrollToPage(pageIndex)
+                        }
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 12.dp)
+                )
             }
         }
+    }
+}
+
+@Composable
+private fun SongListPage(
+    songs: List<Song>,
+    currentPlayingSongId: Int?,
+    onSongClick: (Song) -> Unit,
+    scrollLockState: ScrollLockState
+) {
+    val coroutineScope = rememberCoroutineScope()
+    var unlockJob by remember { mutableStateOf<Job?>(null) }
+
+    val scrollState = rememberScrollState()
+    val noFlingBehavior = remember {
+        object : FlingBehavior {
+            override suspend fun ScrollScope.performFling(initialVelocity: Float): Float {
+                Log.d("SongListPage", "performFling called with velocity=$initialVelocity, isLocked=${scrollLockState.isLocked}")
+                return 0f
+            }
+        }
+    }
+
+    val nestedScrollConnection = remember(scrollLockState) {
+        object : NestedScrollConnection {
+            override suspend fun onPreFling(available: Velocity): Velocity {
+                Log.d("SongListPage", "onPreFling: available=$available, isLocked=${scrollLockState.isLocked}")
+                return if (scrollLockState.isLocked) {
+                    Log.d("SongListPage", "✅ Consuming whole fling velocity")
+                    available   // consume everything
+                } else {
+                    Log.d("SongListPage", "❌ NOT consuming fling (lock false)")
+                    Velocity.Zero
+                }
+            }
+
+            override fun onPostScroll(
+                consumed: Offset,
+                available: Offset,
+                source: NestedScrollSource
+            ): Offset {
+                Log.d("SongListPage", "onPostScroll: available=$available, source=$source, isLocked=${scrollLockState.isLocked}")
+                return if (scrollLockState.isLocked) {
+                    Log.d("SongListPage", "✅ Consuming remaining scroll $available")
+                    Offset(0f, available.y)
+                } else {
+                    Offset.Zero
+                }
+            }
+
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                Log.d("SongListPage", "onPreScroll: available=$available, source=$source, isLocked=${scrollLockState.isLocked}")
+                return Offset.Zero
+            }
+        }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .nestedScroll(nestedScrollConnection)
+            .verticalScroll(scrollState) //, flingBehavior = noFlingBehavior
+            .pointerInput(Unit) {
+                awaitEachGesture {
+                    var unlockJob: Job? = null
+                    try {
+                        awaitFirstDown(requireUnconsumed = false)
+                        scrollLockState.isLocked = true
+                        // Wait for touch release
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            if (event.type == PointerEventType.Release || event.type == PointerEventType.Exit) {
+                                unlockJob = coroutineScope.launch {
+                                    delay(100)
+                                    scrollLockState.isLocked = false
+                                }
+                                break
+                            }
+                        }
+                    } catch (e: CancellationException) {
+                        unlockJob?.cancel()
+                        scrollLockState.isLocked = false
+                        throw e
+                    }
+                }
+            }
+    ) {
+        songs.forEachIndexed { index, song ->
+            SongRow(
+                song = song,
+                isCurrentlyPlaying = song.songId == currentPlayingSongId,
+                onClick = { onSongClick(song) }
+            )
+            if (index != songs.lastIndex) {
+                Divider(modifier = Modifier.padding(vertical = 4.dp))
+            }
+        }
+    }
+}
+
+@Composable
+private fun DummyPageContent(page: Int) {
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = "Page $page – Dummy Content",
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }
 
@@ -1658,7 +1818,7 @@ private fun SongRow(
         Text(
             text = song.songTitle?: "N/A",
             style = MaterialTheme.typography.bodyMedium,
-            maxLines = 1,
+            maxLines = 2,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f),
             color = if (isCurrentlyPlaying) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
@@ -2066,7 +2226,9 @@ fun FastScrollingDotsRow(
                     onDragStart = { offset ->
                         if (rowWidth > 0 && pageCount > 0) {
                             val x = offset.x.coerceIn(0f, rowWidth.toFloat())
-                            val pageIndex = ((x / rowWidth) * pageCount).toInt().coerceIn(0, pageCount - 1)
+                            val pageIndex = ((x / rowWidth) * pageCount)
+                                .toInt()
+                                .coerceIn(0, pageCount - 1)
                             onSwitchToAlphabeticalAndScrollTo(pageIndex)
                         }
                     },
@@ -2074,7 +2236,9 @@ fun FastScrollingDotsRow(
                         change.consume()
                         if (rowWidth > 0 && pageCount > 0) {
                             val x = change.position.x.coerceIn(0f, rowWidth.toFloat())
-                            val pageIndex = ((x / rowWidth) * pageCount).toInt().coerceIn(0, pageCount - 1)
+                            val pageIndex = ((x / rowWidth) * pageCount)
+                                .toInt()
+                                .coerceIn(0, pageCount - 1)
                             if (pageIndex != currentPage) {
                                 onSwitchToAlphabeticalAndScrollTo(pageIndex)
                             }
@@ -2086,7 +2250,9 @@ fun FastScrollingDotsRow(
                 detectTapGestures { offset ->
                     if (rowWidth > 0 && pageCount > 0) {
                         val x = offset.x.coerceIn(0f, rowWidth.toFloat())
-                        val pageIndex = ((x / rowWidth) * pageCount).toInt().coerceIn(0, pageCount - 1)
+                        val pageIndex = ((x / rowWidth) * pageCount)
+                            .toInt()
+                            .coerceIn(0, pageCount - 1)
                         onSwitchToAlphabeticalAndScrollTo(pageIndex)
                     }
                 }
@@ -2384,7 +2550,7 @@ fun HistoryVideoRow(
             .clickable { onClick() }
             .padding(4.dp)
             .background(
-                color = if (isCurrentlyPlaying ) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 1f)
+                color = if (isCurrentlyPlaying) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 1f)
                 else Color.Transparent // or any default color
             ),
         verticalAlignment = Alignment.CenterVertically,
@@ -2973,7 +3139,8 @@ private fun ScrollableTextPage(
                         while (true) {
                             val event = awaitPointerEvent()
                             if (event.type == PointerEventType.Release ||
-                                event.type == PointerEventType.Exit) {
+                                event.type == PointerEventType.Exit
+                            ) {
                                 break
                             }
                         }
@@ -3041,7 +3208,9 @@ fun DotsRow(
                     onDragStart = { offset ->
                         if (rowWidth > 0 && pageCount > 0) {
                             val x = offset.x.coerceIn(0f, rowWidth.toFloat())
-                            val pageIndex = ((x / rowWidth) * pageCount).toInt().coerceIn(0, pageCount - 1)
+                            val pageIndex = ((x / rowWidth) * pageCount)
+                                .toInt()
+                                .coerceIn(0, pageCount - 1)
                             onPageSelected(pageIndex)
                         }
                     },
@@ -3049,7 +3218,9 @@ fun DotsRow(
                         change.consume()
                         if (rowWidth > 0 && pageCount > 0) {
                             val x = change.position.x.coerceIn(0f, rowWidth.toFloat())
-                            val pageIndex = ((x / rowWidth) * pageCount).toInt().coerceIn(0, pageCount - 1)
+                            val pageIndex = ((x / rowWidth) * pageCount)
+                                .toInt()
+                                .coerceIn(0, pageCount - 1)
                             if (pageIndex != currentPage) {
                                 onPageSelected(pageIndex)
                             }
@@ -3061,7 +3232,9 @@ fun DotsRow(
                 detectTapGestures { offset ->
                     if (rowWidth > 0 && pageCount > 0) {
                         val x = offset.x.coerceIn(0f, rowWidth.toFloat())
-                        val pageIndex = ((x / rowWidth) * pageCount).toInt().coerceIn(0, pageCount - 1)
+                        val pageIndex = ((x / rowWidth) * pageCount)
+                            .toInt()
+                            .coerceIn(0, pageCount - 1)
                         onPageSelected(pageIndex)
                     }
                 }
@@ -3434,7 +3607,9 @@ fun AlbumGridView(
         )
 
         // Horizontal grid with floating note
-        Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+        Box(modifier = Modifier
+            .weight(1f)
+            .fillMaxWidth()) {
             if (sortedAlbums.isEmpty()) {
 
                 Text(
@@ -3575,7 +3750,9 @@ fun DotScrollbar(
                         val event = awaitPointerEvent()
                         val position = event.changes.firstOrNull()?.position ?: continue
                         val dotWidth = size.width / dotCount
-                        val dotIndex = (position.x / dotWidth).toInt().coerceIn(0, dotCount - 1)
+                        val dotIndex = (position.x / dotWidth)
+                            .toInt()
+                            .coerceIn(0, dotCount - 1)
                         val isDragging = event.changes.any { it.pressed }
                         onDotDrag(dotIndex, isDragging)
                         if (isDragging && event.changes.all { !it.pressed }) {
