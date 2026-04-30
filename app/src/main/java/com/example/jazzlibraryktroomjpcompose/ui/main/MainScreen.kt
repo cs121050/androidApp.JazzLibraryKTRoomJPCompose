@@ -115,6 +115,8 @@ import android.view.ViewGroup
 import android.widget.Toast
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.gestures.FlingBehavior
+import androidx.compose.foundation.gestures.ScrollScope
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
 import com.google.accompanist.systemuicontroller.rememberSystemUiController
@@ -138,9 +140,12 @@ import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material3.*
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Velocity
 import androidx.lifecycle.ViewModel
 import com.example.jazzlibraryktroomjpcompose.domain.models.Song
+import kotlinx.coroutines.Job
 import java.text.DecimalFormat
+import kotlin.coroutines.cancellation.CancellationException
 
 enum class AlbumGridTab { MAIN, FEATURED }
 enum class SortDirection { ASC, DESC }
@@ -1654,6 +1659,7 @@ fun VideoCard(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun AlbumPlayerCard(
     album: Album,
@@ -1663,15 +1669,41 @@ fun AlbumPlayerCard(
     onAlbumClick: () -> Unit,
     onSongClick: (Song) -> Unit,
     onActiveCardBoundsChanged: (String, IntOffset, IntSize) -> Unit,
-    // 👇 new parameters to match VideoCard functionality
     thumbnailUrl: String?,
-    youtubeVideoId: String?,     // e.g., first song's video ID or album promo video
-    artists: List<Artist>,       // artists featured on this album
+    youtubeVideoId: String?,
+    artists: List<Artist>,
     onArtistClick: (Artist) -> Unit,
     currentPlayingSongId: Int?,
     modifier: Modifier = Modifier
 ) {
     val hasValidVideo = youtubeVideoId != null
+    val scrollLockState = LocalScrollLock.current   // from composition
+
+    // ─── Horizontal Pager ─────────────────────────────────────────
+    val pageCount = 2   // 0: song list, 1: dummy (can be extended)
+    val pagerState = rememberPagerState(
+        initialPage = 0,
+        pageCount = { pageCount }
+    )
+    val coroutineScope = rememberCoroutineScope()
+
+    // ─── Nested scroll connection (consumes when locked) ──────────
+    val nestedScrollConnection = remember(scrollLockState) {
+        object : NestedScrollConnection {
+            override fun onPostScroll(
+                consumed: Offset,
+                available: Offset,
+                source: NestedScrollSource
+            ): Offset {
+                return if (scrollLockState.isLocked) {
+                    // Swallow any remaining vertical scroll
+                    Offset(0f, available.y)
+                } else {
+                    Offset.Zero
+                }
+            }
+        }
+    }
 
     Card(
         modifier = modifier.fillMaxWidth(),
@@ -1683,11 +1715,10 @@ fun AlbumPlayerCard(
                 .fillMaxWidth()
                 .padding(16.dp)
         ) {
-            // --- Title row (clickable on title) ---
+            // --- Title row (same as before) ---
             Row(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { onAlbumClick() },
+                    .fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -1699,13 +1730,12 @@ fun AlbumPlayerCard(
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis
                     )
-                    Spacer(modifier = Modifier.height(4.dp))
                 }
             }
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // --- Thumbnail + video player area ---
+            // --- Thumbnail / video area (unchanged) ---
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1713,16 +1743,16 @@ fun AlbumPlayerCard(
                     .clip(RoundedCornerShape(8.dp))
                     .background(MaterialTheme.colorScheme.surfaceVariant)
                     .clickable(enabled = hasValidVideo) {
-                        if (hasValidVideo) onAlbumClick()  // or trigger video playback
+                        if (hasValidVideo) onAlbumClick()
                     }
                     .then(
-                        if (isActive) {
+                        if (isActive && hasValidVideo) {
                             Modifier.onPlaced { coordinates ->
                                 onActiveCardBoundsChanged(
                                     "album_${album.albumId}",
                                     IntOffset(
-                                        coordinates.positionInRoot().x.roundToInt(),
-                                        coordinates.positionInRoot().y.roundToInt()
+                                        x = coordinates.positionInRoot().x.roundToInt(),
+                                        y = coordinates.positionInRoot().y.roundToInt()
                                     ),
                                     IntSize(coordinates.size.width, coordinates.size.height)
                                 )
@@ -1730,7 +1760,7 @@ fun AlbumPlayerCard(
                         } else Modifier
                     )
             ) {
-                // Thumbnail
+                // thumbnail & play overlay (unchanged)
                 if (thumbnailUrl != null) {
                     AsyncImage(
                         model = ImageRequest.Builder(LocalContext.current)
@@ -1750,8 +1780,6 @@ fun AlbumPlayerCard(
                         tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-
-                // Play icon overlay
                 if (hasValidVideo) {
                     Icon(
                         Icons.Default.PlayArrow,
@@ -1764,7 +1792,7 @@ fun AlbumPlayerCard(
                 }
             }
 
-            // --- Artist chips (same as VideoCard) ---
+            // --- Artist chips (unchanged) ---
             if (artists.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(8.dp))
                 Row(
@@ -1783,55 +1811,168 @@ fun AlbumPlayerCard(
                                 verticalAlignment = Alignment.CenterVertically,
                                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
                             ) {
-                                ArtistImage(
-                                    artist = artist,
-                                    modifier = Modifier.size(20.dp),
-                                    contentScale = ContentScale.Crop
-                                )
+                                ArtistImage(artist, modifier = Modifier.size(20.dp))
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    text = artist.fullName,
-                                    style = MaterialTheme.typography.labelMedium
-                                )
+                                Text(artist.fullName, style = MaterialTheme.typography.labelMedium)
                             }
                         }
                     }
                 }
             }
 
-            // --- Song list (fixed height, non‑scrollable) ---
-            // Song list with highlighting
+            // ─── NEW: PAGER AREA (replaces the old fixed song list) ───
             if (songs.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(12.dp))
-                Column(
+
+                // Fixed height container for the pager
+                Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(250.dp)
+                        .nestedScroll(nestedScrollConnection)   // 👈 consumes scroll when locked
                 ) {
-                    songs.take(5).forEach { song ->
-                        SongRow(
-                            song = song,
-                            isCurrentlyPlaying = song.songId == currentPlayingSongId,  // 👈 highlight condition
-                            onClick = { onSongClick(song) }
-                        )
-                        if (song != songs.lastOrNull()) {
-                            Divider(
-                                modifier = Modifier.padding(vertical = 4.dp),
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f)
+                    HorizontalPager(
+                        state = pagerState,
+                        modifier = Modifier.fillMaxSize()
+                    ) { page ->
+                        when (page) {
+                            0 -> SongListPage(
+                                songs = songs,
+                                currentPlayingSongId = currentPlayingSongId,
+                                onSongClick = onSongClick,
+                                scrollLockState = scrollLockState
                             )
-                        }
-                    }
-                    if (songs.size > 5) {
-                        TextButton(
-                            onClick = { /* expand logic if needed */ },
-                            modifier = Modifier.align(Alignment.End)
-                        ) {
-                            Text("+ ${songs.size - 5} more")
+                            else -> DummyPageContent(page = page)
                         }
                     }
                 }
+
+                // Dots row for pager navigation (same as in WikiInfoCard)
+                DotsRow(
+                    pageCount = pageCount,
+                    currentPage = pagerState.currentPage,
+                    onPageSelected = { pageIndex ->
+                        coroutineScope.launch {
+                            pagerState.animateScrollToPage(pageIndex)
+                        }
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 12.dp)
+                )
             }
         }
+    }
+}
+
+@Composable
+private fun SongListPage(
+    songs: List<Song>,
+    currentPlayingSongId: Int?,
+    onSongClick: (Song) -> Unit,
+    scrollLockState: ScrollLockState
+) {
+    val coroutineScope = rememberCoroutineScope()
+    var unlockJob by remember { mutableStateOf<Job?>(null) }
+
+    val scrollState = rememberScrollState()
+    val noFlingBehavior = remember {
+        object : FlingBehavior {
+            override suspend fun ScrollScope.performFling(initialVelocity: Float): Float {
+                Log.d("SongListPage", "performFling called with velocity=$initialVelocity, isLocked=${scrollLockState.isLocked}")
+                return 0f
+            }
+        }
+    }
+
+    val nestedScrollConnection = remember(scrollLockState) {
+        object : NestedScrollConnection {
+            override suspend fun onPreFling(available: Velocity): Velocity {
+                Log.d("SongListPage", "onPreFling: available=$available, isLocked=${scrollLockState.isLocked}")
+                return if (scrollLockState.isLocked) {
+                    Log.d("SongListPage", "✅ Consuming whole fling velocity")
+                    available   // consume everything
+                } else {
+                    Log.d("SongListPage", "❌ NOT consuming fling (lock false)")
+                    Velocity.Zero
+                }
+            }
+
+            override fun onPostScroll(
+                consumed: Offset,
+                available: Offset,
+                source: NestedScrollSource
+            ): Offset {
+                Log.d("SongListPage", "onPostScroll: available=$available, source=$source, isLocked=${scrollLockState.isLocked}")
+                return if (scrollLockState.isLocked) {
+                    Log.d("SongListPage", "✅ Consuming remaining scroll $available")
+                    Offset(0f, available.y)
+                } else {
+                    Offset.Zero
+                }
+            }
+
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                Log.d("SongListPage", "onPreScroll: available=$available, source=$source, isLocked=${scrollLockState.isLocked}")
+                return Offset.Zero
+            }
+        }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .nestedScroll(nestedScrollConnection)
+            .verticalScroll(scrollState) //, flingBehavior = noFlingBehavior
+            .pointerInput(Unit) {
+                awaitEachGesture {
+                    var unlockJob: Job? = null
+                    try {
+                        awaitFirstDown(requireUnconsumed = false)
+                        scrollLockState.isLocked = true
+                        // Wait for touch release
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            if (event.type == PointerEventType.Release || event.type == PointerEventType.Exit) {
+                                unlockJob = coroutineScope.launch {
+                                    delay(100)
+                                    scrollLockState.isLocked = false
+                                }
+                                break
+                            }
+                        }
+                    } catch (e: CancellationException) {
+                        unlockJob?.cancel()
+                        scrollLockState.isLocked = false
+                        throw e
+                    }
+                }
+            }
+    ) {
+        songs.forEachIndexed { index, song ->
+            SongRow(
+                song = song,
+                isCurrentlyPlaying = song.songId == currentPlayingSongId,
+                onClick = { onSongClick(song) }
+            )
+            if (index != songs.lastIndex) {
+                Divider(modifier = Modifier.padding(vertical = 4.dp))
+            }
+        }
+    }
+}
+
+@Composable
+private fun DummyPageContent(page: Int) {
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = "Page $page – Dummy Content",
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }
 
@@ -1860,9 +2001,9 @@ private fun SongRow(
         )
         Spacer(modifier = Modifier.width(8.dp))
         Text(
-            text = song.songTitle ?: "N/A",
+            text = song.songTitle?: "N/A",
             style = MaterialTheme.typography.bodyMedium,
-            maxLines = 1,
+            maxLines = 2,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f),
             color = if (isCurrentlyPlaying) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
@@ -1876,6 +2017,7 @@ private fun SongRow(
 //    val remainingSeconds = seconds % 60
 //    return String.format("%d:%02d", minutes, remainingSeconds)
 //}
+
 
 @Composable
 private fun SongListItem(
