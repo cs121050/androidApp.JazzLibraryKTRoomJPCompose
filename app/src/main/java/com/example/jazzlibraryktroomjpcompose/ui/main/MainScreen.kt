@@ -1724,10 +1724,10 @@ fun AlbumPlayerCard(
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = album.title,
+                        text = album.title + " • " + album.year,
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
-                        maxLines = 2,
+                        maxLines = 3,
                         overflow = TextOverflow.Ellipsis
                     )
                 }
@@ -2856,32 +2856,6 @@ fun SingleArtistView(
 ) {
 
 
-    val handleArtistClick: (Artist) -> Unit = { clickedArtist ->
-        val alreadyFiltered = currentFilterPath.any {
-            it.categoryId == FilterPath.CATEGORY_ARTIST && it.entityId == clickedArtist.id
-        }
-        if (!alreadyFiltered && clickedArtist.id != null) {
-            viewModel.handleChipSelection(
-                FilterPath.CATEGORY_ARTIST,
-                clickedArtist.id,
-                clickedArtist.fullName ?: "Unknown Artist",
-                true
-            )
-        }
-    }
-
-    Log.d("SingleArtistView", "🎬 Entering for artist: ${artist.fullName}")
-    Log.d(
-        "SingleArtistView",
-        "📀 albumsDisplay size=${albumsDisplay.size}, first 3 titles=${
-            albumsDisplay.take(3).joinToString { it.title ?: "null" }
-        }"
-    )
-    Log.d(
-        "SingleArtistView",
-        "🎯 initialSelectedAlbum = ${initialSelectedAlbum?.title} (id=${initialSelectedAlbum?.albumId})"
-    )
-
     val context = LocalContext.current
     var showFullscreenImage by remember { mutableStateOf(false) }
 
@@ -3184,6 +3158,7 @@ fun SingleArtistView(
 
 
     LaunchedEffect(selectedAlbum) {
+        playerViewModel.minimizePlayer()
         selectedAlbum?.let {
             viewModel.setCurrentAlbumId(it.albumId)
             viewModel.loadAlbumSongs(it.albumId)
