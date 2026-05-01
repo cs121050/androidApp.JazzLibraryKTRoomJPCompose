@@ -3266,7 +3266,6 @@ fun SingleArtistView(
     }
 }
 
-
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun WikiInfoCard(
@@ -3278,14 +3277,11 @@ fun WikiInfoCard(
     val maxHeight = screenHeight * 0.4f
     val minHeight = 150.dp
 
-    // Provide the scroll lock state to children (like ScrollableTextPage)
     val scrollLockState = LocalScrollLock.current
 
-    // Parse the stored wikipedia data
     val sections = remember(artist.wikipediaData) { parseWikipediaData(artist.wikipediaData) }
     val isLoading = sections.isEmpty() && artist.wikipediaData != null
     val error = if (artist.wikipediaData == null) "No Wikipedia data available" else null
-
 
     val allPages = remember(sections) {
         val contentPages = sections.map { (title, content) -> "### $title\n\n$content" }
@@ -3304,16 +3300,25 @@ fun WikiInfoCard(
     )
     val coroutineScope = rememberCoroutineScope()
 
-    // Nested scroll connection that consumes all leftover vertical scroll while the lock is active
+    // Nested scroll connection that consumes BOTH scroll leftovers AND fling velocity
     val nestedScrollConnection = remember(scrollLockState) {
         object : NestedScrollConnection {
+            override suspend fun onPreFling(available: Velocity): Velocity {
+                return if (scrollLockState.isLocked) {
+                    Log.d("WikiInfoCard", "✅ Consuming fling $available")
+                    available   // swallow entire fling
+                } else {
+                    Velocity.Zero
+                }
+            }
+
             override fun onPostScroll(
                 consumed: Offset,
                 available: Offset,
                 source: NestedScrollSource
             ): Offset {
                 return if (scrollLockState.isLocked) {
-                    // Consume any remaining vertical scroll so the parent never gets it
+                    Log.d("WikiInfoCard", "✅ Consuming remaining scroll $available")
                     Offset(0f, available.y)
                 } else {
                     Offset.Zero
@@ -3327,13 +3332,12 @@ fun WikiInfoCard(
             .fillMaxWidth()
             .heightIn(min = minHeight, max = maxHeight)
             .padding(horizontal = 16.dp)
-            .nestedScroll(nestedScrollConnection), // 👈 consume leftover scroll at card level
+            .nestedScroll(nestedScrollConnection),
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceVariant
         )
     ) {
-        // Provide the lock state to all children
         CompositionLocalProvider(LocalScrollLock provides scrollLockState) {
             Column(
                 modifier = Modifier
@@ -3342,34 +3346,21 @@ fun WikiInfoCard(
             ) {
                 when {
                     isLoading -> {
-                        Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center
-                        ) {
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                             CircularProgressIndicator()
                         }
                     }
-
                     error != null -> {
-                        Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center
-                        ) {
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                             Text(error, color = MaterialTheme.colorScheme.error)
                         }
                     }
-
                     allPages.isEmpty() -> {
-                        Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center
-                        ) {
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                             Text("No Wikipedia data found", color = MaterialTheme.colorScheme.error)
                         }
                     }
-
                     else -> {
-                        // Pager area takes remaining space
                         Box(
                             modifier = Modifier
                                 .weight(1f)
@@ -3385,7 +3376,6 @@ fun WikiInfoCard(
                                 )
                             }
                         }
-                        // Dots row below the pager
                         DotsRow(
                             pageCount = allPages.size,
                             currentPage = pagerState.currentPage,
@@ -3405,7 +3395,6 @@ fun WikiInfoCard(
     }
 }
 
-
 @Composable
 private fun ScrollableTextPage(
     text: String,
@@ -3415,33 +3404,38 @@ private fun ScrollableTextPage(
     val lines = text.lines()
     val scrollState = rememberScrollState()
     val scrollLockState = LocalScrollLock.current
+    val coroutineScope = rememberCoroutineScope()
 
     Column(
         modifier = modifier
             .verticalScroll(scrollState)
             .pointerInput(Unit) {
                 awaitEachGesture {
-                    val down = awaitFirstDown(requireUnconsumed = false)
-                    // Lock the scroll while finger is down
-                    scrollLockState.isLocked = true
+                    var unlockJob: Job? = null
                     try {
+                        awaitFirstDown(requireUnconsumed = false)
+                        scrollLockState.isLocked = true
+                        // Wait for touch release
                         while (true) {
                             val event = awaitPointerEvent()
-                            if (event.type == PointerEventType.Release ||
-                                event.type == PointerEventType.Exit
-                            ) {
+                            if (event.type == PointerEventType.Release || event.type == PointerEventType.Exit) {
+                                unlockJob = coroutineScope.launch {
+                                    delay(100)
+                                    scrollLockState.isLocked = false
+                                }
                                 break
                             }
                         }
-                    } finally {
+                    } catch (e: CancellationException) {
+                        unlockJob?.cancel()
                         scrollLockState.isLocked = false
+                        throw e
                     }
                 }
             }
     ) {
         for (line in lines) {
             if (line.startsWith("### ")) {
-                // Render as heading
                 Text(
                     text = line.removePrefix("### "),
                     style = MaterialTheme.typography.titleMedium,
@@ -3459,7 +3453,6 @@ private fun ScrollableTextPage(
             }
         }
 
-        // Extract and handle URL if present
         val urlRegex = Regex("https?://[\\w\\-._~:/?#\\[\\]@!$&'()*+,;=]+")
         val url = urlRegex.find(text)?.value
         if (url != null && text.contains(url)) {
