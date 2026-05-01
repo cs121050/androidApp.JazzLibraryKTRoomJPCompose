@@ -925,7 +925,7 @@ fun VideoStatsRow(
 
     val pagerState = rememberPagerState(
         initialPage = if (controlsAccessible) 1 else 2,
-        pageCount = { 5 }   // now 5 pages (0..4)
+        pageCount = { 4 }   // 4 pages (0..3)
     )
     val coroutineScope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -1136,19 +1136,67 @@ fun VideoStatsRow(
                 }
 
                 1 -> {
+                    val currentType = playerUiState.currentTypeOfMedia
+                    val isAlbumMode = currentType == 1
+
+                    // Album navigation state
+                    val currentSongIndex = if (isAlbumMode) {
+                        getCurrentSongIndex(currentPlayingSongId, currentAlbumSongs)
+                    } else 0
+                    val canGoPrevSong = currentSongIndex > 0
+                    val canGoNextSong = currentSongIndex < currentAlbumSongs.size - 1
+
+                    // Educational navigation state
                     val currentVideoIndex = playerUiState.currentIndex ?: -1
                     val canGoPrevVideo = currentVideoIndex > 0
-                    val canGoNextVideo = currentVideoIndex in 0 until videos.size - 1
-                    // Playback controls (previous, next, close)
+                    val canGoNextVideo = currentVideoIndex in 0 until (videos.size - 1)
+
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(0.dp)
                     ) {
-                        IconButton(onClick = onPreviousClick, enabled = canGoPrevVideo) {
+                        // Previous button
+                        IconButton(
+                            onClick = {
+                                if (isAlbumMode) {
+                                    if (canGoPrevSong) {
+                                        val prevSong = currentAlbumSongs[currentSongIndex - 1]
+                                        onLoadSong(
+                                            prevSong,
+                                            "album_${currentAlbumId ?: return@IconButton}",
+                                            currentTab != MainTab.ARTISTS
+                                        )
+                                    }
+                                } else {
+                                    if (canGoPrevVideo) onPreviousClick()
+                                }
+                            },
+                            enabled = if (isAlbumMode) canGoPrevSong else canGoPrevVideo
+                        ) {
                             Icon(Icons.Default.SkipPrevious, contentDescription = "Previous")
                         }
-                        IconButton(onClick = onNextClick) { //, enabled = canGoNextVideo
+
+                        // Next button
+                        IconButton(
+                            onClick = {
+                                if (isAlbumMode) {
+                                    if (canGoNextSong) {
+                                        val nextSong = currentAlbumSongs[currentSongIndex + 1]
+                                        onLoadSong(
+                                            nextSong,
+                                            "album_${currentAlbumId ?: return@IconButton}",
+                                            currentTab != MainTab.ARTISTS
+                                        )
+                                    }
+                                } else {
+                                    if (canGoNextVideo) onNextClick()
+                                }
+                            },
+                            enabled = if (isAlbumMode) canGoNextSong else canGoNextVideo
+                        ) {
                             Icon(Icons.Default.SkipNext, contentDescription = "Next")
                         }
+
+                        // Close button (same for both)
                         IconButton(onClick = {
                             coroutineScope.launch {
                                 onClose()
@@ -1182,6 +1230,7 @@ fun VideoStatsRow(
 
                 3 -> {
                     // Playback controls for album songs
+
                     val currentIndex = getCurrentSongIndex(currentPlayingSongId, currentAlbumSongs)
                     val canGoPrev = currentIndex > 0
                     val canGoNext = currentIndex < currentAlbumSongs.size - 1
