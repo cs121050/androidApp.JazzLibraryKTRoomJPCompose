@@ -11,6 +11,7 @@ import com.example.jazzlibraryktroomjpcompose.data.player.YouTubePlayerControlle
 import com.example.jazzlibraryktroomjpcompose.domain.models.FilterPath
 import com.example.jazzlibraryktroomjpcompose.domain.models.Video
 import com.example.jazzlibraryktroomjpcompose.domain.player.VideoPlayerController
+import com.example.jazzlibraryktroomjpcompose.domain.repository.SongRepository
 import com.example.jazzlibraryktroomjpcompose.ui.main.MainTab
 import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.YouTubePlayer
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -18,10 +19,13 @@ import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+private const val TAG = "PlayerViewModel"
+
 @HiltViewModel
 class PlayerViewModel @Inject constructor(
     private val playerController: VideoPlayerController,
-    private val database: JazzDatabase
+    private val database: JazzDatabase,
+    private val songRepository: SongRepository
 ) : ViewModel() {
 
     private var currentFilterPathId: Int? = null
@@ -92,40 +96,95 @@ class PlayerViewModel @Inject constructor(
      * @param cardId The ID of the card that should host the player (if any).
      * @param currentFilterPath The filter path active at the moment of loading.
      */
-    fun loadVideo(videoId: String,
-                  cardId: String?,
-                  currentFilterPath:
-                  List<FilterPath>?,
-                  startInMiniMode: Boolean = false,
-                  mediaDbId: Int?,
-                  filterPathId: Int?,
-                  typeOfMedia: Int?
+    /**
+     * Load a video into the player.
+     */
+    fun loadVideo(
+        videoId: String,
+        cardId: String?,
+        currentFilterPath: List<FilterPath>?,
+        startInMiniMode: Boolean = false,
+        mediaDbId: Int?,
+        filterPathId: Int?,
+        typeOfMedia: Int?
     ) {
+        Log.d(TAG, "loadVideo: videoId=$videoId, typeOfMedia=$typeOfMedia, mediaDbId=$mediaDbId, startInMiniMode=$startInMiniMode")
 
         currentFilterPathId = filterPathId
 
-        // After loading, try to set current index
-        val videos = _uiState.value.availableVideos ?: return
-        val index = videos.indexOfFirst { extractYouTubeVideoId(it.path) == videoId }
-        if (index != -1) {
-            _uiState.update { it.copy(currentIndex = index) }
-        }
-
-
-
-
+        // --- Basic UI state (visibility, card binding) ---
         _uiState.update {
             it.copy(
                 currentVideoDbId = mediaDbId,
                 isVisible = true,
-                isInMiniMode = startInMiniMode,   // use the flag
+                isInMiniMode = startInMiniMode,
                 activeCardId = cardId,
                 filterPathAtLoad = currentFilterPath
             )
         }
-        playerController.loadVideo(videoId, autoPlay = true)
-        Log.d("PlayerViewModel", "loadVideo: startInMiniMode=$startInMiniMode, videoId=$videoId")
 
+        // --- Handle album vs educational media ---
+        when (typeOfMedia) {
+            1 -> {
+                // ✅ IMPORTANT: Set album mode IMMEDIATELY (synchronously)
+                _uiState.update { it.copy(currentTypeOfMedia = 1) }
+                Log.d(TAG, "Album mode activated (currentTypeOfMedia = 1)")
+
+                // Load album songs in background
+                if (mediaDbId != null) {
+                    viewModelScope.launch {
+                        Log.d(TAG, "Loading album songs for mediaDbId=$mediaDbId")
+                        val song = songRepository.getSongById(mediaDbId).firstOrNull()
+                        val albumId = song?.albumId
+                        if (albumId != null) {
+                            val songs = songRepository.getSongsByAlbumId(albumId).firstOrNull() ?: emptyList()
+                            val idx = songs.indexOfFirst { it.songId == mediaDbId }
+                            _uiState.update {
+                                it.copy(
+                                    currentAlbumId = albumId,
+                                    currentAlbumSongs = songs,
+                                    currentAlbumIndex = if (idx != -1) idx else null
+                                )
+                            }
+                            Log.d(TAG, "Album loaded: albumId=$albumId, songs count=${songs.size}, index=$idx")
+                        } else {
+                            Log.w(TAG, "No album found for songId=$mediaDbId, falling back to educational mode")
+                            _uiState.update { it.copy(currentTypeOfMedia = 0) }
+                        }
+                    }
+                } else {
+                    Log.w(TAG, "mediaDbId is null for album mode, keeping currentTypeOfMedia=1 without songs")
+                }
+            }
+            else -> {
+                // Educational mode (0 or null)
+                _uiState.update {
+                    it.copy(
+                        currentTypeOfMedia = 0,
+                        currentAlbumId = null,
+                        currentAlbumSongs = emptyList(),
+                        currentAlbumIndex = null
+                    )
+                }
+                Log.d(TAG, "Educational mode (currentTypeOfMedia = 0)")
+
+                // For educational videos, set index inside availableVideos
+                val videos = _uiState.value.availableVideos
+                if (videos != null) {
+                    val idx = videos.indexOfFirst { extractYouTubeVideoId(it.path) == videoId }
+                    if (idx != -1) {
+                        _uiState.update { it.copy(currentIndex = idx) }
+                        Log.d(TAG, "Set educational index = $idx")
+                    }
+                }
+            }
+        }
+
+        // Start playback
+        playerController.loadVideo(videoId, autoPlay = true)
+        Log.d(TAG, "playback started for videoId=$videoId")
+
+        // Save to history (filter_path_contains_media)
         if (mediaDbId != null && filterPathId != null && filterPathId > 0) {
             viewModelScope.launch {
                 val entry = FilterPathContainsMediaRoomEntity(
@@ -135,15 +194,15 @@ class PlayerViewModel @Inject constructor(
                 )
                 filterPathContainsMediaDao.insert(entry)
                 _currentFilterPathMedia.value = entry
+                Log.d(TAG, "Saved to history: filterPathId=$filterPathId, mediaDbId=$mediaDbId, type=$typeOfMedia")
             }
         }
 
-        // ✅ NEW: Emit event so MainScreen can refresh history
+        // Emit event to refresh history in UI
         viewModelScope.launch {
             _videoChangedEvent.emit(Unit)
         }
     }
-
     /**
      * Called by the UI when a card's visibility changes.
      * If the active card becomes completely invisible, switch to mini‑player mode.
@@ -198,28 +257,6 @@ class PlayerViewModel @Inject constructor(
         }
         // Also tell controller to enter fullscreen mode (will be implemented later)
         playerController.setFullScreen(true)
-    }
-
-    /**
-     * Close the player completely (hide it and release resources).
-     */
-    fun closePlayer(filterPathId: Int?) {
-
-        _uiState.update { it.copy(isVisible = false, activeCardId = null) }
-
-        if (filterPathId != null ) {
-            viewModelScope.launch {
-                val entry = FilterPathContainsMediaRoomEntity(
-                    filterPathId = filterPathId,
-                    videoId = null,
-                    typeOfMedia = null
-                )
-                filterPathContainsMediaDao.insert(entry)
-                _currentFilterPathMedia.value = entry
-            }
-        }
-
-        playerController.release()
     }
 
     /**
@@ -310,45 +347,151 @@ class PlayerViewModel @Inject constructor(
 
     fun nextVideo(startInMiniMode: Boolean = false) {
         val state = _uiState.value
-        val videos = state.availableVideos ?: return
-        val currentIdx = state.currentIndex ?: return
-        if (currentIdx + 1 < videos.size) {
-            val nextVideo = videos[currentIdx + 1]
-            val nextVideoId = extractYouTubeVideoId(nextVideo.path)
-            if (nextVideoId != null) {
-                loadVideo(
-                    videoId = nextVideoId,
-                    cardId = nextVideo.locationId,
-                    currentFilterPath = state.filterPathAtLoad,
-                    startInMiniMode = startInMiniMode,
-                    mediaDbId = nextVideo.id,
-                    filterPathId = currentFilterPathId,
-                    typeOfMedia = 0
-                )
-                _uiState.update { it.copy(currentIndex = currentIdx + 1) }
+        Log.d(TAG, "nextVideo called, currentTypeOfMedia=${state.currentTypeOfMedia}")
+        when (state.currentTypeOfMedia) {
+            1 -> {  // Album mode
+                val songs = state.currentAlbumSongs
+                if (songs.isEmpty()) {
+                    Log.w(TAG, "Album mode but song list empty, cannot go next")
+                    return
+                }
+                val currentIdx = state.currentAlbumIndex ?: run {
+                    Log.w(TAG, "Album mode but currentAlbumIndex is null")
+                    return
+                }
+                if (currentIdx + 1 < songs.size) {
+                    val nextSong = songs[currentIdx + 1]
+                    nextSong.ytVideoId?.let { videoId ->
+                        Log.d(TAG, "Album next: playing song ${nextSong.songTitle} (id=${nextSong.songId})")
+                        loadVideo(
+                            videoId = videoId,
+                            cardId = "album_${state.currentAlbumId ?: return}",
+                            currentFilterPath = state.filterPathAtLoad,
+                            startInMiniMode = startInMiniMode,
+                            mediaDbId = nextSong.songId,
+                            filterPathId = currentFilterPathId,
+                            typeOfMedia = 1
+                        )
+                    } ?: Log.e(TAG, "Next song has no ytVideoId")
+                } else {
+                    Log.d(TAG, "Already at last song of album")
+                }
             }
+            0 -> {  // Educational mode
+                val videos = state.availableVideos ?: run {
+                    Log.w(TAG, "Educational mode but availableVideos is null")
+                    return
+                }
+                val currentIdx = state.currentIndex ?: run {
+                    Log.w(TAG, "Educational mode but currentIndex is null")
+                    return
+                }
+                if (currentIdx + 1 < videos.size) {
+                    val nextVideo = videos[currentIdx + 1]
+                    val nextVideoId = extractYouTubeVideoId(nextVideo.path)
+                    if (nextVideoId != null) {
+                        Log.d(TAG, "Educational next: playing video ${nextVideo.name} (id=${nextVideo.id})")
+                        loadVideo(
+                            videoId = nextVideoId,
+                            cardId = nextVideo.locationId,
+                            currentFilterPath = state.filterPathAtLoad,
+                            startInMiniMode = startInMiniMode,
+                            mediaDbId = nextVideo.id,
+                            filterPathId = currentFilterPathId,
+                            typeOfMedia = 0
+                        )
+                    } else {
+                        Log.e(TAG, "Next educational video has no YouTube ID")
+                    }
+                } else {
+                    Log.d(TAG, "Already at last educational video")
+                }
+            }
+            else -> Log.d(TAG, "No media type active, ignoring next")
         }
     }
 
     fun previousVideo(startInMiniMode: Boolean = false) {
         val state = _uiState.value
-        val videos = state.availableVideos ?: return
-        val currentIdx = state.currentIndex ?: return
-        if (currentIdx - 1 >= 0) {
-            val prevVideo = videos[currentIdx - 1]
-            val prevVideoId = extractYouTubeVideoId(prevVideo.path)
-            if (prevVideoId != null) {
-                loadVideo(
-                    videoId = prevVideoId,
-                    cardId = prevVideo.locationId,
-                    currentFilterPath = state.filterPathAtLoad,
-                    startInMiniMode = startInMiniMode,
-                    mediaDbId = prevVideo.id,
-                    filterPathId = currentFilterPathId,   // use the stored filter path ID
-                    typeOfMedia = 0
+        Log.d(TAG, "previousVideo called, currentTypeOfMedia=${state.currentTypeOfMedia}")
+        when (state.currentTypeOfMedia) {
+            1 -> {
+                val songs = state.currentAlbumSongs
+                if (songs.isEmpty()) {
+                    Log.w(TAG, "Album mode but song list empty, cannot go previous")
+                    return
+                }
+                val currentIdx = state.currentAlbumIndex ?: return
+                if (currentIdx - 1 >= 0) {
+                    val prevSong = songs[currentIdx - 1]
+                    prevSong.ytVideoId?.let { videoId ->
+                        Log.d(TAG, "Album previous: playing song ${prevSong.songTitle} (id=${prevSong.songId})")
+                        loadVideo(
+                            videoId = videoId,
+                            cardId = "album_${state.currentAlbumId ?: return}",
+                            currentFilterPath = state.filterPathAtLoad,
+                            startInMiniMode = startInMiniMode,
+                            mediaDbId = prevSong.songId,
+                            filterPathId = currentFilterPathId,
+                            typeOfMedia = 1
+                        )
+                    } ?: Log.e(TAG, "Previous song has no ytVideoId")
+                } else {
+                    Log.d(TAG, "Already at first song of album")
+                }
+            }
+            0 -> {
+                val videos = state.availableVideos ?: return
+                val currentIdx = state.currentIndex ?: return
+                if (currentIdx - 1 >= 0) {
+                    val prevVideo = videos[currentIdx - 1]
+                    val prevVideoId = extractYouTubeVideoId(prevVideo.path)
+                    if (prevVideoId != null) {
+                        Log.d(TAG, "Educational previous: playing video ${prevVideo.name} (id=${prevVideo.id})")
+                        loadVideo(
+                            videoId = prevVideoId,
+                            cardId = prevVideo.locationId,
+                            currentFilterPath = state.filterPathAtLoad,
+                            startInMiniMode = startInMiniMode,
+                            mediaDbId = prevVideo.id,
+                            filterPathId = currentFilterPathId,
+                            typeOfMedia = 0
+                        )
+                    } else {
+                        Log.e(TAG, "Previous educational video has no YouTube ID")
+                    }
+                } else {
+                    Log.d(TAG, "Already at first educational video")
+                }
+            }
+            else -> Log.d(TAG, "No media type active, ignoring previous")
+        }
+    }
+
+    fun closePlayer(filterPathId: Int?) {
+        Log.d(TAG, "closePlayer called, filterPathId=$filterPathId")
+        _uiState.update {
+            it.copy(
+                isVisible = false,
+                activeCardId = null,
+                currentTypeOfMedia = null,
+                currentAlbumId = null,
+                currentAlbumSongs = emptyList(),
+                currentAlbumIndex = null
+            )
+        }
+        if (filterPathId != null) {
+            viewModelScope.launch {
+                val entry = FilterPathContainsMediaRoomEntity(
+                    filterPathId = filterPathId,
+                    videoId = null,
+                    typeOfMedia = null
                 )
-                _uiState.update { it.copy(currentIndex = currentIdx - 1) }
+                filterPathContainsMediaDao.insert(entry)
+                _currentFilterPathMedia.value = entry
+                Log.d(TAG, "Inserted null entry for filterPathId=$filterPathId")
             }
         }
+        playerController.release()
     }
 }

@@ -954,13 +954,7 @@ fun VideoStatsRow(
         Log.d("VIDEOSTATROW", "controlsAccessible: $controlsAccessible")
     }
 
-    // Set currentTypeOfMedia based on which page is active
-    LaunchedEffect(pagerState.currentPage) {
-        when (pagerState.currentPage) {
-            0, 1 -> currentTypeOfMedia = 0 // educational media controls
-            3, 4 -> currentTypeOfMedia = 1 // album media controls
-        }
-    }
+
 
     fun isVideoIndexVisible(index: Int): Boolean {
         return if (index in 0 until videos.size) {
@@ -1005,30 +999,22 @@ fun VideoStatsRow(
         }
     }
 
-// In LaunchedEffect that triggers when pagerState.currentPage == 0
     LaunchedEffect(pagerState.currentPage) {
-        if (pagerState.currentPage == 1 && !playerUiState.isVisible && videos.isNotEmpty()) {
-            loadFirstVideo()
-        }
-
-        if (pagerState.currentPage == 1 && playerUiState.isVisible && currentMediaEntryTypeOfMedia != 0) {
-            loadFirstVideo()
-        }
-
-        if (pagerState.currentPage == 3 && !playerUiState.isVisible && currentAlbumSongs.isNotEmpty()) {
-            loadFirstSong()
-        }
-
-        if (pagerState.currentPage == 3 && playerUiState.isVisible && currentMediaEntryTypeOfMedia != 1) {
-            loadFirstSong()
-        }
-    }
-
-
-// Auto‑load the first song when page 3 becomes active
-    LaunchedEffect(pagerState.currentPage) {
-        if (pagerState.currentPage == 3 && !playerUiState.isVisible && currentAlbumSongs.isNotEmpty()) {
-            loadFirstSong()
+        when (pagerState.currentPage) {
+            1 -> {
+                // Only load educational video if not already playing educational media
+                if (!playerUiState.isVisible && videos.isNotEmpty() &&
+                    playerUiState.currentTypeOfMedia != 1) {
+                    loadFirstVideo()
+                }
+            }
+            3 -> {
+                // Only load album song if not already playing album media
+                if (!playerUiState.isVisible && currentAlbumSongs.isNotEmpty() &&
+                    playerUiState.currentTypeOfMedia != 0) {
+                    loadFirstSong()
+                }
+            }
         }
     }
 
@@ -1160,7 +1146,7 @@ fun VideoStatsRow(
                         IconButton(onClick = onPreviousClick, enabled = canGoPrevVideo) {
                             Icon(Icons.Default.SkipPrevious, contentDescription = "Previous")
                         }
-                        IconButton(onClick = onNextClick, enabled = canGoNextVideo) {
+                        IconButton(onClick = onNextClick) { //, enabled = canGoNextVideo
                             Icon(Icons.Default.SkipNext, contentDescription = "Next")
                         }
                         IconButton(onClick = {
@@ -3080,6 +3066,7 @@ fun SingleArtistView(
             if (albumsDisplay.isNotEmpty() && selectedAlbum != null) {
                 val album = selectedAlbum!!
                 val songs by viewModel.albumSongs.collectAsState()
+                val playerUiState by playerViewModel.uiState.collectAsState()
 
                 // Prepare data for the enhanced card
                 val thumbnailUrl = album.getThumbnailUrl()
@@ -3087,6 +3074,8 @@ fun SingleArtistView(
                 val youtubeVideoId = songs.firstOrNull()?.ytVideoId
                 // Get artists for this album (e.g., from albumArtistsMap)
                 val albumArtists = albumArtistsMap[album.albumId]?.map { it.artist } ?: emptyList()
+
+
 
                 AlbumPlayerCard(
                     album = album,
@@ -3101,7 +3090,7 @@ fun SingleArtistView(
                                 cardId = "album_${album.albumId}",
                                 currentFilterPath = null,
                                 startInMiniMode = false,
-                                mediaDbId = album.albumId,
+                                mediaDbId = songs.firstOrNull()?.songId,
                                 filterPathId = currentFilterPathId,
                                 typeOfMedia = 1
                             )

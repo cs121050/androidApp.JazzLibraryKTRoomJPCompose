@@ -9,5 +9,7 @@ interface SongRepository {
     suspend fun insertAllSongs(songs: List<Song>)
     suspend fun deleteAllSongs()
 
+    fun getSongById(songId: Int): Flow<Song?>
+
     fun getSongsByAlbumId(albumId: Int): Flow<List<Song>>
 }
