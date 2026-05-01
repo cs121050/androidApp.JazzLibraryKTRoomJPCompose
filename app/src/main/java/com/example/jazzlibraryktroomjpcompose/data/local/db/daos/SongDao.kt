@@ -2,6 +2,7 @@ package com.example.jazzlibraryktroomjpcompose.data.local.db.daos
 
 import androidx.room.*
 import com.example.jazzlibraryktroomjpcompose.data.local.db.entities.SongRoomEntity
+import com.example.jazzlibraryktroomjpcompose.domain.models.Song
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -17,6 +18,9 @@ interface SongDao {
 
     @Query("DELETE FROM songs")
     suspend fun deleteAllSongs()
+
+    @Query("SELECT * FROM songs WHERE song_id = :songId")
+    fun getSongById(songId: Int): Flow<SongRoomEntity>
 
     @Query("SELECT * FROM songs WHERE album_id = :albumId")
     fun getSongsByAlbumId(albumId: Int): Flow<List<SongRoomEntity>>

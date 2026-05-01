@@ -31,6 +31,12 @@ class SongRepositoryImpl @Inject constructor(
         database.songDao().deleteAllSongs()
     }
 
+    override fun getSongById(songId: Int): Flow<Song?> =
+        // Map the non‑nullable entity to nullable Song? to match the interface
+        database.songDao().getSongById(songId).map { entity ->
+            SongMapper.toDomain(entity) as Song?
+        }
+
     override fun getSongsByAlbumId(albumId: Int): Flow<List<Song>> =
         database.songDao().getSongsByAlbumId(albumId)
             .map { entities -> entities.map { SongMapper.toDomain(it) } }
