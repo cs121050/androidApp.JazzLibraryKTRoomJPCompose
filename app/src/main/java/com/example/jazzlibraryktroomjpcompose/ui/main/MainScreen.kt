@@ -3080,6 +3080,7 @@ fun SingleArtistView(
             if (albumsDisplay.isNotEmpty() && selectedAlbum != null) {
                 val album = selectedAlbum!!
                 val songs by viewModel.albumSongs.collectAsState()
+                val playerUiState by playerViewModel.uiState.collectAsState()
 
                 // Prepare data for the enhanced card
                 val thumbnailUrl = album.getThumbnailUrl()
@@ -3087,6 +3088,8 @@ fun SingleArtistView(
                 val youtubeVideoId = songs.firstOrNull()?.ytVideoId
                 // Get artists for this album (e.g., from albumArtistsMap)
                 val albumArtists = albumArtistsMap[album.albumId]?.map { it.artist } ?: emptyList()
+
+
 
                 AlbumPlayerCard(
                     album = album,
@@ -3101,7 +3104,7 @@ fun SingleArtistView(
                                 cardId = "album_${album.albumId}",
                                 currentFilterPath = null,
                                 startInMiniMode = false,
-                                mediaDbId = album.albumId,
+                                mediaDbId = songs.firstOrNull()?.songId,
                                 filterPathId = currentFilterPathId,
                                 typeOfMedia = 1
                             )
