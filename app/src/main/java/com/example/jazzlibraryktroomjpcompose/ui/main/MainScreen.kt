@@ -999,10 +999,30 @@ fun VideoStatsRow(
     LaunchedEffect(pagerState.currentPage) {
         when (pagerState.currentPage) {
             1 -> {
-                // Only load educational video if not already playing educational media
-                if (!playerUiState.isVisible && videos.isNotEmpty() &&
-                    playerUiState.currentTypeOfMedia != 1) {
-                    loadFirstVideo()
+                // Only auto‑start if nothing is currently playing
+                val nothingPlaying = !playerUiState.isVisible
+                if (!nothingPlaying) return@LaunchedEffect
+
+                when (currentTab) {
+                    MainTab.ARTISTS -> {
+                        // Try to start the first song of the first album
+                        val albumId = currentAlbumId
+                        val songs = currentAlbumSongs
+                        if (albumId != null && songs.isNotEmpty()) {
+                            val firstSong = songs.first()
+                            // startInMiniMode = false so the player attaches to the album card
+                            onLoadSong(firstSong, "album_$albumId", false)
+                        } else if (videos.isNotEmpty()) {
+                            // Fallback: educational video if no album available
+                            loadFirstVideo()
+                        }
+                    }
+                    MainTab.VIDEOS -> {
+                        if (videos.isNotEmpty()) {
+                            loadFirstVideo()
+                        }
+                    }
+                    else -> { /* History tab – do nothing */ }
                 }
             }
         }
