@@ -22,9 +22,10 @@ import com.example.jazzlibraryktroomjpcompose.data.local.db.entities.*
         FilterPathContainsMediaRoomEntity::class,
         SongRoomEntity::class,
         AlbumRoomEntity::class,
-        AlbumContainsArtistRoomEntity::class
+        AlbumContainsArtistRoomEntity::class,
+        SearchHistoryRoomEntity::class
     ],
-    version = 15,
+    version = 16,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -42,6 +43,9 @@ abstract class JazzDatabase : RoomDatabase() {
     abstract fun songDao(): SongDao
     abstract fun albumDao(): AlbumDao
     abstract fun albumContainsArtistDao(): AlbumContainsArtistDao
+    abstract fun searchHistoryDao(): SearchHistoryDao
+
+
 
     companion object {
         @Volatile

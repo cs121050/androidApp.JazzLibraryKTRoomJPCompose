@@ -57,6 +57,10 @@ abstract class RepositoryModule {
     @Singleton
     abstract fun bindFilterRepository(impl: JazzRepositoryImpl): FilterRepository
 
+    @Binds
+    @Singleton
+    abstract fun bindSearchHistoryRepository(impl: SearchHistoryRepositoryImpl): SearchHistoryRepository
+
     companion object {
         // Provide JazzRepositoryImpl as a concrete class for bootstrap operations
         @Provides

@@ -24,12 +24,14 @@ data class FilterPath(
         const val CATEGORY_ARTIST = 2
         const val CATEGORY_DURATION = 3
         const val CATEGORY_TYPE = 4
+        const val CATEGORY_SEARCH = 99   // ← new
 
         val CATEGORIES = listOf(
             CATEGORY_INSTRUMENT to "Instrument",
             CATEGORY_ARTIST to "Artist",
             CATEGORY_DURATION to "Duration",
-            CATEGORY_TYPE to "Type"
+            CATEGORY_TYPE to "Type",
+            CATEGORY_SEARCH to "Search"
         )
 
         fun getCategoryName(categoryId: Int): String {
