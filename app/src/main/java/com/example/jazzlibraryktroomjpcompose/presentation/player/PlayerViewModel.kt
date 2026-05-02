@@ -170,7 +170,6 @@
                     activeCardId = cardId
                 )
                 _playerSession.value = session
-                _uiState.update { it.copy(currentIndex = startIndex, currentAlbumIndex = startIndex) }
             }
 
             // Basic UI state
@@ -180,7 +179,6 @@
                     isVisible = true,
                     isInMiniMode = startInMiniMode,
                     activeCardId = cardId,
-                    filterPathAtLoad = currentFilterPath,
                     currentTypeOfMedia = typeOfMedia ?: 0
                 )
             }
@@ -189,7 +187,7 @@
 
             playerController.loadVideo(videoId, autoPlay = true)
             Log.d(TAG, "playback started for videoId=$videoId")
-    
+
             // Save to history (filter_path_contains_media)
             if (mediaDbId != null && filterPathId != null && filterPathId > 0) {
                 viewModelScope.launch {
@@ -203,68 +201,13 @@
                     Log.d(TAG, "Saved to history: filterPathId=$filterPathId, mediaDbId=$mediaDbId, type=$typeOfMedia")
                 }
             }
-    
+
             // Emit event to refresh history in UI
             viewModelScope.launch {
                 _videoChangedEvent.emit(Unit)
             }
         }
-        /**
-         * Called by the UI when a card's visibility changes.
-         * If the active card becomes completely invisible, switch to mini‑player mode.
-         * If it becomes visible again, switch back to card‑attached mode.
-         */
-        fun onCardVisibilityChanged(cardId: String, isVisible: Boolean) {
-            val current = _uiState.value
-            // Only react if this is the active card
-            if (cardId == current.activeCardId) {
-                _uiState.update { it.copy(isInMiniMode = !isVisible) }
-            }
-        }
-    
-        /**
-         * User tapped the right corner of the mini‑player.
-         * This should scroll the list to the active card if it exists, otherwise restore the original filter path.
-         */
-        fun onMiniPlayerRightTap() {
-            val current = _uiState.value
-            val activeCardId = current.activeCardId
-            if (activeCardId != null) {
-                // Request scrolling to the card (UI will handle actual scroll)
-                viewModelScope.launch {
-                    _playerEvents.emit(PlayerEvent.ScrollToCard(activeCardId))
-                }
-            } else if (!current.filterPathAtLoad.isNullOrEmpty()) {
-                // No active card – restore the original filter path to bring back the video's context
-                viewModelScope.launch {
-                    _playerEvents.emit(PlayerEvent.RestoreFilterPath(current.filterPathAtLoad))
-                }
-            }
-            // If no filter path either, do nothing (maybe video was loaded directly)
-        }
-    
-        /**
-         * User tapped the left corner of the mini‑player (play/pause).
-         */
-        fun onMiniPlayerLeftTap() {
-            if (_uiState.value.isPlaying) {
-                playerController.pause()
-            } else {
-                playerController.play()
-            }
-        }
-    
-        /**
-         * User tapped the center of the mini‑player (go fullscreen).
-         */
-        fun onMiniPlayerCenterTap() {
-            viewModelScope.launch {
-                _playerEvents.emit(PlayerEvent.RequestFullScreen)
-            }
-            // Also tell controller to enter fullscreen mode (will be implemented later)
-            playerController.setFullScreen(true)
-        }
-    
+
         /**
          * Called when the player successfully moves back to a card after scrolling.
          * This updates the UI state.
@@ -272,26 +215,12 @@
         fun onPlayerMovedToCard() {
             _uiState.update { it.copy(isInMiniMode = false) }
         }
-    
-        /**
-         * Called when the player moves to mini‑player mode (e.g., after card scrolls off‑screen).
-         */
-        fun onPlayerMovedToMini() {
-            _uiState.update { it.copy(isInMiniMode = true) }
-        }
-    
-        /**
-         * Clear the stored filter path (e.g., after it has been restored).
-         */
-        fun clearStoredFilterPath() {
-            _uiState.update { it.copy(filterPathAtLoad = null) }
-        }
-    
+
         override fun onCleared() {
             playerController.release()
             super.onCleared()
         }
-    
+
         fun setPlayer(youTubePlayer: YouTubePlayer) {
             viewModelScope.launch {
                 // Since setPlayer is only in the implementation (not in the interface),
@@ -306,16 +235,11 @@
         fun minimizePlayer() {
             _uiState.update { it.copy(isInMiniMode = true) }
         }
-    
+
         fun restoreFullMode() {
             _uiState.update { it.copy(isInMiniMode = false) }
         }
-    
-    
-        fun seekTo(positionMs: Long) {
-            playerController.seekTo(positionMs)
-        }
-    
+
         fun rewind10Seconds() {
             val newPosition = (_uiState.value.playbackPosition - 10000).coerceAtLeast(0)
             playerController.seekTo(newPosition)
