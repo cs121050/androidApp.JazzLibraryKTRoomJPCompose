@@ -925,7 +925,7 @@ fun VideoStatsRow(
 
     val pagerState = rememberPagerState(
         initialPage = if (controlsAccessible) 1 else 2,
-        pageCount = { 4 }   // 4 pages (0..3)
+        pageCount = { 3 }   // 3 pages (0..2)
     )
     val coroutineScope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -944,10 +944,7 @@ fun VideoStatsRow(
     val isOnAlbumPages = pagerState.currentPage == 3 || pagerState.currentPage == 4
 
     LaunchedEffect(isVideoPlaying) {
-        if (isOnAlbumPages) {
-            if (controlsAccessible && pagerState.currentPage != 3)
-                pagerState.animateScrollToPage(3)
-        } else {
+        if (!isOnAlbumPages) {
             if (controlsAccessible && pagerState.currentPage != 1)
                 pagerState.animateScrollToPage(1)
         }
@@ -1006,13 +1003,6 @@ fun VideoStatsRow(
                 if (!playerUiState.isVisible && videos.isNotEmpty() &&
                     playerUiState.currentTypeOfMedia != 1) {
                     loadFirstVideo()
-                }
-            }
-            3 -> {
-                // Only load album song if not already playing album media
-                if (!playerUiState.isVisible && currentAlbumSongs.isNotEmpty() &&
-                    playerUiState.currentTypeOfMedia != 0) {
-                    loadFirstSong()
                 }
             }
         }
@@ -1224,96 +1214,6 @@ fun VideoStatsRow(
                                 contentDescription = if (isPlayerVisible) "Hide players" else "Show players",
                                 tint = if (isPlayerVisible) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                             )
-                        }
-                    }
-                }
-
-                3 -> {
-                    // Playback controls for album songs
-
-                    val currentIndex = getCurrentSongIndex(currentPlayingSongId, currentAlbumSongs)
-                    val canGoPrev = currentIndex > 0
-                    val canGoNext = currentIndex < currentAlbumSongs.size - 1
-
-                    val redWashed = Color(0xFFE8C0CE)
-
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(0.dp)
-                    ) {
-                        IconButton(
-                            onClick = {
-                                val newIndex = currentIndex - 1
-                                if (newIndex >= 0) {
-                                    val song = currentAlbumSongs[newIndex]
-                                    val startInMiniMode = when {
-                                        currentTab != MainTab.ARTISTS -> true
-                                        else -> !isAlbumCardVisible()
-                                    }
-                                    onLoadSong(
-                                        song,
-                                        "album_${currentAlbumId ?: return@IconButton}",
-                                        startInMiniMode
-                                    )
-                                }
-                            },
-                            enabled = currentIndex > 0
-                        ) {
-                            Icon(Icons.Default.SkipPrevious,
-                                contentDescription = "Previus Song",
-                                tint = redWashed )
-                        }
-
-                        IconButton(
-                            onClick = {
-                                if (canGoNext) {
-                                    val nextSong = currentAlbumSongs[currentIndex + 1]
-                                    val startInMiniMode = when {
-                                        currentTab != MainTab.ARTISTS -> true
-                                        else -> !isAlbumCardVisible()   // no index needed
-                                    }
-                                    onLoadSong(
-                                        nextSong,
-                                        "album_${currentAlbumId ?: return@IconButton}",
-                                        startInMiniMode
-                                    )
-                                }
-                            },
-                            enabled = canGoNext
-                        ) {
-                            Icon(Icons.Default.SkipNext,
-                                contentDescription = "Next Song",
-                                tint = redWashed )
-                        }
-
-                        IconButton(
-                            onClick = {
-                                // Close album player and go back to page 2
-                                coroutineScope.launch {
-                                    onClose()                     // close the player
-                                    pagerState.animateScrollToPage(2)
-                                }
-                            }
-                        ) {
-                            Icon(Icons.Default.Close,
-                                contentDescription = "Close Album Player",
-                                tint = redWashed )
-                        }
-                    }
-                }
-
-                4 -> {
-                    // Extra controls for album player (mirror page 0)
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(0.dp)
-                    ) {
-                        IconButton(onClick = { /* share - maybe share song link? */ }) {
-                            Icon(Icons.Default.Share, contentDescription = "Share")
-                        }
-                        IconButton(onClick = { /* cast */ }) {
-                            Icon(Icons.Default.Cast, contentDescription = "Cast")
-                        }
-                        IconButton(onClick = { /* back – could close player or navigate? */ }) {
-                            Icon(Icons.Default.ArrowBack, contentDescription = "Back")
                         }
                     }
                 }
@@ -2973,6 +2873,32 @@ fun SingleArtistView(
     val imageHeight = if (hasThumbnail) 300.dp else 150.dp
 
     val listState = rememberLazyListState()     // lazy list state for scrolling
+
+    // 1. Auto‑minimise when album card scrolls out of view
+    val albumCardIndex = 4  // because AlbumPlayerCard is the 5th item (0‑based)
+    val currentAlbumCardId = selectedAlbum?.let { "album_${it.albumId}" }
+
+    LaunchedEffect(
+        listState.layoutInfo.visibleItemsInfo,
+        playerUiState.isVisible,
+        playerUiState.isInMiniMode,
+        currentAlbumCardId,
+        playerUiState.activeCardId
+    ) {
+        if (currentAlbumCardId != null && playerUiState.isVisible) {
+            val isCardVisible = listState.layoutInfo.visibleItemsInfo.any { it.index == albumCardIndex }
+            val isActiveCard = playerUiState.activeCardId == currentAlbumCardId
+
+            when {
+                isActiveCard && isCardVisible && playerUiState.isInMiniMode -> {
+                    playerViewModel.restoreFullMode()
+                }
+                isActiveCard && !isCardVisible && !playerUiState.isInMiniMode -> {
+                    playerViewModel.minimizePlayer()
+                }
+            }
+        }
+    }
 
     // SingleArtistView.kt – after listState is defined
     LaunchedEffect(listState.layoutInfo) {
