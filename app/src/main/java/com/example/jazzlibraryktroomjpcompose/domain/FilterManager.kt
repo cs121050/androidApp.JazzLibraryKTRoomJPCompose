@@ -52,31 +52,31 @@ class FilterManager @Inject constructor(
             val artistFilter = filterPath.find { it.categoryId == FilterPath.CATEGORY_ARTIST }
             val durationFilter = filterPath.find { it.categoryId == FilterPath.CATEGORY_DURATION }
             val typeFilter = filterPath.find { it.categoryId == FilterPath.CATEGORY_TYPE }
+            val searchFilter = filterPath.find { it.categoryId == FilterPath.CATEGORY_SEARCH }
+            val searchMode = searchFilter?.entityId ?: -1   // 0=video,1=artist,2=album
+            val searchQuery = searchFilter?.entityName ?: ""
 
             // Get filtered videos
             val videosFlow = database.videoDao().getVideosByMultipleFilters(
                 instrumentId = instrumentFilter?.entityId ?: 0,
                 artistId = artistFilter?.entityId ?: 0,
                 durationId = durationFilter?.entityId ?: 0,
-                typeId = typeFilter?.entityId ?: 0
+                typeId = typeFilter?.entityId ?: 0,
+                searchQuery = searchQuery
             )
 
             val albumsFlow = if (artistFilter != null) {
-                Log.d("FilterManager", "Using artist filter: artistId=${artistFilter.entityId}, instrumentId=${instrumentFilter?.entityId ?: 0}")
                 database.albumDao().getAlbumsByArtistAndInstrumentWithMainFlag(
                     artistId = artistFilter.entityId,
-                    instrumentId = instrumentFilter?.entityId ?: 0
-                ).onEach { albums ->
-                    Log.d("FilterManager", "getAlbumsByArtistAndInstrumentWithMainFlag returned ${albums.size} albums")
-                }
+                    instrumentId = instrumentFilter?.entityId ?: 0,
+                    searchQuery = searchQuery
+                )
             } else {
-                Log.d("FilterManager", "Using generic filter: instrumentId=${instrumentFilter?.entityId ?: 0}, artistId=0")
                 database.albumDao().getAlbumByMultipleFilters(
                     instrumentId = instrumentFilter?.entityId ?: 0,
-                    artistId = 0
-                ).onEach { albums ->
-                    Log.d("FilterManager", "getAlbumByMultipleFilters returned ${albums.size} albums")
-                }
+                    artistId = 0,
+                    searchQuery = searchQuery
+                )
             }
 
 
@@ -109,7 +109,8 @@ class FilterManager @Inject constructor(
             val artistsFlowWithCount = database.artistDao().getArtistsWithVideoCountByMultipleFilters(
                 instrumentId = instrumentFilter?.entityId ?: 0,
                 typeId = typeFilter?.entityId ?: 0,
-                durationId = durationFilter?.entityId ?: 0
+                durationId = durationFilter?.entityId ?: 0,
+                searchQuery = searchQuery
             )
             // Get instruments WITH COUNT - add this new method to your DAO
             val instrumentsFlowWithCount = database.instrumentDao().getInstrumentsWithVideoCountByMultipleFilters(

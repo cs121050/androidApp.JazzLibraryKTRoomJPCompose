@@ -227,14 +227,17 @@ interface VideoDao {
       AND (:durationId = 0 OR v.duration_id = :durationId)
       AND (:artistId = 0 OR vca.artist_id = :artistId)
       AND v.video_availability = '1'
+      AND (v.video_name LIKE '%' || :searchQuery || '%')
     ORDER BY v.video_name
 """)
     fun getVideosByMultipleFilters(
         instrumentId: Int = 0,
         artistId: Int = 0,
         durationId: Int = 0,
-        typeId: Int = 0
+        typeId: Int = 0,
+        searchQuery: String = ""
     ): Flow<List<VideoRoomEntity>>
+
 
 
 }

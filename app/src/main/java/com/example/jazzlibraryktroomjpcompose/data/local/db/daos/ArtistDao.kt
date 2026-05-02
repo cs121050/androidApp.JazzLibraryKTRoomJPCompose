@@ -152,12 +152,14 @@ interface ArtistDao {
     WHERE (:instrumentId = 0 OR a.instrument_id = :instrumentId)
       AND (:typeId = 0 OR v.type_id = :typeId)
       AND (:durationId = 0 OR v.duration_id = :durationId)
+      AND (a.artist_name LIKE '%' || :searchQuery || '%')
     ORDER BY a.artist_name
 """)
     fun getArtistsByMultipleFilters(
         instrumentId: Int = 0,
         typeId: Int = 0,
-        durationId: Int = 0
+        durationId: Int = 0,
+        searchQuery: String = ""
     ): Flow<List<ArtistRoomEntity>>
 
     @Query("""
@@ -168,12 +170,14 @@ LEFT JOIN videos v ON vca.video_id = v.video_id
 WHERE (:instrumentId = 0 OR a.instrument_id = :instrumentId)
   AND (:typeId = 0 OR v.type_id = :typeId)
   AND (:durationId = 0 OR v.duration_id = :durationId)
+  AND (a.artist_name LIKE '%' || :searchQuery || '%')
 GROUP BY a.artist_id, a.artist_name, a.artist_surname, a.artist_rank 
 ORDER BY a.artist_name
 """)
     fun getArtistsWithVideoCountByMultipleFilters(
         instrumentId: Int = 0,
         typeId: Int = 0,
-        durationId: Int = 0
+        durationId: Int = 0,
+        searchQuery: String = ""
     ): Flow<List<ArtistWithVideoCount>>
 }

@@ -43,9 +43,14 @@ interface AlbumDao {
     JOIN artists art ON art.artist_id = aca.artist_id
     WHERE aca.artist_id = :artistId
       AND (:instrumentId = 0 OR art.instrument_id = :instrumentId)
+      AND (a.title LIKE '%' || :searchQuery || '%')
     ORDER BY a.title DESC
 """)
-    fun getAlbumsByArtistAndInstrumentWithMainFlag(artistId: Int, instrumentId: Int): Flow<List<AlbumWithIsMainFlag>>
+    fun getAlbumsByArtistAndInstrumentWithMainFlag(
+        artistId: Int,
+        instrumentId: Int,
+        searchQuery: String = ""
+        ): Flow<List<AlbumWithIsMainFlag>>
 
     // Single filter – by instrument
     @Query("""
@@ -67,9 +72,14 @@ interface AlbumDao {
     WHERE (:instrumentId = 0 OR art.instrument_id = :instrumentId)
       AND (:artistId = 0 OR aca.artist_id = :artistId)
       AND aca.is_main = 1
+      AND (a.title LIKE '%' || :searchQuery || '%')
     ORDER BY a.title DESC
 """)
-    fun getAlbumByMultipleFilters(instrumentId: Int, artistId: Int): Flow<List<AlbumWithIsMainFlag>>
+    fun getAlbumByMultipleFilters(
+        instrumentId: Int,
+        artistId: Int,
+        searchQuery: String = ""
+    ): Flow<List<AlbumWithIsMainFlag>>
 
     @Query("SELECT * FROM albums ORDER BY released DESC")
     fun getAllAlbumsSortedByReleaseDateDesc(): Flow<List<AlbumRoomEntity>>
