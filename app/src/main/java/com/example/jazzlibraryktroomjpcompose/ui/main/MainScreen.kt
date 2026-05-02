@@ -2061,19 +2061,21 @@ fun ArtistContent(
             selectedAlbum = null
             viewModel.setCurrentAlbumId(null)  // Clear current album
         } else {
-            val artist = artistsBase.find { it.id == artistFilter.entityId }
-            if (artist != null) {
-                // Find albums for this artist
-                val artistAlbums = albumsDisplay.filter { album ->
-                    albumArtistsMap[album.albumId]?.any { it.artist.id == artist.id } == true
-                }
-                if (artistAlbums.isNotEmpty()) {
-                    val firstAlbum = artistAlbums.first()
-                    selectedAlbum = firstAlbum
-                    viewModel.setCurrentAlbumId(firstAlbum.albumId)
-                } else {
-                    selectedAlbum = null
-                    viewModel.setCurrentAlbumId(null)
+            // Only auto-select a default album if the user hasn't already picked one
+            if (selectedAlbum == null) {
+                val artist = artistsBase.find { it.id == artistFilter.entityId }
+                if (artist != null) {
+                    val artistAlbums = albumsDisplay.filter { album ->
+                        albumArtistsMap[album.albumId]?.any { it.artist.id == artist.id } == true
+                    }
+                    if (artistAlbums.isNotEmpty()) {
+                        val firstAlbum = artistAlbums.first()
+                        selectedAlbum = firstAlbum
+                        viewModel.setCurrentAlbumId(firstAlbum.albumId)
+                    } else {
+                        selectedAlbum = null
+                        viewModel.setCurrentAlbumId(null)
+                    }
                 }
             }
         }
@@ -2752,75 +2754,59 @@ fun SingleArtistView(
     var showFullscreenImage by remember { mutableStateOf(false) }
 
     // State to hold the selected album for the video card
+// Track the album the user actually wants (from click or initial selection)
+    var requestedAlbumId by remember { mutableStateOf(initialSelectedAlbum?.albumId) }
+
+// The actual currently selected album (used for display)
     var selectedAlbum by remember { mutableStateOf<Album?>(null) }
-    var isDefaultSelection by remember { mutableStateOf(true) } // true until user picks an album
+    var isDefaultSelection by remember { mutableStateOf(true) } // true until user picks
 
-// Automatically select the first album from albumsDisplay when available
-    LaunchedEffect(albumsDisplay, initialSelectedAlbum) {
-        Log.d("SingleArtistView", "🔄 Default selection effect triggered")
-        Log.d(
-            "SingleArtistView",
-            "   isDefaultSelection=$isDefaultSelection, selectedAlbum=${selectedAlbum?.title}"
-        )
-        Log.d("SingleArtistView", "   initialSelectedAlbum=${initialSelectedAlbum?.title}")
-
-        when {
-            initialSelectedAlbum != null && albumsDisplay.any { it.albumId == initialSelectedAlbum.albumId } -> {
-                Log.d(
-                    "SingleArtistView",
-                    "✅ Using initialSelectedAlbum: ${initialSelectedAlbum.title}"
-                )
-                selectedAlbum = initialSelectedAlbum
+// Watch for changes in albumsDisplay and requestedAlbumId
+    LaunchedEffect(albumsDisplay, requestedAlbumId) {
+        // First, if we have a requested album ID and it's now in albumsDisplay, select it
+        if (requestedAlbumId != null) {
+            val found = albumsDisplay.find { it.albumId == requestedAlbumId }
+            if (found != null && selectedAlbum?.albumId != requestedAlbumId) {
+                selectedAlbum = found
                 isDefaultSelection = false
+                viewModel.setCurrentAlbumId(found.albumId)
+                viewModel.loadAlbumSongs(found.albumId)
             }
+        }
+        // Second, if no requested album and no selection yet, fall back to first album
+        if (requestedAlbumId == null && selectedAlbum == null && albumsDisplay.isNotEmpty() && isDefaultSelection) {
+            val first = albumsDisplay.first()
+            selectedAlbum = first
+            viewModel.setCurrentAlbumId(first.albumId)
+            viewModel.loadAlbumSongs(first.albumId)
+        }
+    }
 
-            selectedAlbum == null && albumsDisplay.isNotEmpty() && isDefaultSelection -> {
-                val firstAlbum = albumsDisplay.first()
-                Log.d(
-                    "SingleArtistView",
-                    "🎯 Setting default album to FIRST: ${firstAlbum.title} (id=${firstAlbum.albumId})"
-                )
-                selectedAlbum = firstAlbum
-                // isDefaultSelection remains true
-            }
-
-            else -> {
-                Log.d(
-                    "SingleArtistView",
-                    "⚠️ No default set. Reasons: selectedAlbum=${selectedAlbum?.title}, albumsDisplay.isEmpty=${albumsDisplay.isEmpty()}, isDefaultSelection=$isDefaultSelection"
-                )
+// Update requestedAlbumId when a new initialSelectedAlbum comes from outside
+    LaunchedEffect(initialSelectedAlbum) {
+        if (initialSelectedAlbum != null && initialSelectedAlbum.albumId != requestedAlbumId) {
+            requestedAlbumId = initialSelectedAlbum.albumId
+            isDefaultSelection = false
+            // If the album is already in albumsDisplay, select it immediately
+            val existing = albumsDisplay.find { it.albumId == requestedAlbumId }
+            if (existing != null) {
+                selectedAlbum = existing
+                viewModel.setCurrentAlbumId(existing.albumId)
+                viewModel.loadAlbumSongs(existing.albumId)
+            } else {
+                // Not yet available – will be picked up when albumsDisplay changes
+                selectedAlbum = null
             }
         }
     }
 
-    LaunchedEffect(albumsDisplay) {
-        Log.d("SingleArtistView", "🔄 albumsDisplay changed (for default update check)")
-        if (isDefaultSelection && albumsDisplay.isNotEmpty()) {
-            val newFirst = albumsDisplay.first()
-            Log.d(
-                "SingleArtistView",
-                "🆙 Updating default selection to new first album: ${newFirst.title} (was ${selectedAlbum?.title})"
-            )
-            selectedAlbum = newFirst
-        } else if (isDefaultSelection && albumsDisplay.isEmpty()) {
-            Log.d("SingleArtistView", "❌ albumsDisplay empty, clearing selectedAlbum")
-            selectedAlbum = null
-        } else {
-            Log.d(
-                "SingleArtistView",
-                "⏸️ No update: isDefaultSelection=$isDefaultSelection, albumsDisplay.isEmpty=${albumsDisplay.isEmpty()}"
-            )
-        }
-    }
 
 // Wrap the original onAlbumSelected to update our state
     val handleAlbumSelected: (Album) -> Unit = { album ->
-        Log.d(
-            "SingleArtistView",
-            "🖱️ handleAlbumSelected called with album: ${album.title} (id=${album.albumId})"
-        )
+        Log.d("SingleArtistView", "🖱️ handleAlbumSelected called with album: ${album.title} (id=${album.albumId})")
+        requestedAlbumId = album.albumId
         selectedAlbum = album
-        isDefaultSelection = false   // user took control
+        isDefaultSelection = false
         viewModel.setCurrentAlbumId(album.albumId)
         onAlbumSelected(album)
     }
