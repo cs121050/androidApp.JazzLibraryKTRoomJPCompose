@@ -8,5 +8,6 @@ data class FilterHistoryEntry(
     val videoId: Int?,
     val videoName: String?,
     val videoPath: String?,
-    val locationId: String?
+    val locationId: String?,
+    val typeOfMedia: Int?
 )

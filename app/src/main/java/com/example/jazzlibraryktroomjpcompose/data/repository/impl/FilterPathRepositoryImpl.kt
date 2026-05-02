@@ -72,7 +72,8 @@ class FilterPathRepositoryImpl @Inject constructor(
                 videoId = daoEntry.videoId,
                 videoName = daoEntry.videoName,
                 videoPath = daoEntry.videoPath,
-                locationId = daoEntry.locationId
+                locationId = daoEntry.locationId,
+                typeOfMedia = daoEntry.typeOfMedia
             )
         }
     }

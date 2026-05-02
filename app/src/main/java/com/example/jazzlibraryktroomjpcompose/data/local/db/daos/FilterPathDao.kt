@@ -35,7 +35,8 @@ interface FilterPathDao {
         val videoId: Int?,
         val videoName: String?,
         val videoPath: String?,
-        val locationId: String?
+        val locationId: String?,
+        val typeOfMedia: Int?
     )
 
     @Query("""
@@ -46,13 +47,14 @@ interface FilterPathDao {
         v.video_id AS videoId,
         v.video_name AS videoName,
         v.video_path AS videoPath,
-        v.location_id AS locationId
+        v.location_id AS locationId,
+        fcv.type_of_media AS typeOfMedia   -- ← add this column
     FROM filter_path f
     LEFT JOIN filter_path_contains_media fcv ON fcv.filter_path_room_entity_id = f.id
     LEFT JOIN videos v ON v.video_id = fcv.video_id
     ORDER BY f.timestamp DESC
 """)
-    suspend  fun getAllHistoryEntries(): List<HistoryEntry>
+    suspend fun getAllHistoryEntries(): List<HistoryEntry>
 
     @Query("DELETE FROM filter_path")
     suspend fun deleteAll()

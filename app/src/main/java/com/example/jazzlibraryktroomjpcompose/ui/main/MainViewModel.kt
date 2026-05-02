@@ -714,8 +714,10 @@ class MainViewModel @Inject constructor(
             // Get all history entries from repository (returns List<FilterHistoryEntry>)
             val rawEntries = filterPathRepository.getAllHistoryEntries()
 
+
             // Group by filterPathId (each path corresponds to one filter_path row)
-            val grouped = rawEntries.groupBy { it.filterPathId }
+            val grouped = rawEntries
+                .groupBy { it.filterPathId }
             val result = mutableListOf<HistoryGroupItem>()
 
             for ((filterPathId, entries) in grouped) {
@@ -725,7 +727,9 @@ class MainViewModel @Inject constructor(
                 val enrichedPaths = enrichFilterPathNames(filterPaths)
 
                 // Collect videos associated with this filter path (distinct by videoId)
-                val videos = entries.mapNotNull { entry ->
+                val videos = entries
+                    .filter { it.typeOfMedia == 0 }
+                    .mapNotNull { entry ->
                     entry.videoId?.let { videoId ->
                         // Use videoRepository to fetch the full Video domain object
                         videoRepository.getVideoById(videoId).firstOrNull()
