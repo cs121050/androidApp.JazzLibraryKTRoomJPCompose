@@ -1,3 +1,4 @@
+
 package com.example.jazzlibraryktroomjpcompose.ui.main
 
 import android.app.Activity
@@ -147,6 +148,9 @@ import kotlinx.coroutines.Job
 import java.text.DecimalFormat
 import kotlin.coroutines.cancellation.CancellationException
 
+import com.example.jazzlibraryktroomjpcompose.presentation.player.PlayerSession
+import com.example.jazzlibraryktroomjpcompose.presentation.player.PlaylistItem
+
 enum class AlbumGridTab { MAIN, FEATURED }
 enum class SortDirection { ASC, DESC }
 
@@ -230,20 +234,12 @@ fun MainScreen(
     val currentAlbumSongs by viewModel.albumSongs.collectAsState()
     val currentPlayingSongId by playerViewModel.currentVideoDbIdState.collectAsState()
 
-    val onLoadSong: (Song, String, Boolean) -> Unit = { song, _, startInMiniMode ->
-        song.ytVideoId?.let { videoId ->
-            playerViewModel.loadVideo(
-                videoId = videoId,
-                cardId = "album_${viewModel.currentAlbumId.value}",   // ✅ uses current album ID
-                currentFilterPath = filterState.currentFilterPath,
-                startInMiniMode = startInMiniMode,
-                mediaDbId = song.songId,
-                filterPathId = currentFilterPathId,
-                typeOfMedia = 1
-            )
-        }
-    }
 
+
+
+    LaunchedEffect(isPlayerVisible) {
+        playerViewModel.onGlobalPlayerVisibilityChanged(isPlayerVisible)
+    }
 
     LaunchedEffect(isLandscape, playerUiState.isVisible) {
         viewModel.setFullscreen(isLandscape && playerUiState.isVisible)
@@ -330,9 +326,7 @@ fun MainScreen(
                 uiState.filteredVideos
             }
 
-            LaunchedEffect(videosToShow) {
-                playerViewModel.updatePlaylist(videosToShow)
-            }
+
 
             // ----- CHIPS ROW (fixed) -----
             if (!isFullscreen) {
@@ -429,7 +423,6 @@ fun MainScreen(
                                 viewModel = viewModel,
                                 currentAlbumSongs = currentAlbumSongs,
                                 currentPlayingSongId = currentPlayingSongId,
-                                onLoadSong = onLoadSong,
                                 currentAlbumId = viewModel.currentAlbumId.value,
                                 currentMediaEntryTypeOfMedia = currentMediaEntryTypeOfMedia,
                                 onTogglePlayerVisibility = { viewModel.togglePlayerVisibility() }
@@ -476,6 +469,7 @@ fun MainScreen(
                                                 videoId
                                             )
                                         },
+                                        currentTab = currentTab,
                                         viewModel = viewModel
                                     )
 
@@ -532,6 +526,7 @@ fun MainScreen(
                                     MainTab.HISTORY -> HistoryContent(
                                         modifier = Modifier.fillMaxSize(),
                                         viewModel = viewModel,
+                                        playerUiState = playerUiState,
                                         playerViewModel = playerViewModel,
                                         onRefresh = { viewModel.refreshHistory() },
                                         isPlayerVisible = isPlayerVisible
@@ -810,8 +805,7 @@ fun toolbarBox(
     currentAlbumSongs: List<Song>,
     currentPlayingSongId: Int?,
     currentAlbumId: Int?,
-    currentMediaEntryTypeOfMedia: Int?,
-    onLoadSong: (Song, String, Boolean) -> Unit
+    currentMediaEntryTypeOfMedia: Int?
 ) {
     SearchBar(
         onFilterClick = onFilterClick,
@@ -839,7 +833,6 @@ fun toolbarBox(
         isAlbumCardVisible = { viewModel.isCurrentAlbumCardVisible.value },
         currentAlbumSongs = currentAlbumSongs,
         currentPlayingSongId = currentPlayingSongId,
-        onLoadSong = onLoadSong,
         currentAlbumId = currentAlbumId,
         currentMediaEntryTypeOfMedia = currentMediaEntryTypeOfMedia,
         modifier = Modifier.fillMaxWidth()
@@ -911,13 +904,18 @@ fun VideoStatsRow(
     currentFilterPathId: Int?,
     currentAlbumSongs: List<Song>,           // songs of the currently selected album (empty if none)
     currentPlayingSongId: Int?,              // from playerViewModel.currentVideoDbIdState
-    onLoadSong: (song: Song, cardId: String, startInMiniMode: Boolean) -> Unit, // callback to play a song
     isAlbumCardVisible: () -> Boolean,
     currentAlbumId: Int?,
     currentMediaEntryTypeOfMedia: Int?,
     modifier: Modifier = Modifier
 ) {
 
+    val playerSession by playerViewModel.playerSession.collectAsState()
+
+    val canGoPrev = playerSession?.let { it.currentIndex > 0 } ?: false
+    val canGoNext = playerSession?.let { it.currentIndex < it.playlist.size - 1 } ?: false
+
+    val isActiveCardVisible by playerViewModel.isActiveCardVisible.collectAsState()
 
     val playerUiState by playerViewModel.uiState.collectAsState()
     val isVideoPlaying = playerUiState.isVisible && playerUiState.currentVideoId != null
@@ -960,20 +958,6 @@ fun VideoStatsRow(
         } else false
     }
 
-
-    // Function to load the first song (similar to loadFirstVideo)
-    fun loadFirstSong() {
-        if (currentAlbumSongs.isNotEmpty()) {
-            val firstSong = currentAlbumSongs.first()
-            val startInMiniMode = when {
-                currentTab != MainTab.ARTISTS -> true
-                else -> !isAlbumCardVisible()
-            }
-            onLoadSong(firstSong, "album_${currentAlbumId ?: return}", startInMiniMode)
-            //                                  ^^^^^^^^^^^^^^^ correct card ID
-        }
-    }
-
     val loadFirstVideo: () -> Unit = {
         if (videos.isNotEmpty()) {
             val firstVideo = videos.first()
@@ -981,8 +965,10 @@ fun VideoStatsRow(
             if (videoId != null) {
                 val startInMiniMode = when {
                     currentTab != MainTab.VIDEOS -> true
-                    else -> !isVideoIndexVisible(0)   // first video's index is 0
+                    else -> !isVideoIndexVisible(0)   // index 0 for first video
                 }
+                val playlist = videos.map { PlaylistItem.VideoItem(it) }
+                val startIndex = 0
                 playerViewModel.loadVideo(
                     videoId = videoId,
                     cardId = firstVideo.locationId,
@@ -990,7 +976,9 @@ fun VideoStatsRow(
                     startInMiniMode = startInMiniMode,
                     mediaDbId = firstVideo.id,
                     filterPathId = currentFilterPathId,
-                    typeOfMedia = currentTypeOfMedia
+                    typeOfMedia = 0,
+                    playlist = playlist,
+                    startIndex = startIndex
                 )
             }
         }
@@ -1005,15 +993,24 @@ fun VideoStatsRow(
 
                 when (currentTab) {
                     MainTab.ARTISTS -> {
-                        // Try to start the first song of the first album
                         val albumId = currentAlbumId
                         val songs = currentAlbumSongs
                         if (albumId != null && songs.isNotEmpty()) {
                             val firstSong = songs.first()
-                            // startInMiniMode = false so the player attaches to the album card
-                            onLoadSong(firstSong, "album_$albumId", false)
+                            val playlist = songs.map { PlaylistItem.SongItem(it, albumId) }
+                            val startIndex = 0
+                            playerViewModel.loadVideo(
+                                videoId = firstSong.ytVideoId!!,
+                                cardId = "album_$albumId",
+                                currentFilterPath = currentFilterPath,
+                                startInMiniMode = false,
+                                mediaDbId = firstSong.songId,
+                                filterPathId = currentFilterPathId,
+                                typeOfMedia = 1,
+                                playlist = playlist,
+                                startIndex = startIndex
+                            )
                         } else if (videos.isNotEmpty()) {
-                            // Fallback: educational video if no album available
                             loadFirstVideo()
                         }
                     }
@@ -1028,63 +1025,7 @@ fun VideoStatsRow(
         }
     }
 
-    val onNextClick: () -> Unit = {
-        val currentVideoId = playerUiState.currentVideoId
-        val currentIndex = playerUiState.currentIndex ?: -1
-        val targetIndex = currentIndex + 1
 
-        // Determine if we should start in mini mode
-        val startInMiniMode = when {
-            currentTab != MainTab.VIDEOS -> true                    // non-video tabs always mini
-            targetIndex !in 0 until videos.size -> false            // fallback (shouldn't happen)
-            else -> !isVideoIndexVisible(targetIndex)               // mini if card not visible
-        }
-
-        if (targetIndex in 0 until videos.size) {
-            val targetVideo = videos[targetIndex]
-            val videoId = extractYouTubeVideoId(targetVideo.path)
-            if (videoId != null) {
-                playerViewModel.loadVideo(
-                    videoId = videoId,
-                    cardId = targetVideo.locationId,
-                    currentFilterPath = currentFilterPath,
-                    startInMiniMode = startInMiniMode,
-                    mediaDbId = targetVideo.id,
-                    filterPathId = currentFilterPathId,
-                    typeOfMedia = currentTypeOfMedia
-                )
-            }
-        } else {
-            // No next video – you might want to wrap around or do nothing
-        }
-    }
-
-    val onPreviousClick: () -> Unit = {
-        val currentIndex = playerUiState.currentIndex ?: -1
-        val targetIndex = currentIndex - 1
-
-        val startInMiniMode = when {
-            currentTab != MainTab.VIDEOS -> true
-            targetIndex !in 0 until videos.size -> false
-            else -> !isVideoIndexVisible(targetIndex)
-        }
-
-        if (targetIndex in 0 until videos.size) {
-            val targetVideo = videos[targetIndex]
-            val videoId = extractYouTubeVideoId(targetVideo.path)
-            if (videoId != null) {
-                playerViewModel.loadVideo(
-                    videoId = videoId,
-                    cardId = targetVideo.locationId,
-                    currentFilterPath = currentFilterPath,
-                    startInMiniMode = startInMiniMode,
-                    mediaDbId = targetVideo.id,
-                    filterPathId = currentFilterPathId,
-                    typeOfMedia = currentTypeOfMedia
-                )
-            }
-        }
-    }
 
     Row(
         modifier = modifier.fillMaxWidth(),
@@ -1149,38 +1090,20 @@ fun VideoStatsRow(
                     val currentType = playerUiState.currentTypeOfMedia
                     val isAlbumMode = currentType == 1
 
-                    // Album navigation state
-                    val currentSongIndex = if (isAlbumMode) {
-                        getCurrentSongIndex(currentPlayingSongId, currentAlbumSongs)
-                    } else 0
-                    val canGoPrevSong = currentSongIndex > 0
-                    val canGoNextSong = currentSongIndex < currentAlbumSongs.size - 1
+                    // Determine if previous/next are possible (reuse your existing logic)
 
-                    // Educational navigation state
-                    val currentVideoIndex = playerUiState.currentIndex ?: -1
-                    val canGoPrevVideo = currentVideoIndex > 0
-                    val canGoNextVideo = currentVideoIndex in 0 until (videos.size - 1)
 
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(0.dp)
-                    ) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(0.dp)) {
                         // Previous button
                         IconButton(
                             onClick = {
-                                if (isAlbumMode) {
-                                    if (canGoPrevSong) {
-                                        val prevSong = currentAlbumSongs[currentSongIndex - 1]
-                                        onLoadSong(
-                                            prevSong,
-                                            "album_${currentAlbumId ?: return@IconButton}",
-                                            currentTab != MainTab.ARTISTS
-                                        )
-                                    }
-                                } else {
-                                    if (canGoPrevVideo) onPreviousClick()
+                                val shouldStartInMini = when {
+                                    currentTab != MainTab.ARTISTS -> true
+                                    else -> !isActiveCardVisible   // visibility of the active card (original album)
                                 }
+                                playerViewModel.previousVideo(shouldStartInMini)
                             },
-                            enabled = if (isAlbumMode) canGoPrevSong else canGoPrevVideo
+                            enabled = canGoPrev
                         ) {
                             Icon(Icons.Default.SkipPrevious, contentDescription = "Previous")
                         }
@@ -1188,25 +1111,20 @@ fun VideoStatsRow(
                         // Next button
                         IconButton(
                             onClick = {
-                                if (isAlbumMode) {
-                                    if (canGoNextSong) {
-                                        val nextSong = currentAlbumSongs[currentSongIndex + 1]
-                                        onLoadSong(
-                                            nextSong,
-                                            "album_${currentAlbumId ?: return@IconButton}",
-                                            currentTab != MainTab.ARTISTS
-                                        )
-                                    }
-                                } else {
-                                    if (canGoNextVideo) onNextClick()
+                                val shouldStartInMini = when {
+                                    currentTab != MainTab.ARTISTS -> true
+                                    else -> !isActiveCardVisible   // visibility of the active card (original album)
                                 }
+
+                                playerViewModel.nextVideo(shouldStartInMini)
+// and similarly for previous
                             },
-                            enabled = if (isAlbumMode) canGoNextSong else canGoNextVideo
+                            enabled = canGoNext
                         ) {
                             Icon(Icons.Default.SkipNext, contentDescription = "Next")
                         }
 
-                        // Close button (same for both)
+                        // Close button (unchanged)
                         IconButton(onClick = {
                             coroutineScope.launch {
                                 onClose()
@@ -1309,6 +1227,7 @@ private fun VideoListContent(
     currentFilterPathId: Int?,
     videoArtistsMap: Map<Int, List<Artist>>,
     viewModel: MainViewModel,
+    currentTab: MainTab,
     onCardTitleClick: (String) -> Unit
 ) {
 // Find the index of the currently active video card
@@ -1317,6 +1236,8 @@ private fun VideoListContent(
     val imageLoader = coil.ImageLoader(context)
 
     val typeOfMedia = 0 // educational videos only here.
+
+
 
     //helps with loading the thubnails faster while scrolling
     LaunchedEffect(listState) {
@@ -1339,35 +1260,6 @@ private fun VideoListContent(
                     }
                 }
             }
-    }
-// Monitor scroll state and manage player mode based on card visibility
-// that monitors scroll position and active card visibility.
-    LaunchedEffect(
-        listState.firstVisibleItemIndex,
-        listState.layoutInfo,
-        activeCardIndex,
-        playerUiState.isVisible,
-        playerUiState.isInMiniMode,
-        isPlayerVisible
-    ) {
-        if (activeCardIndex >= 0 && playerUiState.isVisible) {
-            val visibleItems = listState.layoutInfo.visibleItemsInfo
-            val isVisible = visibleItems.any { it.index == activeCardIndex }
-
-            when {
-                // If "Hide players" is on, force mini mode
-                !isPlayerVisible && !playerUiState.isInMiniMode -> {
-                    playerViewModel.minimizePlayer()
-                }
-                // If "Show players" is on, use scroll-based logic
-                isPlayerVisible -> {
-                    when {
-                        isVisible && playerUiState.isInMiniMode -> playerViewModel.restoreFullMode()
-                        !isVisible && !playerUiState.isInMiniMode -> playerViewModel.minimizePlayer()
-                    }
-                }
-            }
-        }
     }
 
     // Effect to handle removal of the active card from the list
@@ -1438,9 +1330,6 @@ private fun VideoListContent(
                 }
             }
         } else {
-            LaunchedEffect(videosToShow) {
-                listState.animateScrollToItem(0)
-            }
 
             LazyColumn(
                 state = listState,
@@ -1449,9 +1338,16 @@ private fun VideoListContent(
             ) {
                 items(
                     items = videosToShow,
-                    key = { it.id }
+                    key = { it.locationId }
                 ) { video ->
-                    // 🔁 Pass only isPlayerVisible – no per‑card toggle callback
+                    val clickedVideoIndex = videosToShow.indexOfFirst { it.id == video.id }
+                    val startInMiniMode = if (currentTab != MainTab.VIDEOS) {
+                        true
+                    } else {
+                        val isCardVisible = listState.layoutInfo.visibleItemsInfo.any { it.index == clickedVideoIndex }
+                        !isCardVisible
+                    }
+
                     VideoCard(
                         video = video,
                         isActive = video.locationId == playerUiState.activeCardId,
@@ -1459,13 +1355,18 @@ private fun VideoListContent(
                         onCardClick = {
                             val videoId = extractYouTubeVideoId(video.path)
                             if (videoId != null) {
+                                val playlist = videosToShow.map { PlaylistItem.VideoItem(it) }
+                                val startIndex = videosToShow.indexOfFirst { it.id == video.id }
                                 playerViewModel.loadVideo(
                                     videoId = videoId,
                                     cardId = video.locationId,
                                     currentFilterPath = filterState.currentFilterPath,
+                                    startInMiniMode = startInMiniMode,
                                     mediaDbId = video.id,
                                     filterPathId = currentFilterPathId,
-                                    typeOfMedia = typeOfMedia
+                                    typeOfMedia = 0,
+                                    playlist = playlist,
+                                    startIndex = startIndex
                                 )
                             }
                         },
@@ -1490,6 +1391,13 @@ private fun VideoListContent(
                     )
                 }
             }
+
+            PlayerCardVisibilityMonitor(
+                listState = listState,
+                activeCardId = playerUiState.activeCardId,
+                playerViewModel = playerViewModel
+            )
+
         }
     }
 }
@@ -2134,6 +2042,9 @@ fun ArtistContent(
         }"
     )
 
+    val listState = rememberLazyListState()     // lazy list state for scrolling
+
+
     // Check if there's an artist filter
     val selectedArtist = filterPath
         .firstOrNull { it.categoryId == FilterPath.CATEGORY_ARTIST }
@@ -2150,14 +2061,26 @@ fun ArtistContent(
     // Clear selected album when no artist filter is active (so you don't see old album later)
     LaunchedEffect(filterPath) {
         Log.d("ArtistContent", "🔍 filterPath changed: $filterPath")
-        if (filterPath.none { it.categoryId == FilterPath.CATEGORY_ARTIST }) {
-            Log.d("ArtistContent", "🧹 Clearing selectedAlbum (no artist filter)")
+        val artistFilter = filterPath.firstOrNull { it.categoryId == FilterPath.CATEGORY_ARTIST }
+        if (artistFilter == null) {
             selectedAlbum = null
+            viewModel.setCurrentAlbumId(null)  // Clear current album
         } else {
-            Log.d(
-                "ArtistContent",
-                "✅ Artist filter present, keeping selectedAlbum=${selectedAlbum?.title}"
-            )
+            val artist = artistsBase.find { it.id == artistFilter.entityId }
+            if (artist != null) {
+                // Find albums for this artist
+                val artistAlbums = albumsDisplay.filter { album ->
+                    albumArtistsMap[album.albumId]?.any { it.artist.id == artist.id } == true
+                }
+                if (artistAlbums.isNotEmpty()) {
+                    val firstAlbum = artistAlbums.first()
+                    selectedAlbum = firstAlbum
+                    viewModel.setCurrentAlbumId(firstAlbum.albumId)
+                } else {
+                    selectedAlbum = null
+                    viewModel.setCurrentAlbumId(null)
+                }
+            }
         }
     }
 
@@ -2273,6 +2196,7 @@ fun ArtistContent(
     val coroutineScope = rememberCoroutineScope()
 
     LazyColumn(
+        state = listState,
         modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
@@ -2373,6 +2297,13 @@ fun ArtistContent(
         }
 
     }
+
+    PlayerCardVisibilityMonitor(
+        listState = listState,   // you need to get the listState from the LazyColumn
+        activeCardId = playerUiState.activeCardId,
+        playerViewModel = playerViewModel
+    )
+
 }
 
 @Composable
@@ -2529,6 +2460,7 @@ fun ArtistCard(
 fun HistoryContent(
     modifier: Modifier = Modifier,
     viewModel: MainViewModel,
+    playerUiState: PlayerUiState,
     playerViewModel: PlayerViewModel,
     onRefresh: () -> Unit,
     isPlayerVisible: Boolean
@@ -2536,6 +2468,8 @@ fun HistoryContent(
     val enrichedHistory by viewModel.enrichedHistory.collectAsState()
 
     val currentPlayingDbId by playerViewModel.currentVideoDbIdState.collectAsState()
+
+    val listState = rememberLazyListState()   // ADD THIS
 
     // Load data when this screen appears
     LaunchedEffect(Unit) {
@@ -2595,6 +2529,7 @@ fun HistoryContent(
 
         // History List
         LazyColumn(
+            state = listState,   // ADD THIS
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(vertical = 8.dp)
         ) {
@@ -2636,6 +2571,13 @@ fun HistoryContent(
                 }
             }
         }
+
+        PlayerCardVisibilityMonitor(
+            listState = listState,
+            activeCardId = playerUiState.activeCardId,
+            playerViewModel = playerViewModel
+        )
+
     }
 }
 
@@ -3078,8 +3020,9 @@ fun SingleArtistView(
                     isActive = playerUiState.activeCardId == "album_${album.albumId}",
                     isPlayerVisible = minimiseMaximiseToggle,
                     onAlbumClick = {
-                        // Optional: expand album or play first song
                         youtubeVideoId?.let { videoId ->
+                            val playlist = songs.map { PlaylistItem.SongItem(it, album.albumId) }
+                            val startIndex = 0
                             playerViewModel.loadVideo(
                                 videoId = videoId,
                                 cardId = "album_${album.albumId}",
@@ -3087,21 +3030,28 @@ fun SingleArtistView(
                                 startInMiniMode = false,
                                 mediaDbId = songs.firstOrNull()?.songId,
                                 filterPathId = currentFilterPathId,
-                                typeOfMedia = 1
+                                typeOfMedia = 1,
+                                playlist = playlist,
+                                startIndex = startIndex
                             )
                         }
                     },
                     onSongClick = { song ->
                         viewModel.setCurrentAlbumId(album.albumId)
+                        // Build playlist from the songs of this album
+                        val playlist = songs.map { PlaylistItem.SongItem(it, album.albumId) }
+                        val startIndex = songs.indexOfFirst { it.songId == song.songId }
                         song.ytVideoId?.let { videoId ->
                             playerViewModel.loadVideo(
                                 videoId = videoId,
-                                cardId = "album_${album.albumId}",   // ✅ always use album card ID
+                                cardId = "album_${album.albumId}",
                                 currentFilterPath = null,
                                 startInMiniMode = false,
-                                mediaDbId = song.songId,             // keep song ID for playback tracking
+                                mediaDbId = song.songId,
                                 filterPathId = currentFilterPathId,
-                                typeOfMedia = 1
+                                typeOfMedia = 1,
+                                playlist = playlist,
+                                startIndex = startIndex
                             )
                         }
                     },
@@ -3137,6 +3087,11 @@ fun SingleArtistView(
         }
     }
 
+    PlayerCardVisibilityMonitor(
+        listState = listState,
+        activeCardId = playerUiState.activeCardId,
+        playerViewModel = playerViewModel
+    )
 
     val videoCardIndex = 4  // because the video card is the 5th item (0-based index)
 
@@ -4140,6 +4095,21 @@ fun AlbumCard(
                 )
             }
         }
+    }
+}
+
+@Composable
+fun PlayerCardVisibilityMonitor(
+    listState: LazyListState,
+    activeCardId: String?,
+    playerViewModel: PlayerViewModel
+) {
+    LaunchedEffect(listState, activeCardId, playerViewModel.uiState) {
+        snapshotFlow { listState.layoutInfo.visibleItemsInfo.map { it.key } }
+            .collect { visibleKeys ->
+                val isVisible = activeCardId != null && visibleKeys.contains(activeCardId)
+                playerViewModel.onCardVisibilityChanged(isVisible)
+            }
     }
 }
 
