@@ -1160,11 +1160,6 @@ fun VideoStatsRow(
     }
 }
 
-private fun getCurrentSongIndex(currentPlayingSongId: Int?, songs: List<Song>): Int {
-    if (currentPlayingSongId == null) return 0
-    return songs.indexOfFirst { it.songId == currentPlayingSongId }.coerceAtLeast(0)
-}
-
 @Composable
 fun TabText(
     text: String,
