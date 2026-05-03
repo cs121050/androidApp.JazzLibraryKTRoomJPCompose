@@ -807,7 +807,8 @@ fun toolbarBox(
     currentAlbumId: Int?,
     currentMediaEntryTypeOfMedia: Int?
 ) {
-    SearchBar(
+    SmartSearchBar(
+        viewModel = viewModel,
         onFilterClick = onFilterClick,
         modifier = Modifier
             .fillMaxWidth()
@@ -841,7 +842,7 @@ fun toolbarBox(
 
 @Composable
 fun ActiveFilterChipsRow(
-    filterPath: List<FilterPath>,  // Use your actual type here
+    filterPath: List<FilterPath>,
     onMenuClick: () -> Unit,
     onChipClick: (categoryId: Int, entityId: Int, entityName: String) -> Unit,
     modifier: Modifier = Modifier
@@ -870,17 +871,70 @@ fun ActiveFilterChipsRow(
                 .horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            if (filterPath.isNotEmpty()) {
-                filterPath.forEach { filter ->
+            filterPath.forEach { filter ->
+                if (filter.categoryId == FilterPath.CATEGORY_SEARCH) {
+                    SearchChip(
+                        text = filter.entityName,
+                        onClick = {
+                            onChipClick(filter.categoryId, filter.entityId, filter.entityName)
+                        }
+                    )
+                } else {
+                    // Regular chip (instrument, artist, duration, type)
                     FilterPathChip(
                         text = filter.entityName,
-                        isSelected = false,  // always false – chips are not "selected", just showing applied filters
+                        isSelected = false,
                         onClick = {
                             onChipClick(filter.categoryId, filter.entityId, filter.entityName)
                         }
                     )
                 }
             }
+        }
+    }
+}
+
+@Composable
+fun SearchChip(
+    text: String,
+    onClick: () -> Unit
+) {
+    val backgroundColor = MaterialTheme.colorScheme.surfaceVariant
+    val textColor = MaterialTheme.colorScheme.onSurfaceVariant
+    val borderColor = Color.Transparent
+
+    Box(
+        modifier = Modifier
+            .wrapContentWidth()
+            .clip(RoundedCornerShape(Dimens.chipRoundedCorner))
+            .background(backgroundColor)
+            .clickable { onClick() }
+            .border(
+                BorderStroke(1.dp, borderColor),
+                RoundedCornerShape(Dimens.chipRoundedCorner)
+            )
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            modifier = Modifier.padding(
+                horizontal = Dimens.chiptextHorizontalPadding,
+                vertical = 6.dp
+            )
+        ) {
+            Icon(
+                Icons.Default.Search,
+                contentDescription = "Search",
+                modifier = Modifier.size(16.dp),
+                tint = textColor
+            )
+            Text(
+                text = text,
+                color = textColor,
+                style = MaterialTheme.typography.bodyMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
         }
     }
 }
