@@ -136,13 +136,21 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.LazyHorizontalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.filled.Album
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.*
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Velocity
 import androidx.lifecycle.ViewModel
+import com.example.jazzlibraryktroomjpcompose.data.local.db.entities.SearchHistoryRoomEntity
 import com.example.jazzlibraryktroomjpcompose.domain.models.Song
 import kotlinx.coroutines.Job
 import java.text.DecimalFormat
@@ -234,8 +242,21 @@ fun MainScreen(
     val currentAlbumSongs by viewModel.albumSongs.collectAsState()
     val currentPlayingSongId by playerViewModel.currentVideoDbIdState.collectAsState()
 
+    var hideSearchDropdown by remember { mutableStateOf(false) }
 
+    var isDropdownOpen by remember { mutableStateOf(false) }
 
+    val focusManager = LocalFocusManager.current
+    val keyboardController = LocalSoftwareKeyboardController.current
+
+    val coroutineScope = rememberCoroutineScope()
+
+    LaunchedEffect(Unit) {
+        playerViewModel.clearBoundsEvent.collect {
+            activeCardRelativePosition = null
+            activeCardSize = null
+        }
+    }
 
     LaunchedEffect(isPlayerVisible) {
         playerViewModel.onGlobalPlayerVisibilityChanged(isPlayerVisible)
@@ -286,10 +307,15 @@ fun MainScreen(
         }
     }
 
-    // BackHandler (unchanged)
     BackHandler {
+        Log.d("MainScreen-BackHandler", "Back pressed – hideSearchDropdown=$hideSearchDropdown, showSuggestions state unknown (inside SmartSearchBar)")
+        hideSearchDropdown = true
+        Log.d("MainScreen-BackHandler", "set hideSearchDropdown=true")
+
+        // Normal back handling (double back, bottom sheet, history)
         viewModel.handleBackPress { (context as? Activity)?.finish() }
     }
+
 
     if (loadingState == LoadingState.LOADING && uiState.videos.isEmpty()) {
         LoadingScreen()
@@ -300,13 +326,18 @@ fun MainScreen(
             val toolbarHeightPx = remember { mutableIntStateOf(0) }
             val toolbarOffset = remember { mutableFloatStateOf(0f) }
 
-            val nestedScrollConnection = remember(scrollLockState) {
+            val nestedScrollConnection = remember(scrollLockState, isDropdownOpen) {
                 object : NestedScrollConnection {
                     override fun onPreScroll(
                         available: Offset,
                         source: NestedScrollSource
                     ): Offset {
-                        // If the wiki card is locked, do NOT move the toolbar
+                        // If the search dropdown is open, do NOT move the toolbar
+                        if (isDropdownOpen) {
+                            Log.d("MainScreen-NestedScroll", "Dropdown open → ignoring scroll")
+                            return Offset.Zero
+                        }
+                        // Original logic for wiki card lock and toolbar movement
                         if (scrollLockState.isLocked) {
                             return Offset.Zero
                         }
@@ -424,7 +455,28 @@ fun MainScreen(
                                 currentAlbumSongs = currentAlbumSongs,
                                 currentPlayingSongId = currentPlayingSongId,
                                 currentAlbumId = viewModel.currentAlbumId.value,
+                                hideSearchDropdown = hideSearchDropdown,
+                                isDropdownOpen = isDropdownOpen,
+                                onDropdownVisibilityChanged = { isDropdownOpen = it },
+                                onSearchBarClicked = { hideSearchDropdown = false },
                                 currentMediaEntryTypeOfMedia = currentMediaEntryTypeOfMedia,
+                                allVideos = videosToShow,
+                                onVideoSelected = { video ->
+                                    // Find the index of the video in the current videosToShow list
+                                    val index = videosToShow.indexOfFirst { it.id == video.id }
+                                    if (index != -1) {
+                                        // Scroll to that item
+                                        coroutineScope.launch {
+                                            listState.animateScrollToItem(index)
+                                            // Optional: you may also want to highlight the card briefly
+                                        }
+                                        // If currently not on Videos tab, switch to it
+                                        if (currentTab != MainTab.VIDEOS) {
+                                            viewModel.setCurrentTab(MainTab.VIDEOS)
+                                            playerViewModel.setCurrentTab(MainTab.VIDEOS)
+                                        }
+                                    }
+                                },
                                 onTogglePlayerVisibility = { viewModel.togglePlayerVisibility() }
                             )
                         }
@@ -805,16 +857,30 @@ fun toolbarBox(
     currentAlbumSongs: List<Song>,
     currentPlayingSongId: Int?,
     currentAlbumId: Int?,
-    currentMediaEntryTypeOfMedia: Int?
+    hideSearchDropdown: Boolean,
+    onSearchBarClicked: () -> Unit,
+    isDropdownOpen: Boolean,
+    onDropdownVisibilityChanged: (Boolean) -> Unit,
+    allVideos: List<Video>,   // <-- new parameter
+    currentMediaEntryTypeOfMedia: Int?,
+    onVideoSelected: (Video) -> Unit,
 ) {
+
+    Log.d("toolbarBox", "Rendering SmartSearchBar with hideSearchDropdown=$hideSearchDropdown")
     SmartSearchBar(
         viewModel = viewModel,
         onFilterClick = onFilterClick,
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(top = 4.dp)
+        hideSearchDropdown = hideSearchDropdown,
+        onVideoSelected = onVideoSelected,
+        onSearchBarClicked = {
+            Log.d("toolbarBox", "onSearchBarClicked called – resetting hideSearchDropdown flag")
+            onSearchBarClicked()
+        },
+        onDropdownVisibilityChanged = onDropdownVisibilityChanged,
+        allVideos = allVideos,
+        modifier = Modifier.fillMaxWidth().padding(top = 4.dp)
     )
-    //Spacer(modifier = Modifier.height(16.dp))
+    // rest of the function unchanged
     VideoStatsRow(
         videoCount = videoCount,
         artistCount = artistCount,
@@ -839,7 +905,6 @@ fun toolbarBox(
         modifier = Modifier.fillMaxWidth()
     )
 }
-
 @Composable
 fun ActiveFilterChipsRow(
     filterPath: List<FilterPath>,
