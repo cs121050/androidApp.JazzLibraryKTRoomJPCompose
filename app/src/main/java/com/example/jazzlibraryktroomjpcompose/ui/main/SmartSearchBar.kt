@@ -57,8 +57,8 @@ fun SmartSearchBar(
     hideSearchDropdown: Boolean,
     onSearchBarClicked: () -> Unit,
     onDropdownVisibilityChanged: (Boolean) -> Unit,
-    allVideos: List<Video>,   // <-- filtered videos (respect current filter path)
-    onVideoSelected: (Video) -> Unit,
+    allVideos: List<Video>,                // filtered videos (respect current filter path)
+    onVideoSelected: (Video) -> Unit,     // callback to scroll to the selected video
     modifier: Modifier = Modifier
 ) {
     var isScrollLocked by remember { mutableStateOf(false) }
@@ -72,22 +72,21 @@ fun SmartSearchBar(
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
 
-    // Compute autocomplete items – NO LIMIT, shows all matching video titles
+    // Compute autocomplete items – shows all matching video titles (no limit)
     val autocompleteItems = remember(text, mode, allVideos) {
         if (mode == 0 && text.isNotBlank()) {
             val lowerText = text.lowercase()
             allVideos
                 .filter { it.name.contains(lowerText, ignoreCase = true) }
-                .map { it.name }   // No .take() – show all matches
+                .map { it.name }   // no .take() – show all matches
         } else {
             emptyList()
         }
     }
 
-    // Decide what to show: autocomplete or history
     val showAutocomplete = autocompleteItems.isNotEmpty()
 
-    // Single source of truth for showing dropdown
+    // Decide when to show the dropdown
     LaunchedEffect(isFocused, text, hideSearchDropdown, mode, autocompleteItems) {
         val newShow = when {
             !isFocused -> false
@@ -105,7 +104,7 @@ fun SmartSearchBar(
         }
     }
 
-    // Callback to parent when dropdown visibility changes
+    // Notify parent about dropdown visibility (used for toolbar scroll locking)
     LaunchedEffect(showSuggestions) {
         onDropdownVisibilityChanged(showSuggestions)
     }
@@ -232,7 +231,7 @@ fun SmartSearchBar(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(max = 150.dp)   // increased height for scrolling
+                        .heightIn(max = 150.dp)
                         .nestedScroll(nestedScrollConnection)
                         .pointerInput(Unit) {
                             awaitEachGesture {
@@ -264,12 +263,20 @@ fun SmartSearchBar(
                     ) {
                         if (showAutocomplete) {
                             items(autocompleteItems) { title ->
+                                val matchedVideo = allVideos.find { it.name == title }
                                 AutocompleteItem(
                                     title = title,
                                     searchText = text,
                                     onClick = {
                                         Log.d(TAG, "Autocomplete selected: $title")
-                                        performSearch(title, mode)
+                                        if (matchedVideo != null) {
+                                            onVideoSelected(matchedVideo)   // scroll to video
+                                        }
+                                        // Clear search bar and close dropdown
+                                        text = ""
+                                        showSuggestions = false
+                                        focusManager.clearFocus()
+                                        keyboardController?.hide()
                                     }
                                 )
                             }
@@ -319,7 +326,7 @@ private fun AutocompleteItem(
             pushStyle(
                 SpanStyle(
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary   // blue highlight
+                    color = MaterialTheme.colorScheme.primary
                 )
             )
             append(title.substring(index, index + searchText.length))
@@ -355,7 +362,6 @@ private fun AutocompleteItem(
                 overflow = TextOverflow.Ellipsis
             )
         }
-        // No delete button for autocomplete
     }
     Divider()
 }
