@@ -7,6 +7,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.jazzlibraryktroomjpcompose.domain.models.FilterPath
 import com.example.jazzlibraryktroomjpcompose.data.local.db.entities.FilterPathRoomEntity
+import com.example.jazzlibraryktroomjpcompose.data.local.db.entities.SearchHistoryRoomEntity
 import com.example.jazzlibraryktroomjpcompose.data.mappers.*
 import com.example.jazzlibraryktroomjpcompose.data.repository.JazzRepositoryImpl
 import com.example.jazzlibraryktroomjpcompose.domain.FilterOrchestrator
@@ -22,6 +23,7 @@ import com.example.jazzlibraryktroomjpcompose.domain.repository.AssociationRepos
 import com.example.jazzlibraryktroomjpcompose.domain.repository.DurationRepository
 import com.example.jazzlibraryktroomjpcompose.domain.repository.FilterPathRepository
 import com.example.jazzlibraryktroomjpcompose.domain.repository.InstrumentRepository
+import com.example.jazzlibraryktroomjpcompose.domain.repository.SearchHistoryRepository
 import com.example.jazzlibraryktroomjpcompose.domain.repository.SongRepository
 import com.example.jazzlibraryktroomjpcompose.domain.repository.TypeRepository
 import com.example.jazzlibraryktroomjpcompose.domain.repository.VideoRepository
@@ -46,7 +48,8 @@ class MainViewModel @Inject constructor(
     private val filterPathRepository: FilterPathRepository,
     private val jazzRepository: JazzRepositoryImpl,
     private val filterOrchestrator: FilterOrchestrator,
-    private val settingsRepository: SettingsRepository
+    private val settingsRepository: SettingsRepository,
+    private val searchHistoryRepository: SearchHistoryRepository
 ) : ViewModel() {
 
     private var lastBackPressTime = 0L
@@ -128,6 +131,9 @@ class MainViewModel @Inject constructor(
 
     private val _isCurrentAlbumCardVisible = MutableStateFlow(false)
     val isCurrentAlbumCardVisible: StateFlow<Boolean> = _isCurrentAlbumCardVisible.asStateFlow()
+
+    private val _searchHistory = MutableStateFlow<List<SearchHistoryRoomEntity>>(emptyList())
+    val searchHistory: StateFlow<List<SearchHistoryRoomEntity>> = _searchHistory.asStateFlow()
 
     // This is used in SingleArtistView to track whether the album card is visible on screen, which influences startInMiniMode logic (whether to start in mini mode or full mode when playing a song from the album card).
     fun setCurrentAlbumCardVisible(visible: Boolean) {
@@ -241,6 +247,46 @@ class MainViewModel @Inject constructor(
 
     init {
         checkAndLoadData()
+        loadSearchHistory()
+    }
+
+    // NEW: Load search history from repository
+    private fun loadSearchHistory() {
+        viewModelScope.launch {
+            searchHistoryRepository.getAllSearchHistory().collect { history ->
+                _searchHistory.value = history
+            }
+        }
+    }
+
+    // NEW: Insert a search history entry (called when user performs a search)
+    fun addSearchHistoryEntry(query: String, mode: Int, filterPathId: Int) {
+        viewModelScope.launch {
+            if (query.isNotBlank()) {
+                val entry = SearchHistoryRoomEntity(
+                    filterPathId = filterPathId,
+                    query = query,
+                    mode = mode
+                )
+                searchHistoryRepository.insertSearchHistory(entry)
+                // No need to call loadSearchHistory() because the Flow will auto-update
+            }
+        }
+    }
+
+    // NEW: Delete a single history entry
+    fun deleteSearchHistoryEntry(entry: SearchHistoryRoomEntity) {
+        viewModelScope.launch {
+            searchHistoryRepository.deleteSearchHistory(entry)
+            // Flow will update automatically
+        }
+    }
+
+    // NEW: Clear all search history (optional, could be used in Settings)
+    fun clearAllSearchHistory() {
+        viewModelScope.launch {
+            searchHistoryRepository.deleteAllSearchHistory()
+        }
     }
 
     fun hasPreviousHistory(): Boolean {
@@ -551,19 +597,15 @@ class MainViewModel @Inject constructor(
         }
     }
 
-    fun handleChipSelection(
-        categoryId: Int,
-        entityId: Int,
-        entityName: String,
-        isSelected: Boolean
-    ) {
+    fun handleChipSelection(categoryId: Int, entityId: Int, entityName: String, isSelected: Boolean) {
         viewModelScope.launch {
             val currentPath = _currentFilterPath.value
-            val newPath = if (isSelected) {
-                filterOrchestrator.handleChipSelection(currentPath, categoryId, entityId, entityName)
-            } else {
-                filterOrchestrator.handleChipDeselection(currentPath, categoryId, entityId)
-            }
+            Log.d("MainViewModel", "Before: currentPath = $currentPath")
+            Log.d("MainViewModel", "handleChipSelection: category=$categoryId, entity=$entityId, name=$entityName, selected=$isSelected")
+
+            val newPath = filterOrchestrator.handleChipSelection(currentPath, categoryId, entityId, entityName, isSelected)
+            Log.d("MainViewModel", "After orchestrator: newPath = $newPath")
+
             if (newPath == currentPath) return@launch
 
             // Delete forward history entries (newer than current state)
@@ -589,6 +631,15 @@ class MainViewModel @Inject constructor(
             _currentFilterPath.value = newPath
             applyFiltersFromPath(newPath)
             _filterState.update { it.copy(currentFilterPath = newPath) }
+
+
+            if (categoryId == FilterPath.CATEGORY_SEARCH && entityName.isNotBlank()) {
+                Log.d("MainViewModel", "Adding search chip: query='$entityName', mode=$entityId, filterPathId=${_currentFilterPathId.value}")
+                val newFilterPathId = _currentFilterPathId.value
+                if (newFilterPathId != null) {
+                    addSearchHistoryEntry(entityName, entityId, newFilterPathId)
+                }
+            }
 
             // Refresh history
             loadEnrichedHistory()

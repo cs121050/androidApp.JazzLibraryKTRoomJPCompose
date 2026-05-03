@@ -133,43 +133,64 @@ class JazzRepositoryImpl(
             val artistFilter = filterPath.find { it.categoryId == FilterPath.CATEGORY_ARTIST }
             val durationFilter = filterPath.find { it.categoryId == FilterPath.CATEGORY_DURATION }
             val typeFilter = filterPath.find { it.categoryId == FilterPath.CATEGORY_TYPE }
+            val searchFilter = filterPath.find { it.categoryId == FilterPath.CATEGORY_SEARCH }
+            val searchMode = searchFilter?.entityId ?: -1
+            val searchQuery = searchFilter?.entityName ?: ""
 
+            Log.d("JazzRepositoryImpl", "🔍 Search mode=$searchMode, query='$searchQuery'")
+
+            // 1. VIDEOS: apply search only if mode == 0
+            val videoSearchQuery = if (searchMode == 0) searchQuery else ""
+            Log.d("JazzRepositoryImpl", "🎬 Video search query='$videoSearchQuery'")
             val videosFlow = database.videoDao().getVideosByMultipleFilters(
                 instrumentId = instrumentFilter?.entityId ?: 0,
                 artistId = artistFilter?.entityId ?: 0,
                 durationId = durationFilter?.entityId ?: 0,
-                typeId = typeFilter?.entityId ?: 0
+                typeId = typeFilter?.entityId ?: 0,
+                searchQuery = videoSearchQuery
             )
 
+            // 2. ALBUMS: apply search only if mode == 2
+            val albumSearchQuery = if (searchMode == 2) searchQuery else ""
+            Log.d("JazzRepositoryImpl", "💿 Album search query='$albumSearchQuery'")
             val albumsFlow = if (artistFilter != null) {
                 database.albumDao().getAlbumsByArtistAndInstrumentWithMainFlag(
                     artistId = artistFilter.entityId,
-                    instrumentId = instrumentFilter?.entityId ?: 0
+                    instrumentId = instrumentFilter?.entityId ?: 0,
+                    searchQuery = albumSearchQuery
                 )
             } else {
                 database.albumDao().getAlbumByMultipleFilters(
                     instrumentId = instrumentFilter?.entityId ?: 0,
-                    artistId = 0
+                    artistId = 0,
+                    searchQuery = albumSearchQuery
                 )
             }
 
+            // 3. ARTISTS: apply search only if mode == 1
+            val artistSearchQuery = if (searchMode == 1) searchQuery else ""
+            Log.d("JazzRepositoryImpl", "🎤 Artist search query='$artistSearchQuery'")
             val artistsFlowWithCount = database.artistDao().getArtistsWithVideoCountByMultipleFilters(
                 instrumentId = instrumentFilter?.entityId ?: 0,
                 typeId = typeFilter?.entityId ?: 0,
-                durationId = durationFilter?.entityId ?: 0
+                durationId = durationFilter?.entityId ?: 0,
+                searchQuery = artistSearchQuery
             )
 
+            // 4. INSTRUMENTS (no search)
             val instrumentsFlowWithCount = database.instrumentDao().getInstrumentsWithVideoCountByMultipleFilters(
                 typeId = typeFilter?.entityId ?: 0,
                 durationId = durationFilter?.entityId ?: 0
             )
 
+            // 5. DURATIONS (no search)
             val durationsFlowWithCount = database.durationDao().getDurationsWithVideoCountByMultipleFilters(
                 typeId = typeFilter?.entityId ?: 0,
                 instrumentId = instrumentFilter?.entityId ?: 0,
                 artistId = artistFilter?.entityId ?: 0
             )
 
+            // 6. TYPES (no search)
             val typesFlowWithCount = database.typeDao().getTypesWithVideoCountByMultipleFilters(
                 instrumentId = instrumentFilter?.entityId ?: 0,
                 artistId = artistFilter?.entityId ?: 0,
@@ -190,6 +211,10 @@ class JazzRepositoryImpl(
                 val instruments = values[3] as List<InstrumentWithVideoCount>
                 val durations = values[4] as List<DurationWithVideoCount>
                 val types = values[5] as List<TypeWithVideoCount>
+
+                Log.d("JazzRepositoryImpl", "📹 Videos after filter: ${videos.size}")
+                Log.d("JazzRepositoryImpl", "💿 Albums after filter: ${albums.size}")
+                Log.d("JazzRepositoryImpl", "🎤 Artists after filter: ${artists.size}")
 
                 FilterRepository.FilteredData(
                     videos = videos.map { VideoMapper.toDomain(it) },

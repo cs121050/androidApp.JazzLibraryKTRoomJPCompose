@@ -1,5 +1,6 @@
 package com.example.jazzlibraryktroomjpcompose.domain
 
+import android.util.Log
 import com.example.jazzlibraryktroomjpcompose.domain.models.FilterPath
 import com.example.jazzlibraryktroomjpcompose.domain.repository.FilterRepository
 import kotlinx.coroutines.flow.Flow
@@ -17,12 +18,35 @@ class FilterOrchestrator @Inject constructor(
     fun getFilteredDataFlow(filterPath: List<FilterPath>): Flow<FilterRepository.FilteredData> =
         filterRepository.getFilteredDataFlow(filterPath)
 
+    // In FilterOrchestrator.kt
     suspend fun handleChipSelection(
         currentFilterPath: List<FilterPath>,
         selectedCategoryId: Int,
         selectedEntityId: Int,
-        selectedEntityName: String
+        selectedEntityName: String,
+        isSelected: Boolean  // new parameter
     ): List<FilterPath> {
+        // Special case: SEARCH chip
+        if (selectedCategoryId == FilterPath.CATEGORY_SEARCH) {
+            return if (isSelected) {
+                // Replace: remove any existing search chip, then add the new one
+                val filteredPath = currentFilterPath.filterNot { it.categoryId == FilterPath.CATEGORY_SEARCH }
+                filteredPath + FilterPath(
+                    categoryId = selectedCategoryId,
+                    entityId = selectedEntityId,
+                    entityName = selectedEntityName
+                )
+            } else {
+                // Deselection: remove the specific search chip (match category, entityId, and entityName)
+                currentFilterPath.filterNot {
+                    it.categoryId == selectedCategoryId &&
+                            it.entityId == selectedEntityId &&
+                            it.entityName == selectedEntityName
+                }
+            }
+        }
+
+        // Original logic for other categories (no change needed)
         val result = when {
             // Deselection case (chip already selected)
             currentFilterPath.any { it.categoryId == selectedCategoryId && it.entityId == selectedEntityId } -> {
@@ -100,6 +124,11 @@ class FilterOrchestrator @Inject constructor(
                     filter.categoryId == categoryId || filter.categoryId == FilterPath.CATEGORY_ARTIST
                 }
             }
+
+            FilterPath.CATEGORY_SEARCH -> {
+                currentFilterPath.filterNot { it.categoryId == categoryId && it.entityId == entityId }
+            }
+
             else -> {
                 currentFilterPath.filterNot {
                     it.categoryId == categoryId && it.entityId == entityId

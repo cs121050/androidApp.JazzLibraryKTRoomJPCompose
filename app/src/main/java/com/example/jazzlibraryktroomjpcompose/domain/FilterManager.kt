@@ -55,75 +55,69 @@ class FilterManager @Inject constructor(
             val searchFilter = filterPath.find { it.categoryId == FilterPath.CATEGORY_SEARCH }
             val searchMode = searchFilter?.entityId ?: -1   // 0=video,1=artist,2=album
             val searchQuery = searchFilter?.entityName ?: ""
+            Log.d("FilterManager", "🔍 Search mode=$searchMode, query='$searchQuery'")
+            Log.d("FilterManager", "Search mode=$searchMode, query='$searchQuery'")
 
-            // Get filtered videos
+
+            // ──────────────────────────────────────────────────────────────
+            // 1. VIDEOS: apply searchQuery only if mode == 0
+            val videoSearchQuery = if (searchMode == 0) searchQuery else ""
+            Log.d("FilterManager", "Video search query='$videoSearchQuery'")
+            Log.d("FilterManager", "🎬 Video search query='$videoSearchQuery'")
             val videosFlow = database.videoDao().getVideosByMultipleFilters(
                 instrumentId = instrumentFilter?.entityId ?: 0,
                 artistId = artistFilter?.entityId ?: 0,
                 durationId = durationFilter?.entityId ?: 0,
                 typeId = typeFilter?.entityId ?: 0,
-                searchQuery = searchQuery
+                searchQuery = videoSearchQuery
             )
 
+            // ──────────────────────────────────────────────────────────────
+            // 2. ALBUMS: apply searchQuery only if mode == 2
+            val albumSearchQuery = if (searchMode == 2) searchQuery else ""
+            Log.d("FilterManager", "album search query='$albumSearchQuery'")
             val albumsFlow = if (artistFilter != null) {
                 database.albumDao().getAlbumsByArtistAndInstrumentWithMainFlag(
                     artistId = artistFilter.entityId,
                     instrumentId = instrumentFilter?.entityId ?: 0,
-                    searchQuery = searchQuery
+                    searchQuery = albumSearchQuery
                 )
             } else {
                 database.albumDao().getAlbumByMultipleFilters(
                     instrumentId = instrumentFilter?.entityId ?: 0,
                     artistId = 0,
-                    searchQuery = searchQuery
+                    searchQuery = albumSearchQuery
                 )
             }
 
-
-            // Get filtered artists
-            val artistsFlow = database.artistDao().getArtistsByMultipleFilters(
-                instrumentId = instrumentFilter?.entityId ?: 0,
-                typeId = typeFilter?.entityId ?: 0,
-                durationId = durationFilter?.entityId ?: 0
-            )
-
-            // Get filtered instruments
-            val instrumentsFlow = database.instrumentDao().getInstrumentsByMultipleFilters(
-                typeId = typeFilter?.entityId ?: 0,
-                durationId = durationFilter?.entityId ?: 0
-            )
-
-            // Get filtered durations
-            val durationsFlow = database.durationDao().getDurationsByMultipleFilters(
-                instrumentId = instrumentFilter?.entityId ?: 0,
-                typeId = typeFilter?.entityId ?: 0,
-                artistId = artistFilter?.entityId ?: 0
-            )
-
-            // Get filtered types
-            val typesFlow = database.typeDao().getTypesByMultipleFilters(
-                instrumentId = instrumentFilter?.entityId ?: 0,
-                artistId = artistFilter?.entityId ?: 0
-            )
-            // Get      artists WITH COUNT - using existing query
+            // ──────────────────────────────────────────────────────────────
+            // 3. ARTISTS: apply searchQuery only if mode == 1
+            val artistSearchQuery = if (searchMode == 1) searchQuery else ""
+            Log.d("FilterManager", "artist search query='$artistSearchQuery'")
             val artistsFlowWithCount = database.artistDao().getArtistsWithVideoCountByMultipleFilters(
                 instrumentId = instrumentFilter?.entityId ?: 0,
                 typeId = typeFilter?.entityId ?: 0,
                 durationId = durationFilter?.entityId ?: 0,
-                searchQuery = searchQuery
+                searchQuery = artistSearchQuery
             )
-            // Get instruments WITH COUNT - add this new method to your DAO
+
+            // ──────────────────────────────────────────────────────────────
+            // 4. INSTRUMENTS: no search support
             val instrumentsFlowWithCount = database.instrumentDao().getInstrumentsWithVideoCountByMultipleFilters(
                 typeId = typeFilter?.entityId ?: 0,
                 durationId = durationFilter?.entityId ?: 0
             )
-            // Get duration WITH COUNT - add this new method to your DAO
+
+            // ──────────────────────────────────────────────────────────────
+            // 5. DURATIONS: no search support
             val durationsFlowWithCount = database.durationDao().getDurationsWithVideoCountByMultipleFilters(
                 typeId = typeFilter?.entityId ?: 0,
                 instrumentId = instrumentFilter?.entityId ?: 0,
                 artistId = artistFilter?.entityId ?: 0
             )
-            // Get type WITH COUNT - add this new method to your DAO
+
+            // ──────────────────────────────────────────────────────────────
+            // 6. TYPES: no search support
             val typesFlowWithCount = database.typeDao().getTypesWithVideoCountByMultipleFilters(
                 instrumentId = instrumentFilter?.entityId ?: 0,
                 artistId = artistFilter?.entityId ?: 0,
@@ -229,6 +223,17 @@ suspend fun handleChipSelection(
                     )
                 }
 
+                FilterPath.CATEGORY_SEARCH -> {
+                    // Only one search chip allowed: remove any existing search chip,
+                    // then add the new one.
+                    val filteredWithoutSearch = filteredPath.filterNot { it.categoryId == FilterPath.CATEGORY_SEARCH }
+                    filteredWithoutSearch + FilterPath(
+                        categoryId = selectedCategoryId,
+                        entityId = selectedEntityId,
+                        entityName = selectedEntityName
+                    )
+                }
+
                 else -> {
                     // For duration or type, just add the new chip
                     filteredPath + FilterPath(
@@ -256,6 +261,14 @@ suspend fun handleChipSelection(
                             filter.categoryId == FilterPath.CATEGORY_ARTIST  // Remove any artist
                 }
             }
+
+            FilterPath.CATEGORY_SEARCH -> {
+                // Remove only the specific search chip (by entityId and entityName)
+                currentFilterPath.filterNot {
+                    it.categoryId == categoryId && it.entityId == entityId
+                }
+            }
+
             else -> {
                 // For other categories, just remove the specific chip
                 currentFilterPath.filterNot {
