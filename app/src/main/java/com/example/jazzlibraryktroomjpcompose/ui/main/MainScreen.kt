@@ -1156,19 +1156,22 @@ fun VideoStatsRow(
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             TabText(
-                text = "Videos ($videoCount)",
+                text = "Videos",
                 selected = currentTab == MainTab.VIDEOS,
-                onClick = { onTabSelected(MainTab.VIDEOS) }
+                onClick = { onTabSelected(MainTab.VIDEOS) },
+                count = videoCount
             )
             TabText(
-                text = "Artists ($artistCount)",
+                text = "Artists",
                 selected = currentTab == MainTab.ARTISTS,
-                onClick = { onTabSelected(MainTab.ARTISTS) }
+                onClick = { onTabSelected(MainTab.ARTISTS) },
+                count = artistCount
             )
             TabText(
                 text = "History",
                 selected = currentTab == MainTab.HISTORY,
-                onClick = { onTabSelected(MainTab.HISTORY) }
+                onClick = { onTabSelected(MainTab.HISTORY) },
+                count = historyCount
             )
         }
 
@@ -1283,17 +1286,29 @@ fun VideoStatsRow(
 fun TabText(
     text: String,
     selected: Boolean,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    count: Int
 ) {
-    Text(
-        text = text,
-        style = MaterialTheme.typography.titleMedium,
-        fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-        color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+    Column(
         modifier = Modifier
             .clickable { onClick() }
-            .padding(vertical = 8.dp)
-    )
+            .padding(vertical = 2.dp),
+        horizontalAlignment = Alignment.Start
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+            color = if (selected) MaterialTheme.colorScheme.primary
+            else MaterialTheme.colorScheme.onSurface
+        )
+        Text(
+            text = count.toString(),
+            style = MaterialTheme.typography.labelSmall,
+            fontSize = 10.sp,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+        )
+    }
 }
 
 @Composable

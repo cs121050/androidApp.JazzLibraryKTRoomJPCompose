@@ -374,7 +374,10 @@ private fun SuggestionItem(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Row(
+            modifier = Modifier.weight(1f),   // ← add this line
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ){
             Icon(
                 imageVector = when (entry.mode) {
                     0 -> Icons.Default.PlayArrow
