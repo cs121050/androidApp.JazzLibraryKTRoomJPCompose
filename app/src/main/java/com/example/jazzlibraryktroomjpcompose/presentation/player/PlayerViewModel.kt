@@ -89,12 +89,21 @@
         val isActiveCardVisible: StateFlow<Boolean> = _isActiveCardVisible.asStateFlow()
 
         fun onCardVisibilityChanged(isVisible: Boolean) {
+            Log.d(TAG, "🚨 onCardVisibilityChanged called: isVisible=$isVisible")
+            Log.d(TAG, "   current _isActiveCardVisible.value = ${_isActiveCardVisible.value}")
+            Log.d(TAG, "   current _globalPlayerVisible.value = $_globalPlayerVisible.value")
+            Log.d(TAG, "   current uiState.isVisible = ${_uiState.value.isVisible}")
+            Log.d(TAG, "   current uiState.isInMiniMode = ${_uiState.value.isInMiniMode}")
+            Log.d(TAG, "   current uiState.currentTypeOfMedia = ${_uiState.value.currentTypeOfMedia}")
+
+
             _isActiveCardVisible.value = isVisible
             _isCardVisible.value = isVisible
             updateMiniMode()
         }
 
         fun onGlobalPlayerVisibilityChanged(isVisible: Boolean) {
+            Log.d(TAG, "🌍 onGlobalPlayerVisibilityChanged: isVisible=$isVisible")
             _globalPlayerVisible.value = isVisible
             updateMiniMode()
         }
@@ -102,9 +111,15 @@
         private fun updateMiniMode() {
             val currentType = _uiState.value.currentTypeOfMedia
             val shouldBeMini = !_globalPlayerVisible.value || !_isCardVisible.value
-            if (shouldBeMini && !_uiState.value.isInMiniMode && currentType ==0) {
+            val isCurrentlyMini = _uiState.value.isInMiniMode
+            val isPlayerVisible = _uiState.value.isVisible
+
+            Log.d(TAG, "⚙️ updateMiniMode: shouldBeMini=$shouldBeMini, isCurrentlyMini=$isCurrentlyMini, currentType=$currentType, isPlayerVisible=$isPlayerVisible")
+
+            // Only auto‑minimize when typeOfMedia == 0 (videos)
+            if (shouldBeMini && !isCurrentlyMini && isPlayerVisible) {
                 minimizePlayer()
-            } else if (!shouldBeMini && _uiState.value.isInMiniMode) {
+            } else if (!shouldBeMini && isCurrentlyMini && isPlayerVisible) {
                 restoreFullMode()
             }
         }
@@ -233,10 +248,12 @@
          * This is typically called when the active video card scrolls out of view.
          */
         fun minimizePlayer() {
+            Log.d(TAG, "🟢 minimizePlayer: setting isInMiniMode = true")
             _uiState.update { it.copy(isInMiniMode = true) }
         }
 
         fun restoreFullMode() {
+            Log.d(TAG, "🔴 restoreFullMode: setting isInMiniMode = false")
             _uiState.update { it.copy(isInMiniMode = false) }
         }
 
