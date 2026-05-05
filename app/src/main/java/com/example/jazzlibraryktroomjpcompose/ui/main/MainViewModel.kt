@@ -135,6 +135,16 @@ class MainViewModel @Inject constructor(
     private val _searchHistory = MutableStateFlow<List<SearchHistoryRoomEntity>>(emptyList())
     val searchHistory: StateFlow<List<SearchHistoryRoomEntity>> = _searchHistory.asStateFlow()
 
+    private val albumSongsCache = mutableMapOf<Int, List<Song>>()
+
+    suspend fun loadAlbumSongsCached(albumId: Int): List<Song> {
+        return albumSongsCache[albumId] ?: run {
+            val songs = songRepository.getSongsByAlbumId(albumId).first()  // collect the flow once
+            albumSongsCache[albumId] = songs
+            songs
+        }
+    }
+
     // This is used in SingleArtistView to track whether the album card is visible on screen, which influences startInMiniMode logic (whether to start in mini mode or full mode when playing a song from the album card).
     fun setCurrentAlbumCardVisible(visible: Boolean) {
         _isCurrentAlbumCardVisible.value = visible
@@ -571,14 +581,23 @@ class MainViewModel @Inject constructor(
             }.collect { (filteredData, shouldRandomise) ->
 
                 val finalVideos = if (shouldRandomise) filteredData.videos.shuffled() else filteredData.videos
-                val displayAlbums = filteredData.albums.shuffleWithNullThumbnailsAtEnd()
+                val finalAlbums = if (shouldRandomise) {
+                    filteredData.albums.shuffleWithNullThumbnailsAtEnd()
+                } else {
+                    filteredData.albums
+                }
+                val displayAlbums = finalAlbums // already shuffled if needed
+                val finalArtists = if (shouldRandomise) filteredData.artists.shuffled() else filteredData.artists
+
+
+
 
                 _uiState.update { uiState ->
                     uiState.copy(
                         filteredVideos = finalVideos,
-                        filteredAlbums = filteredData.albums,
+                        filteredAlbums = finalAlbums,
                         availableAlbumsDisplay = displayAlbums,
-                        availableArtistsDisplay = filteredData.artists,
+                        availableArtistsDisplay = finalArtists,
                         availableArtists = filteredData.artists,
                         availableInstruments = filteredData.instruments,
                         availableDurations = filteredData.durations,
@@ -871,13 +890,6 @@ class MainViewModel @Inject constructor(
         }
     }
 
-    fun shuffleAlbums() {
-        viewModelScope.launch {
-            val current = _uiState.value.availableAlbumsDisplay
-            val shuffled = current.shuffleWithNullThumbnailsAtEnd()
-            _uiState.update { it.copy(availableAlbumsDisplay = shuffled) }
-        }
-    }
 
     // MainViewModel.kt
     fun refreshHistory() {
@@ -908,7 +920,15 @@ class MainViewModel @Inject constructor(
         }
     }
 
-
+    // In MainViewModel
+    fun triggerShuffle() {
+        _isRefreshing.value = true
+        refreshTrigger.value += 1
+        viewModelScope.launch {
+            delay(300)
+            _isRefreshing.value = false
+        }
+    }
 
 }
 
@@ -972,4 +992,4 @@ enum class TypeOfMedia {
 }
 
 
-enum class MainTab { VIDEOS, ARTISTS, HISTORY }
+enum class MainTab { VIDEOS, ALBUMS, ARTISTS, HISTORY }
