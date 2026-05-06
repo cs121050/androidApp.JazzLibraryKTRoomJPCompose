@@ -316,6 +316,7 @@
                 val chipsHeightPx = remember { mutableIntStateOf(0) }
                 val toolbarHeightPx = remember { mutableIntStateOf(0) }
                 val toolbarOffset = remember { mutableFloatStateOf(0f) }
+                val expandToolbar = { toolbarOffset.floatValue = 0f }
     
                 val nestedScrollConnection = remember(scrollLockState, isDropdownOpen) {
                     object : NestedScrollConnection {
@@ -428,6 +429,7 @@
                                     albumCount = albumCount,
                                     historyCount = historyCount,
                                     currentTab = currentTab,
+                                    onExpandToolbar = expandToolbar,
                                     onTabSelected = { tab ->
                                         viewModel.setCurrentTab(tab)          // MainViewModel
                                         playerViewModel.setCurrentTab(tab)    // PlayerViewModel (new)
@@ -897,6 +899,7 @@
         allVideos: List<Video>,   // <-- new parameter
         currentMediaEntryTypeOfMedia: Int?,
         albumCount: Int,
+        onExpandToolbar: () -> Unit,
         onVideoSelected: (Video) -> Unit,
     ) {
     
@@ -906,6 +909,7 @@
             onFilterClick = onFilterClick,
             hideSearchDropdown = hideSearchDropdown,
             onVideoSelected = onVideoSelected,
+            onExpandToolbar = onExpandToolbar,
             onSearchBarClicked = {
                 Log.d("toolbarBox", "onSearchBarClicked called – resetting hideSearchDropdown flag")
                 onSearchBarClicked()
