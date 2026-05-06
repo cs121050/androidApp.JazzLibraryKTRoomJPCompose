@@ -147,7 +147,6 @@
     import kotlin.coroutines.cancellation.CancellationException
 
     import com.example.jazzlibraryktroomjpcompose.presentation.player.PlaylistItem
-    import kotlinx.coroutines.flow.debounce
 
     enum class AlbumGridTab { MAIN, FEATURED }
     enum class SortDirection { ASC, DESC }
@@ -913,7 +912,9 @@
             },
             onDropdownVisibilityChanged = onDropdownVisibilityChanged,
             allVideos = allVideos,
-            modifier = Modifier.fillMaxWidth().padding(top = 4.dp)
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 4.dp)
         )
         // rest of the function unchanged
         VideoStatsRow(
@@ -2022,7 +2023,9 @@
                 .clickable { onClick() }
                 .padding(vertical = 8.dp)
                 .background(
-                    color = if (isCurrentlyPlaying) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                    color = if (isCurrentlyPlaying) MaterialTheme.colorScheme.surfaceVariant.copy(
+                        alpha = 0.5f
+                    )
                     else Color.Transparent
                 ),
             verticalAlignment = Alignment.CenterVertically
@@ -2816,7 +2819,10 @@
                                 .background(
                                     color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 1f)
                                 )
-                                .padding(horizontal = Dimens.chiptextHorizontalPadding, vertical = 6.dp)
+                                .padding(
+                                    horizontal = Dimens.chiptextHorizontalPadding,
+                                    vertical = 6.dp
+                                )
                         ) {
                             Text(
                                 text = "  *  ",
@@ -2867,7 +2873,9 @@
                 .clickable { onClick() }
                 .padding(4.dp)
                 .background(
-                    color = if (isCurrentlyPlaying) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 1f)
+                    color = if (isCurrentlyPlaying) MaterialTheme.colorScheme.surfaceVariant.copy(
+                        alpha = 1f
+                    )
                     else Color.Transparent // or any default color
                 ),
             verticalAlignment = Alignment.CenterVertically,
@@ -4130,10 +4138,18 @@
         playerViewModel: PlayerViewModel
     ) {
         LaunchedEffect(listState, activeCardId) {
-            snapshotFlow { listState.layoutInfo.visibleItemsInfo.map { it.key.toString() } }
-                .debounce(150) // wait for scroll to settle
-                .collect { visibleKeys ->
+            Log.d("VisibilityMonitor", "🚀 Monitor started. activeCardId = $activeCardId")
+
+            snapshotFlow { listState.layoutInfo.visibleItemsInfo }
+                .collect { visibleItems ->
+                    val visibleKeys = visibleItems.map { it.key.toString() }
                     val isVisible = activeCardId != null && visibleKeys.contains(activeCardId)
+
+                    // Log current player state (without referencing missing isCardVisible)
+                    val currentUiState = playerViewModel.uiState.value
+                    Log.d("VisibilityMonitor", "🎮 Player state: isVisible=${currentUiState.isVisible}, isInMiniMode=${currentUiState.isInMiniMode}, activeCardId=${currentUiState.activeCardId}")
+
+                    // Always call ViewModel method – it internally checks if visibility changed
                     playerViewModel.onCardVisibilityChanged(isVisible)
                 }
         }

@@ -138,9 +138,9 @@
             if (!isPlayerVisible) return
 
             // Only auto‑minimize when typeOfMedia == 0 (videos)
-            if (shouldBeMini && !isCurrentlyMini && currentType == 0) {
+            if (shouldBeMini && !isCurrentlyMini ) {
                 minimizePlayer()
-            } else if (!shouldBeMini && isCurrentlyMini && currentType == 0) {
+            } else if (!shouldBeMini && isCurrentlyMini) {
                 restoreFullMode()
             }
         }
