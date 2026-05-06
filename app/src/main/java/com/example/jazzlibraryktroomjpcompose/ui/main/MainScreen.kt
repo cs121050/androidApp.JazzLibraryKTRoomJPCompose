@@ -492,6 +492,8 @@
                                     onSearchBarClicked = { hideSearchDropdown = false },
                                     currentMediaEntryTypeOfMedia = currentMediaEntryTypeOfMedia,
                                     allVideos = videosToShow,
+                                    allArtists = uiState.availableArtists,
+                                    allAlbums = albumsToShow,
                                     onVideoSelected = { video ->
                                         // Find the index of the video in the current videosToShow list
                                         val index = videosToShow.indexOfFirst { it.id == video.id }
@@ -916,6 +918,7 @@
         historyCount: Int,
         currentTab: MainTab,
         onTabSelected: (MainTab) -> Unit,
+
         isPlayerVisible: Boolean,
         onPrevious: () -> Unit,
         onNext: () -> Unit,
@@ -935,6 +938,8 @@
         isDropdownOpen: Boolean,
         onDropdownVisibilityChanged: (Boolean) -> Unit,
         allVideos: List<Video>,   // <-- new parameter
+        allAlbums: List<Album>,
+        allArtists: List<Artist>,
         currentMediaEntryTypeOfMedia: Int?,
         albumCount: Int,
         onVideoTabClick: () -> Unit,
@@ -949,6 +954,7 @@
             onFilterClick = onFilterClick,
             hideSearchDropdown = hideSearchDropdown,
             onVideoSelected = onVideoSelected,
+
             onExpandToolbar = onExpandToolbar,
             onSearchBarClicked = {
                 Log.d("toolbarBox", "onSearchBarClicked called – resetting hideSearchDropdown flag")
@@ -956,6 +962,8 @@
             },
             onDropdownVisibilityChanged = onDropdownVisibilityChanged,
             allVideos = allVideos,
+            allAlbums = allAlbums,
+            allArtists = allArtists,
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(top = 4.dp)

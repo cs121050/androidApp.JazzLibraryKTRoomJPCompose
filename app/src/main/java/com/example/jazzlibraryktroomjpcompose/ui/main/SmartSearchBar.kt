@@ -40,6 +40,8 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import com.example.jazzlibraryktroomjpcompose.data.local.db.entities.SearchHistoryRoomEntity
+import com.example.jazzlibraryktroomjpcompose.domain.models.Album
+import com.example.jazzlibraryktroomjpcompose.domain.models.Artist
 import com.example.jazzlibraryktroomjpcompose.domain.models.FilterPath
 import com.example.jazzlibraryktroomjpcompose.domain.models.Video
 import kotlinx.coroutines.Job
@@ -59,6 +61,8 @@ fun SmartSearchBar(
     onDropdownVisibilityChanged: (Boolean) -> Unit,
     allVideos: List<Video>,   // <-- filtered videos (respect current filter path)
     onVideoSelected: (Video) -> Unit,
+    allArtists: List<Artist>,
+    allAlbums: List<Album>,
     onExpandToolbar: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -74,16 +78,17 @@ fun SmartSearchBar(
     val keyboardController = LocalSoftwareKeyboardController.current
 
     // Compute autocomplete items – NO LIMIT, shows all matching video titles
-    val autocompleteItems = remember(text, mode, allVideos) {
-        if (mode == 0 && text.isNotBlank()) {
-            val lowerText = text.lowercase()
-            allVideos
-                .filter { it.name.contains(lowerText, ignoreCase = true) }
-                .map { it.name }   // No .take() – show all matches
-        } else {
-            emptyList()
+    val autocompleteItems = remember(text, mode, allVideos, allArtists, allAlbums) {
+        if (text.isBlank()) return@remember emptyList()
+        val lowerText = text.lowercase()
+        when (mode) {
+            0 -> allVideos.filter { it.name.contains(lowerText, ignoreCase = true) }.map { it.name }
+            1 -> allArtists.filter { it.fullName.contains(lowerText, ignoreCase = true) }.map { it.fullName }
+            2 -> allAlbums.filter { it.title.contains(lowerText, ignoreCase = true) }.map { it.title }
+            else -> emptyList()
         }
     }
+
 
     // Decide what to show: autocomplete or history
     val showAutocomplete = autocompleteItems.isNotEmpty()
@@ -94,7 +99,7 @@ fun SmartSearchBar(
             !isFocused -> false
             hideSearchDropdown -> false
             text.isEmpty() -> true                     // show history
-            mode == 0 && showAutocomplete -> true      // show autocomplete
+            autocompleteItems.isNotEmpty() -> true     // show autocomplete for any mode
             else -> false
         }
         if (newShow != showSuggestions) {
@@ -273,6 +278,7 @@ fun SmartSearchBar(
                                 AutocompleteItem(
                                     title = title,
                                     searchText = text,
+                                    mode = mode,
                                     onClick = {
                                         Log.d(TAG, "Autocomplete selected: $title")
                                         performSearch(title, mode)
@@ -306,6 +312,7 @@ fun SmartSearchBar(
 private fun AutocompleteItem(
     title: String,
     searchText: String,
+    mode:Int,
     onClick: () -> Unit
 ) {
     // Build text with bold + blue highlight for the matching substring
@@ -348,7 +355,12 @@ private fun AutocompleteItem(
             modifier = Modifier.weight(1f)
         ) {
             Icon(
-                Icons.Default.Search,
+                imageVector = when (mode) {
+                    0 -> Icons.Default.PlayArrow
+                    1 -> Icons.Default.Person
+                    2 -> Icons.Default.Album
+                    else -> Icons.Default.Search
+                },
                 contentDescription = "Search",
                 modifier = Modifier.size(18.dp),
                 tint = MaterialTheme.colorScheme.primary
