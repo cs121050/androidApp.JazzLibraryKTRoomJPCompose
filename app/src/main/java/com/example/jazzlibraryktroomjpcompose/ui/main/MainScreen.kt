@@ -521,6 +521,12 @@
                                             val albumsToShow = uiState.filteredAlbums
                                             val albumsListState = rememberLazyListState()
 
+                                            LaunchedEffect(currentTab) {
+                                                if (currentTab == MainTab.ALBUMS) {
+                                                    albumsListState.scrollToItem(0)   // reset on every tab switch
+                                                }
+                                            }
+
                                             // ✅ No LaunchedEffect – no auto‑selection of first album
                                             AlbumsListContent(
                                                 albums = albumsToShow,
@@ -544,6 +550,7 @@
                                                         Log.d("ShuffleDebug-Album", "⚠️ Bounds for non-active album: $cardId (active=${playerStableState.activeCardId})")
                                                     }
                                                 },
+                                                onRefresh = { viewModel.safeRefreshDataFromAPI() },
                                                 onAlbumSelected = { album ->
                                                     val alreadyFiltered = filterState.currentFilterPath.any {
                                                         it.categoryId == FilterPath.CATEGORY_ARTIST && it.entityId == album.artistId
@@ -1469,46 +1476,51 @@
                 }
             }
         } else {
-            if (videosToShow.isEmpty()) {
-                Box(
-                    modifier = modifier,
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center
+                if (videosToShow.isEmpty()) {
+                    LazyColumn(
+                        modifier = modifier.fillMaxSize(),
+                        verticalArrangement = Arrangement.Center,
+                        horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Text(
-                            text = if (uiState.videos.isEmpty())
-                                "No videos in library"
-                            else
-                                "No videos found",
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = if (uiState.videos.isEmpty())
-                                "Try refreshing data"
-                            else
-                                "Try changing your filters",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.outline
-                        )
-                        if (uiState.videos.isEmpty()) {
-                            Spacer(modifier = Modifier.height(16.dp))
-                            Button(onClick = onRefresh) {
-                                Icon(Icons.Default.Refresh, contentDescription = "Refresh")
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text("Load Data")
+                        item {
+
+
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center
+                            ) {
+                                Text(
+                                    text = if (uiState.videos.isEmpty())
+                                        "No videos in library"
+                                    else
+                                        "No videos found",
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    text = if (uiState.videos.isEmpty())
+                                        "Try refreshing data"
+                                    else
+                                        "Try changing your filters",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.outline
+                                )
+                                if (uiState.videos.isEmpty()) {
+                                    Spacer(modifier = Modifier.height(16.dp))
+                                    Button(onClick = onRefresh) {
+                                        Icon(Icons.Default.Refresh, contentDescription = "Refresh")
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text("Load Data")
+                                    }
+                                }
                             }
                         }
                     }
-                }
-            } else {
-    
-                LazyColumn(
-                    state = listState,
+                } else {
+
+                    LazyColumn(
+                        state = listState,
                     modifier = modifier,
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
@@ -4255,9 +4267,58 @@
         viewModel: MainViewModel,
         onActiveCardBoundsChanged: (String, IntOffset, IntSize) -> Unit,
         onAlbumSelected: (Album) -> Unit,
+        onRefresh: () -> Unit,
         modifier: Modifier = Modifier
     ) {
         val currentPlayingSongId by playerViewModel.currentVideoDbIdState.collectAsState()
+
+
+        if (albums.isEmpty()) {
+
+            // --- Enhanced empty state (exactly like Videos tab) ---
+            LazyColumn(
+                modifier = modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.Center,
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                item {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        // Different message based on whether we have any albums at all
+                        // (you can adapt the condition – here we assume the library's total album count is known)
+                        val totalAlbums = viewModel.uiState.value.albums.size
+                        Text(
+                            text = if (totalAlbums == 0)
+                                "No albums in library"
+                            else
+                                "No albums found",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = if (totalAlbums == 0)
+                                "Try refreshing data"
+                            else
+                                "Try changing your filters",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.outline
+                        )
+                        if (totalAlbums == 0) {
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Button(onClick = onRefresh) {
+                                Icon(Icons.Default.Refresh, contentDescription = "Refresh")
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Load Data")
+                            }
+                        }
+                    }
+                }
+            }
+            return
+        }
 
         // ---- LOG: monitor activeCardId changes ----
         LaunchedEffect(playerUiState.activeCardId) {
@@ -4269,12 +4330,12 @@
             Log.d("AlbumsListContent", "📜 Scroll to index ${listState.firstVisibleItemIndex}")
         }
 
-        if (albums.isEmpty()) {
-            Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("No albums in this filter")
+            if (albums.isEmpty()) {
+                Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text("No albums in this filter")
+                }
+                return
             }
-            return
-        }
 
         LazyColumn(
             state = listState,
