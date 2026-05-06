@@ -260,7 +260,9 @@
         LaunchedEffect(currentFilterPathId) {
             Log.d("MainScreen", "currentFilterPathId changed to: $currentFilterPathId")
         }
-    
+
+
+
         //DEBUGLOG
         LaunchedEffect(isFullscreen) {
             Log.d(
@@ -348,9 +350,44 @@
                 } else {
                     uiState.filteredVideos
                 }
-    
-    
-    
+                val albumsToShow = uiState.filteredAlbums
+                val albumsListState = rememberLazyListState()
+
+                // Scroll to the currently playing video (if any)
+                fun scrollToPlayingVideo() {
+                    if (playerStableState.currentTypeOfMedia == 0) {
+                        val currentYoutubeId = playerStableState.currentVideoId
+                        if (currentYoutubeId != null) {
+                            val index = videosToShow.indexOfFirst { video ->
+                                extractYouTubeVideoId(video.path) == currentYoutubeId
+                            }
+                            if (index != -1) {
+                                coroutineScope.launch {
+                                    listState.animateScrollToItem(index)
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Scroll to the currently playing album (if any)
+                fun scrollToPlayingAlbum() {
+                    if (playerStableState.currentTypeOfMedia == 1) {
+                        val activeCardId = playerStableState.activeCardId
+                        if (activeCardId != null && activeCardId.startsWith("album_")) {
+                            val albumId = activeCardId.removePrefix("album_").toIntOrNull()
+                            if (albumId != null) {
+                                val index = uiState.filteredAlbums.indexOfFirst { it.albumId == albumId }
+                                if (index != -1) {
+                                    coroutineScope.launch {
+                                        albumsListState.animateScrollToItem(index)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
                 // ----- CHIPS ROW (fixed) -----
                 if (!isFullscreen) {
                     ActiveFilterChipsRow(
@@ -426,6 +463,8 @@
                                     onFilterClick = { viewModel.toggleBottomSheet() },
                                     videoCount = videosToShow.size,
                                     artistCount = artistCount,
+                                    onVideoTabClick = { scrollToPlayingVideo() },
+                                    onAlbumTabClick = { scrollToPlayingAlbum() },
                                     albumCount = albumCount,
                                     historyCount = historyCount,
                                     currentTab = currentTab,
@@ -518,14 +557,6 @@
                                         )
     
                                         MainTab.ALBUMS -> {
-                                            val albumsToShow = uiState.filteredAlbums
-                                            val albumsListState = rememberLazyListState()
-
-                                            LaunchedEffect(currentTab) {
-                                                if (currentTab == MainTab.ALBUMS) {
-                                                    albumsListState.scrollToItem(0)   // reset on every tab switch
-                                                }
-                                            }
 
                                             // ✅ No LaunchedEffect – no auto‑selection of first album
                                             AlbumsListContent(
@@ -906,6 +937,8 @@
         allVideos: List<Video>,   // <-- new parameter
         currentMediaEntryTypeOfMedia: Int?,
         albumCount: Int,
+        onVideoTabClick: () -> Unit,
+        onAlbumTabClick: () -> Unit,
         onExpandToolbar: () -> Unit,
         onVideoSelected: (Video) -> Unit,
     ) {
@@ -931,6 +964,8 @@
         VideoStatsRow(
             videoCount = videoCount,
             artistCount = artistCount,
+            onVideoTabClick = onVideoTabClick,
+            onAlbumTabClick = onAlbumTabClick,
             historyCount = historyCount,
             albumCount = albumCount,
             currentTab = currentTab,
@@ -1075,6 +1110,8 @@
         isAlbumCardVisible: () -> Boolean,
         currentAlbumId: Int?,
         currentMediaEntryTypeOfMedia: Int?,
+        onVideoTabClick: () -> Unit,
+        onAlbumTabClick: () -> Unit,
         modifier: Modifier = Modifier
     ) {
     
@@ -1206,13 +1243,23 @@
                 TabText(
                     text = "Videos",
                     selected = currentTab == MainTab.VIDEOS,
-                    onClick = { onTabSelected(MainTab.VIDEOS) },
+                    onClick = {
+                        onTabSelected(MainTab.VIDEOS)
+                        if (currentTab == MainTab.VIDEOS) {  // already on Videos tab
+                            onVideoTabClick()
+                        }
+                    },
                     count = videoCount
                 )
                 TabText(
                     text = "Albums",
                     selected = currentTab == MainTab.ALBUMS,
-                    onClick = { onTabSelected(MainTab.ALBUMS) },
+                    onClick = {
+                        onTabSelected(MainTab.ALBUMS)
+                        if (currentTab == MainTab.ALBUMS) {
+                            onAlbumTabClick()
+                        }
+                    },
                     count = albumCount   // placeholder count, you can replace later
                 )
                 TabText(
