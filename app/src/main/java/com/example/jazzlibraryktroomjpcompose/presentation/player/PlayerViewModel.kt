@@ -89,6 +89,7 @@
         val isActiveCardVisible: StateFlow<Boolean> = _isActiveCardVisible.asStateFlow()
 
         fun onCardVisibilityChanged(isVisible: Boolean) {
+            Log.d("ShuffleDebug-Album", "👁️ onCardVisibilityChanged: isVisible=$isVisible, activeCardId=${_uiState.value.activeCardId}")
             Log.d(TAG, "🚨 onCardVisibilityChanged called: isVisible=$isVisible")
             Log.d(TAG, "   current _isActiveCardVisible.value = ${_isActiveCardVisible.value}")
             Log.d(TAG, "   current _globalPlayerVisible.value = $_globalPlayerVisible.value")

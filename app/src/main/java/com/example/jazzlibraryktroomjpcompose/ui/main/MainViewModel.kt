@@ -404,6 +404,7 @@ class MainViewModel @Inject constructor(
     }
 
     fun safeRefreshDataFromAPI() {
+        Log.d("ShuffleDebug-Album", "🔄 Refresh started at ${System.currentTimeMillis()}")
         viewModelScope.launch {
             _loadingState.value = LoadingState.LOADING
 
@@ -437,6 +438,7 @@ class MainViewModel @Inject constructor(
                 _loadingState.value = LoadingState.SUCCESS
             }
         }
+        Log.d("ShuffleDebug-Album", "🔄 Refresh finished")
     }
 
     private suspend fun checkApiAvailability(): Boolean {

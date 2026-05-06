@@ -529,7 +529,7 @@
                                         MainTab.ALBUMS -> {
                                             val albumsToShow = uiState.filteredAlbums
                                             val albumsListState = rememberLazyListState()
-    
+
                                             // ✅ No LaunchedEffect – no auto‑selection of first album
                                             AlbumsListContent(
                                                 albums = albumsToShow,
@@ -542,11 +542,15 @@
                                                 filterPath = filterState.currentFilterPath,
                                                 albumArtistsMap = viewModel.albumArtistsMap.collectAsState().value,
                                                 viewModel = viewModel,
-                                                onActiveCardBoundsChanged = { cardId, rootPosition, size ->
+                                                onActiveCardBoundsChanged = { cardId, position, size ->
+                                                    Log.d("ShuffleDebug-Album", "📐 Bounds update: card=$cardId, pos=$position, size=$size")
                                                     if (cardId == playerUiState.activeCardId) {
-                                                        val relativePos = rootPosition - contentBoxRootPosition
+                                                        val relativePos = position - contentBoxRootPosition
+                                                        Log.d("ShuffleDebug-Album", "✅ Active album card bounds stored: relativePos=$relativePos, contentRoot=$contentBoxRootPosition")
                                                         activeCardRelativePosition = relativePos
                                                         activeCardSize = size
+                                                    } else {
+                                                        Log.d("ShuffleDebug-Album", "⚠️ Bounds for non-active album: $cardId (active=${playerUiState.activeCardId})")
                                                     }
                                                 },
                                                 onAlbumSelected = { album ->
@@ -1698,7 +1702,7 @@
             }
         }
     }
-    
+
     @OptIn(ExperimentalFoundationApi::class)
     @Composable
     fun AlbumPlayerCard(
@@ -2463,13 +2467,43 @@
                         .height(460.dp)   // ✅ provide finite height
                 ) {
                     AlbumsSection(
-                        onAlbumSelected = handleAlbumSelected,
+                        onAlbumSelected = { album ->
+                            val cardId = "album_${album.albumId}"
+                            if (playerUiState.activeCardId == cardId) {
+                                // Close the player
+                                playerViewModel.closePlayer(currentFilterPathId)
+                            } else {
+                                // Play this album in mini mode
+                                coroutineScope.launch {
+                                    val songs = viewModel.loadAlbumSongsCached(album.albumId)
+                                    if (songs.isNotEmpty()) {
+                                        val firstSong = songs.first()
+                                        val playlist =
+                                            songs.map { PlaylistItem.SongItem(it, album.albumId) }
+                                        firstSong.ytVideoId?.let { videoId ->
+                                            playerViewModel.loadVideo(
+                                                videoId = videoId,
+                                                cardId = "album_${album.albumId}",
+                                                currentFilterPath = filterPath,
+                                                startInMiniMode = true,
+                                                mediaDbId = firstSong.songId,
+                                                filterPathId = currentFilterPathId,
+                                                typeOfMedia = 1,
+                                                playlist = playlist,
+                                                startIndex = 0
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        },
                         currentMediaEntryTypeOfMedia = currentMediaEntryTypeOfMedia,
                         albumsDisplay = albumsDisplay,
                         currentFilterPathId = currentFilterPathId,
                         minimiseMaximiseToggle = minimiseMaximiseToggle,
                         showMainAndFeaturedChips = false,
-                        albumArtistsMap = viewModel.albumArtistsMap.collectAsState().value,
+                        albumArtistsMap = albumArtistsMap,
+                        activeCardId = playerUiState.activeCardId,
                         modifier = Modifier.fillMaxSize()
                     )
                 }
@@ -2938,6 +2972,8 @@
         var selectedAlbum by remember { mutableStateOf<Album?>(null) }
         var isDefaultSelection by remember { mutableStateOf(true) }
 
+        val coroutineScope = rememberCoroutineScope()
+
         // Watch for changes in albumsDisplay and requestedAlbumId
         LaunchedEffect(albumsDisplay, requestedAlbumId) {
             if (requestedAlbumId != null) {
@@ -3079,13 +3115,42 @@
                         .height(460.dp)
                 ) {
                     AlbumsSection(
-                        onAlbumSelected = handleAlbumSelected,
+                        onAlbumSelected = { album ->
+                            val cardId = "album_${album.albumId}"
+                            if (playerUiState.activeCardId == cardId) {
+                                // Close the player
+                                playerViewModel.closePlayer(currentFilterPathId)
+                            } else {
+                                coroutineScope.launch {
+                                    val songs = viewModel.loadAlbumSongsCached(album.albumId)
+                                    if (songs.isNotEmpty()) {
+                                        val firstSong = songs.first()
+                                        val playlist =
+                                            songs.map { PlaylistItem.SongItem(it, album.albumId) }
+                                        firstSong.ytVideoId?.let { videoId ->
+                                            playerViewModel.loadVideo(
+                                                videoId = videoId,
+                                                cardId = "album_${album.albumId}",
+                                                currentFilterPath = currentFilterPath,
+                                                startInMiniMode = true,
+                                                mediaDbId = firstSong.songId,
+                                                filterPathId = currentFilterPathId,
+                                                typeOfMedia = 1,
+                                                playlist = playlist,
+                                                startIndex = 0
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        },
                         currentMediaEntryTypeOfMedia = currentMediaEntryTypeOfMedia,
                         albumsDisplay = albumsDisplay,
                         currentFilterPathId = currentFilterPathId,
                         minimiseMaximiseToggle = minimiseMaximiseToggle,
                         showMainAndFeaturedChips = true,
                         albumArtistsMap = albumArtistsMap,
+                        activeCardId = playerUiState.activeCardId,
                         modifier = Modifier.fillMaxSize()
                     )
                 }
@@ -3492,6 +3557,7 @@
         albumArtistsMap: Map<Int, List<MainViewModel.AlbumArtistInfo>>,
         minimiseMaximiseToggle: Boolean,
         showMainAndFeaturedChips: Boolean,
+        activeCardId: String?,
         modifier: Modifier = Modifier
     ) {
         Column(
@@ -3503,6 +3569,7 @@
                 onAlbumClick = onAlbumSelected,
                 albumsDisplay = albumsDisplay,
                 currentFilterPathId = currentFilterPathId,
+                activeCardId = activeCardId,
                 albumArtistsMap = albumArtistsMap,
                 minimiseMaximiseToggle = minimiseMaximiseToggle,
                 showMainAndFeaturedChips = showMainAndFeaturedChips,
@@ -3519,6 +3586,7 @@
         minimiseMaximiseToggle: Boolean,
         albumArtistsMap: Map<Int, List<MainViewModel.AlbumArtistInfo>>,
         showMainAndFeaturedChips: Boolean,
+        activeCardId: String?,
         modifier: Modifier = Modifier
     ) {
     
@@ -3813,6 +3881,7 @@
                         val cardWidth = if (minimiseMaximiseToggle) 120.dp else 250.dp
     
                         items(sortedAlbums) { album ->
+                            val isActive = activeCardId == "album_${album.albumId}"
                             Log.d(
                                 "AlbumGridView",
                                 "🖼️ Rendering album card: ${album.title} (id=${album.albumId})"
@@ -3823,7 +3892,8 @@
                                 modifier = Modifier
                                     .width(cardWidth)
                                     .animateContentSize(),
-                                onClick = { onAlbumClick(album) }
+                                onClick = { onAlbumClick(album) },
+                                isActive = isActive
                             )
                         }
                     }
@@ -3967,14 +4037,18 @@
         album: Album,
         artistName: String,
         modifier: Modifier = Modifier,
-        onClick: () -> Unit
+        onClick: () -> Unit,
+        isActive: Boolean = false
     ) {
         val thumbnailUrl = album.getThumbnailUrl()
+        val borderColor = if (isActive) MaterialTheme.colorScheme.primary else Color.Transparent
+        val borderWidth = if (isActive) 1.dp else 0.dp
     
         Card(
             modifier = modifier
                 .clickable { onClick() }
                 .shadow(2.dp, RoundedCornerShape(12.dp))
+                .border(borderWidth, borderColor, RoundedCornerShape(12.dp))
                 .animateContentSize(),
             shape = RoundedCornerShape(12.dp),
             colors = CardDefaults.cardColors(
