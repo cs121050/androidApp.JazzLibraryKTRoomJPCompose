@@ -83,7 +83,6 @@
     import androidx.compose.ui.zIndex
     import com.example.jazzlibraryktroomjpcompose.presentation.player.PlayerViewModel
     import kotlinx.coroutines.launch
-    import androidx.compose.material.icons.filled.BrokenImage
     import androidx.compose.material.icons.filled.Close
     import androidx.compose.ui.input.pointer.pointerInput
     import androidx.compose.ui.layout.ContentScale
@@ -122,43 +121,34 @@
     import androidx.compose.material.icons.filled.SkipPrevious
     import com.google.accompanist.systemuicontroller.rememberSystemUiController
     import androidx.compose.ui.platform.LocalView
-    
-    import androidx.compose.foundation.layout.WindowInsets
-    import androidx.compose.foundation.layout.navigationBars
+
     import androidx.compose.material.icons.filled.ArrowBack
     import androidx.compose.material.icons.filled.Cast
     import androidx.compose.material.icons.filled.Share
     import androidx.compose.material3.Surface
-    import androidx.compose.ui.unit.Dp
     import com.example.jazzlibraryktroomjpcompose.domain.models.Album
     
     import androidx.compose.foundation.lazy.grid.GridCells
     import androidx.compose.foundation.lazy.grid.LazyGridState
     import androidx.compose.foundation.lazy.grid.LazyHorizontalGrid
     import androidx.compose.foundation.lazy.grid.items
-    import androidx.compose.foundation.text.KeyboardActions
-    import androidx.compose.foundation.text.KeyboardOptions
     import androidx.compose.material.icons.filled.Album
     import androidx.compose.material.icons.filled.ArrowDownward
     import androidx.compose.material.icons.filled.ArrowUpward
-    import androidx.compose.material.icons.filled.Person
     import androidx.compose.material3.*
-    import androidx.compose.ui.focus.onFocusChanged
     import androidx.compose.ui.platform.LocalFocusManager
     import androidx.compose.ui.platform.LocalSoftwareKeyboardController
-    import androidx.compose.ui.text.input.ImeAction
     import androidx.compose.ui.text.style.TextAlign
     import androidx.compose.ui.unit.Velocity
-    import androidx.lifecycle.ViewModel
-    import com.example.jazzlibraryktroomjpcompose.data.local.db.entities.SearchHistoryRoomEntity
     import com.example.jazzlibraryktroomjpcompose.domain.models.Song
+    import com.example.jazzlibraryktroomjpcompose.presentation.player.PlayerStableState
     import kotlinx.coroutines.Job
     import java.text.DecimalFormat
     import kotlin.coroutines.cancellation.CancellationException
-    
-    import com.example.jazzlibraryktroomjpcompose.presentation.player.PlayerSession
+
     import com.example.jazzlibraryktroomjpcompose.presentation.player.PlaylistItem
-    
+    import kotlinx.coroutines.flow.debounce
+
     enum class AlbumGridTab { MAIN, FEATURED }
     enum class SortDirection { ASC, DESC }
     
@@ -195,7 +185,7 @@
         val context = LocalContext.current
         val isRefreshing by viewModel.isRefreshing.collectAsState()
     
-        val playerUiState by playerViewModel.uiState.collectAsState()
+        val playerStableState by playerViewModel.stableState.collectAsState()
         var activeCardRelativePosition by remember { mutableStateOf<IntOffset?>(null) }
         var activeCardSize by remember { mutableStateOf<IntSize?>(null) }
         var contentBoxRootPosition by remember { mutableStateOf(IntOffset.Zero) }
@@ -219,7 +209,7 @@
         //orientation detection
         val configuration = LocalConfiguration.current
         val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
-        val isFullscreen = isLandscape && playerUiState.isVisible
+        val isFullscreen = isLandscape && playerStableState.isVisible
     
         var miniPlayerHeight by remember { mutableStateOf(0.dp) }
     
@@ -264,8 +254,8 @@
             playerViewModel.onGlobalPlayerVisibilityChanged(isPlayerVisible)
         }
     
-        LaunchedEffect(isLandscape, playerUiState.isVisible) {
-            viewModel.setFullscreen(isLandscape && playerUiState.isVisible)
+        LaunchedEffect(isLandscape, playerStableState.isVisible) {
+            viewModel.setFullscreen(isLandscape && playerStableState.isVisible)
         }
     
         LaunchedEffect(currentFilterPathId) {
@@ -276,7 +266,7 @@
         LaunchedEffect(isFullscreen) {
             Log.d(
                 "Fullscreen",
-                "isFullscreen: $isFullscreen, isLandscape: $isLandscape, playerVisible: ${playerUiState.isVisible}"
+                "isFullscreen: $isFullscreen, isLandscape: $isLandscape, playerVisible: ${playerStableState.isVisible}"
             )
         }
     
@@ -503,14 +493,14 @@
                                             videosToShow = videosToShow,
                                             onRefresh = { viewModel.safeRefreshDataFromAPI() },
                                             onActiveCardBoundsChanged = { cardId, rootPosition, size ->
-                                                if (cardId == playerUiState.activeCardId) {
+                                                if (cardId == playerStableState.activeCardId) {
                                                     val relativePos =
                                                         rootPosition - contentBoxRootPosition
                                                     activeCardRelativePosition = relativePos
                                                     activeCardSize = size
                                                 }
                                             },
-                                            playerUiState = playerUiState,
+                                            playerUiState = playerStableState,
                                             playerViewModel = playerViewModel,
                                             listState = listState,
                                             isPlayerVisible = isPlayerVisible,
@@ -535,7 +525,7 @@
                                                 albums = albumsToShow,
                                                 filterState = filterState,
                                                 isPlayerVisible = isPlayerVisible,
-                                                playerUiState = playerUiState,
+                                                playerUiState = playerStableState,
                                                 playerViewModel = playerViewModel,
                                                 listState = albumsListState,
                                                 currentFilterPathId = currentFilterPathId,
@@ -544,13 +534,13 @@
                                                 viewModel = viewModel,
                                                 onActiveCardBoundsChanged = { cardId, position, size ->
                                                     Log.d("ShuffleDebug-Album", "📐 Bounds update: card=$cardId, pos=$position, size=$size")
-                                                    if (cardId == playerUiState.activeCardId) {
+                                                    if (cardId == playerStableState.activeCardId) {
                                                         val relativePos = position - contentBoxRootPosition
                                                         Log.d("ShuffleDebug-Album", "✅ Active album card bounds stored: relativePos=$relativePos, contentRoot=$contentBoxRootPosition")
                                                         activeCardRelativePosition = relativePos
                                                         activeCardSize = size
                                                     } else {
-                                                        Log.d("ShuffleDebug-Album", "⚠️ Bounds for non-active album: $cardId (active=${playerUiState.activeCardId})")
+                                                        Log.d("ShuffleDebug-Album", "⚠️ Bounds for non-active album: $cardId (active=${playerStableState.activeCardId})")
                                                     }
                                                 },
                                                 onAlbumSelected = { album ->
@@ -577,14 +567,14 @@
                                             filterPath = filterState.currentFilterPath, // pass filter path
                                             onRefresh = { viewModel.shuffleArtists() },
                                             onActiveCardBoundsChanged = { cardId, rootPosition, size ->
-                                                if (cardId == playerUiState.activeCardId) {
+                                                if (cardId == playerStableState.activeCardId) {
                                                     val relativePos =
                                                         rootPosition - contentBoxRootPosition
                                                     activeCardRelativePosition = relativePos
                                                     activeCardSize = size
                                                 }
                                             },
-                                            playerUiState = playerUiState,
+                                            playerUiState = playerStableState,
                                             onArtistSelected = { artist ->
                                                 viewModel.handleChipSelection(
                                                     FilterPath.CATEGORY_ARTIST,
@@ -622,7 +612,7 @@
                                         MainTab.HISTORY -> HistoryContent(
                                             modifier = Modifier.fillMaxSize(),
                                             viewModel = viewModel,
-                                            playerUiState = playerUiState,
+                                            playerUiState = playerStableState,
                                             playerViewModel = playerViewModel,
                                             onRefresh = { viewModel.refreshHistory() },
                                             isPlayerVisible = isPlayerVisible
@@ -632,7 +622,7 @@
                             }
     
                             // ----- PLAYER (draggable mini player) -----
-                            if (playerUiState.isVisible) {
+                            if (playerStableState.isVisible) {
                                 val density = LocalDensity.current
                                 val configuration = LocalConfiguration.current
                                 val context = LocalContext.current
@@ -649,8 +639,8 @@
                                 val marginPx = with(density) { 6.dp.toPx() }
     
                                 // Reset offset when entering mini mode
-                                LaunchedEffect(playerUiState.isInMiniMode) {
-                                    if (playerUiState.isInMiniMode) {
+                                LaunchedEffect(playerStableState.isInMiniMode) {
+                                    if (playerStableState.isInMiniMode) {
                                         dragOffsetY.snapTo(0f)
                                     }
                                 }
@@ -673,7 +663,7 @@
                                             }
                                         }
     
-                                    playerUiState.isInMiniMode -> Modifier
+                                    playerStableState.isInMiniMode -> Modifier
                                         .size(
                                             width = 235.dp,
                                             height = 200.dp
@@ -711,10 +701,10 @@
                                         }
                                 ) {
                                     SmartYoutubePlayerHost(
-                                        key = playerUiState.playerInstanceId,
-                                        videoId = playerUiState.currentVideoId,
+                                        key = playerStableState.playerInstanceId,
+                                        videoId = playerStableState.currentVideoId,
                                         isFullscreen = isFullscreen,
-                                        isMiniMode = playerUiState.isInMiniMode && !isFullscreen,
+                                        isMiniMode = playerStableState.isInMiniMode && !isFullscreen,
                                         onPlayerReady = { player ->
                                             playerViewModel.setPlayer(
                                                 player
@@ -1398,7 +1388,7 @@
         filterState: FilterState,
         videosToShow: List<Video>,
         isPlayerVisible: Boolean,
-        playerUiState: PlayerUiState,
+        playerUiState: PlayerStableState,
         onRefresh: () -> Unit,
         listState: LazyListState,
         playerViewModel: PlayerViewModel,
@@ -2201,7 +2191,7 @@
         artistsBase: List<Artist>,
         filteredAlbums: List<Album>,
         albumsDisplay: List<Album>,
-        playerUiState: PlayerUiState,
+        playerUiState: PlayerStableState,
         onRefresh: () -> Unit = {},
         onActiveCardBoundsChanged: (String, IntOffset, IntSize) -> Unit,
         filterPath: List<FilterPath>, // new parameter
@@ -2673,7 +2663,7 @@
     fun HistoryContent(
         modifier: Modifier = Modifier,
         viewModel: MainViewModel,
-        playerUiState: PlayerUiState,
+        playerUiState: PlayerStableState,
         playerViewModel: PlayerViewModel,
         onRefresh: () -> Unit,
         isPlayerVisible: Boolean
@@ -2961,7 +2951,7 @@
         initialSelectedAlbum: Album? = null,
         albumArtistsMap: Map<Int, List<MainViewModel.AlbumArtistInfo>>,
         onActiveCardBoundsChanged: (String, IntOffset, IntSize) -> Unit,
-        playerUiState: PlayerUiState,
+        playerUiState: PlayerStableState,
         modifier: Modifier = Modifier
     ) {
         val context = LocalContext.current
@@ -4140,28 +4130,10 @@
         playerViewModel: PlayerViewModel
     ) {
         LaunchedEffect(listState, activeCardId) {
-            Log.d("VisibilityMonitor", "🚀 Monitor started. activeCardId = $activeCardId")
-
-            snapshotFlow { listState.layoutInfo.visibleItemsInfo }
-                .collect { visibleItems ->
-                    val visibleKeys = visibleItems.map { it.key.toString() }
+            snapshotFlow { listState.layoutInfo.visibleItemsInfo.map { it.key.toString() } }
+                .debounce(150) // wait for scroll to settle
+                .collect { visibleKeys ->
                     val isVisible = activeCardId != null && visibleKeys.contains(activeCardId)
-
-                    Log.d("VisibilityMonitor", """
-                    |📊 Update:
-                    |  activeCardId        = $activeCardId
-                    |  visibleKeys         = $visibleKeys
-                    |  contains?           = ${activeCardId != null && visibleKeys.contains(activeCardId)}
-                    |  isVisible           = $isVisible
-                    |  firstVisibleIndex   = ${listState.firstVisibleItemIndex}
-                    |  visible items count = ${visibleItems.size}
-                """.trimMargin())
-
-                    // Log current player state (without referencing missing isCardVisible)
-                    val currentUiState = playerViewModel.uiState.value
-                    Log.d("VisibilityMonitor", "🎮 Player state: isVisible=${currentUiState.isVisible}, isInMiniMode=${currentUiState.isInMiniMode}, activeCardId=${currentUiState.activeCardId}")
-
-                    // Always call ViewModel method – it internally checks if visibility changed
                     playerViewModel.onCardVisibilityChanged(isVisible)
                 }
         }
@@ -4254,7 +4226,7 @@
         albums: List<Album>,
         filterState: FilterState,
         isPlayerVisible: Boolean,
-        playerUiState: PlayerUiState,
+        playerUiState: PlayerStableState,
         playerViewModel: PlayerViewModel,
         listState: LazyListState,
         currentFilterPathId: Int?,
