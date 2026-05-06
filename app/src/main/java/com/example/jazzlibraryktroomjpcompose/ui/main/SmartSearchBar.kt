@@ -59,6 +59,7 @@ fun SmartSearchBar(
     onDropdownVisibilityChanged: (Boolean) -> Unit,
     allVideos: List<Video>,   // <-- filtered videos (respect current filter path)
     onVideoSelected: (Video) -> Unit,
+    onExpandToolbar: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     var isScrollLocked by remember { mutableStateOf(false) }
@@ -184,7 +185,10 @@ fun SmartSearchBar(
                     .fillMaxWidth()
                     .onFocusChanged { focusState ->
                         isFocused = focusState.isFocused
-                        if (focusState.isFocused) onSearchBarClicked()
+                        if (focusState.isFocused) {
+                            onSearchBarClicked()
+                            onExpandToolbar()
+                        }
                     },
                 placeholder = { Text("Search videos, artists, albums...") },
                 leadingIcon = {
@@ -258,6 +262,8 @@ fun SmartSearchBar(
                             }
                         }
                 ) {
+                    val historyToShow = searchHistory.filter { it.mode == mode }
+
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
                         verticalArrangement = Arrangement.spacedBy(0.dp)
@@ -274,7 +280,7 @@ fun SmartSearchBar(
                                 )
                             }
                         } else {
-                            items(searchHistory) { entry ->
+                            items(historyToShow) { entry ->
                                 SuggestionItem(
                                     entry = entry,
                                     onClick = {
@@ -379,12 +385,13 @@ private fun SuggestionItem(
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ){
             Icon(
-                imageVector = when (entry.mode) {
-                    0 -> Icons.Default.PlayArrow
-                    1 -> Icons.Default.Person
-                    2 -> Icons.Default.Album
-                    else -> Icons.Default.Search
-                },
+                imageVector = Icons.Default.History,
+//                imageVector = when (entry.mode) {
+//                    0 -> Icons.Default.PlayArrow
+//                    1 -> Icons.Default.Person
+//                    2 -> Icons.Default.Album
+//                    else -> Icons.Default.Search
+//                },
                 contentDescription = "Mode",
                 modifier = Modifier.size(20.dp),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant
