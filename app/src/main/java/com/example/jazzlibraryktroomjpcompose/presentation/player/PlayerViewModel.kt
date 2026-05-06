@@ -13,6 +13,7 @@
     import com.example.jazzlibraryktroomjpcompose.domain.player.VideoPlayerController
     import com.example.jazzlibraryktroomjpcompose.domain.repository.SongRepository
     import com.example.jazzlibraryktroomjpcompose.ui.main.MainTab
+    import com.pierfrancescosoffritti.androidyoutubeplayer.BuildConfig
     import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.YouTubePlayer
     import dagger.hilt.android.lifecycle.HiltViewModel
     import kotlinx.coroutines.flow.*
@@ -34,7 +35,15 @@
     ) : ViewModel() {
     
         private var currentFilterPathId: Int? = null
-    
+
+        private val _stableState = MutableStateFlow(PlayerStableState())
+        val stableState: StateFlow<PlayerStableState> = _stableState.asStateFlow()
+
+        private val _dynamicState = MutableStateFlow(PlayerDynamicState())
+        val dynamicState: StateFlow<PlayerDynamicState> = _dynamicState.asStateFlow()
+
+        private var playerInstanceCounter = 0
+
         // UI state
         private val _uiState = MutableStateFlow(PlayerUiState())
         val uiState: StateFlow<PlayerUiState> = _uiState.asStateFlow()
@@ -110,23 +119,35 @@
         }
 
         private fun updateMiniMode() {
-            val currentType = _uiState.value.currentTypeOfMedia
-            val shouldBeMini = !_globalPlayerVisible.value || !_isCardVisible.value
-            val isCurrentlyMini = _uiState.value.isInMiniMode
-            val isPlayerVisible = _uiState.value.isVisible
+            // Read from stable state to avoid relying on old uiState
+            val currentStable = _stableState.value
+            val currentUi = _uiState.value
 
-            Log.d(TAG, "⚙️ updateMiniMode: shouldBeMini=$shouldBeMini, isCurrentlyMini=$isCurrentlyMini, currentType=$currentType, isPlayerVisible=$isPlayerVisible")
+            val shouldBeMini = !_globalPlayerVisible.value || !_isCardVisible.value
+            val isCurrentlyMini = currentStable.isInMiniMode
+            val isPlayerVisible = currentStable.isVisible
+            val currentType = currentStable.currentTypeOfMedia
+
+            // Only log in debug builds
+            if (BuildConfig.DEBUG) {
+                Log.d(TAG, "updateMiniMode: shouldBeMini=$shouldBeMini, isCurrentlyMini=$isCurrentlyMini, currentType=$currentType, isPlayerVisible=$isPlayerVisible")
+            }
+
+            // Early return if no change needed
+            if (shouldBeMini == isCurrentlyMini) return
+            if (!isPlayerVisible) return
 
             // Only auto‑minimize when typeOfMedia == 0 (videos)
-            if (shouldBeMini && !isCurrentlyMini && isPlayerVisible) {
+            if (shouldBeMini && !isCurrentlyMini && currentType == 0) {
                 minimizePlayer()
-            } else if (!shouldBeMini && isCurrentlyMini && isPlayerVisible) {
+            } else if (!shouldBeMini && isCurrentlyMini && currentType == 0) {
                 restoreFullMode()
             }
         }
 
 
         init {
+            // Combine player controller updates – update dynamic state and also old uiState
             viewModelScope.launch {
                 combine(
                     playerController.currentVideoId,
@@ -134,8 +155,15 @@
                     playerController.playbackPosition,
                     playerController.videoDuration
                 ) { videoId, isPlaying, position, duration ->
-                    _uiState.update { currentState ->
-                        currentState.copy(
+                    // Update dynamic state
+                    _dynamicState.update { it.copy(
+                        playbackPosition = position,
+                        videoDuration = duration,
+                        isPlaying = isPlaying
+                    ) }
+                    // Also update old uiState for compatibility
+                    _uiState.update { current ->
+                        current.copy(
                             currentVideoId = videoId,
                             isPlaying = isPlaying,
                             playbackPosition = position,
@@ -166,6 +194,10 @@
             playlist: List<PlaylistItem>? = null,
             startIndex: Int = 0
         ) {
+
+            playerInstanceCounter++
+            val newInstanceId = playerInstanceCounter
+
             Log.d(TAG, "loadVideo called, stack trace8888:", Exception())
 
             viewModelScope.launch {
@@ -195,7 +227,22 @@
                     isVisible = true,
                     isInMiniMode = startInMiniMode,
                     activeCardId = cardId,
-                    currentTypeOfMedia = typeOfMedia ?: 0
+                    currentTypeOfMedia = typeOfMedia ?: 0,
+                    //currentVideoId = videoId,
+                    //playerInstanceId = newInstanceId
+                )
+            }
+
+            // 2. Update stable state (CRITICAL!)
+            _stableState.update {
+                it.copy(
+                    isVisible = true,
+                    isInMiniMode = startInMiniMode,
+                    activeCardId = cardId,
+                    currentVideoId = videoId,
+                    currentTypeOfMedia = typeOfMedia ?: 0,
+                    //currentVideoDbId = mediaDbId,
+                    //playerInstanceId = newInstanceId
                 )
             }
 
@@ -251,11 +298,13 @@
         fun minimizePlayer() {
             Log.d(TAG, "🟢 minimizePlayer: setting isInMiniMode = true")
             _uiState.update { it.copy(isInMiniMode = true) }
+            _stableState.update { it.copy(isInMiniMode = true) }
         }
 
         fun restoreFullMode() {
             Log.d(TAG, "🔴 restoreFullMode: setting isInMiniMode = false")
             _uiState.update { it.copy(isInMiniMode = false) }
+            _stableState.update { it.copy(isInMiniMode = false) }
         }
 
         fun rewind10Seconds() {
@@ -375,7 +424,8 @@
 
 
         fun closePlayer(filterPathId: Int?) {
-            _playerSession.value = null          // Discard retained playlist
+            _stableState.update { PlayerStableState() }
+            _dynamicState.update { PlayerDynamicState() }
             _uiState.update {
                 it.copy(
                     isVisible = false,
