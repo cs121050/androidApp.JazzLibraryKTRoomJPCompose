@@ -29,4 +29,6 @@ class SearchHistoryRepositoryImpl @Inject constructor(
 
     override fun getByFilterPathId(filterPathId: Int): Flow<List<SearchHistoryRoomEntity>> =
         database.searchHistoryDao().getByFilterPathId(filterPathId)
+    
+    
 }

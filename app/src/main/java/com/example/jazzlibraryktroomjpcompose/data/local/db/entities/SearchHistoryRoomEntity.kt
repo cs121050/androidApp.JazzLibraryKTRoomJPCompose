@@ -31,5 +31,11 @@ data class SearchHistoryRoomEntity(
     val mode: Int,                  // 0 = video, 1 = artist, 2 = album
 
     @ColumnInfo(name = "timestamp")
-    val timestamp: Long = System.currentTimeMillis()
+    val timestamp: Long = System.currentTimeMillis(),
+
+    @ColumnInfo(name = "results_count", defaultValue = "0")
+    val resultsCount: Int = 0,
+
+    @ColumnInfo(name = "is_media")
+    val isMedia: Int? = null
 )
