@@ -661,14 +661,6 @@ class MainViewModel @Inject constructor(
             _filterState.update { it.copy(currentFilterPath = newPath) }
 
 
-            if (isSelected && categoryId == FilterPath.CATEGORY_SEARCH && entityName.isNotBlank()) {
-                Log.d("MainViewModel", "Adding search chip: query='$entityName', mode=$entityId, filterPathId=${_currentFilterPathId.value}")
-                val newFilterPathId = _currentFilterPathId.value
-                if (newFilterPathId != null) {
-                    addSearchHistoryEntry(entityName, entityId, newFilterPathId, isMedia)
-                }
-            }
-
             // Refresh history
             loadEnrichedHistory()
         }
