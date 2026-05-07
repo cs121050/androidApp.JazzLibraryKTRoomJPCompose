@@ -351,6 +351,10 @@
                     uiState.filteredVideos
                 }
                 val albumsToShow = uiState.filteredAlbums
+                LaunchedEffect(albumsToShow) {
+                    Log.d("UIRecomposition", "albumsToShow changed, size=${albumsToShow.size}")
+                }
+
                 val albumsListState = rememberLazyListState()
 
                 // Scroll to the currently playing video (if any)
@@ -559,11 +563,11 @@
                                         )
     
                                         MainTab.ALBUMS -> {
-
+                                            Log.d("UIRecomposition", "Rendering AlbumsListContent with albumsToShow.size=${albumsToShow.size}")
                                             // ✅ No LaunchedEffect – no auto‑selection of first album
                                             AlbumsListContent(
                                                 albums = albumsToShow,
-                                                filterState = filterState,
+                                                currentMediaEntryTypeOfMedia = currentMediaEntryTypeOfMedia,
                                                 isPlayerVisible = isPlayerVisible,
                                                 playerUiState = playerStableState,
                                                 playerViewModel = playerViewModel,
@@ -2279,6 +2283,8 @@
         albumArtistsMap: Map<Int, List<MainViewModel.AlbumArtistInfo>>,
         currentMediaEntryTypeOfMedia: Int?
     ) {
+
+
         Log.d("ArtistContent", "🎨 ArtistContent recompose: filterPath=$filterPath")
         Log.d(
             "ArtistContent",
@@ -3658,10 +3664,23 @@
         activeCardId: String?,
         modifier: Modifier = Modifier
     ) {
-    
+
+        Log.d("Recomposition", "AlbumGrid recomposed at ${System.currentTimeMillis()}")
+
         // Shuffled vs alphabetical mode (only active when no year/rating sort)
         var isAlphabeticalMode by remember { mutableStateOf(false) }
-    
+
+        // ✅ ADD THIS: Wait for artist map to be ready (if there are albums)
+        val isMapReady = albumsDisplay.isEmpty() || albumArtistsMap.isNotEmpty()
+        if (!isMapReady) {
+            // Show a loading spinner while waiting
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator()
+            }
+            return
+        }
+
+
         fun isMainAlbum(album: Album): Boolean {
             return albumArtistsMap[album.albumId]
                 ?.any { if (album.isMain == 1) true else false } == true
@@ -3683,7 +3702,7 @@
         val featuredCount = remember(albumsDisplay, albumArtistsMap) {
             albumsDisplay.count { !isMainAlbum(it) }
         }
-    
+
         var selectedTab by remember {
             mutableStateOf(
                 when {
@@ -3693,7 +3712,7 @@
                 }
             )
         }
-    
+
         LaunchedEffect(mainCount, featuredCount) {
             selectedTab = when {
                 selectedTab == AlbumGridTab.MAIN && mainCount == 0 && featuredCount > 0 -> AlbumGridTab.FEATURED
@@ -3707,7 +3726,7 @@
                 else -> selectedTab
             }
         }
-    
+
         LaunchedEffect(albumsDisplay) {
             isAlphabeticalMode = false   // back to shuffled after refresh
         }
@@ -3727,7 +3746,7 @@
             if (direction != null) yearSort = null
             isAlphabeticalMode = false   // ← add this
         }
-    
+
         val filteredByTab = remember(albumsDisplay, selectedTab, albumArtistsMap) {
             when (selectedTab) {
                 AlbumGridTab.MAIN -> albumsDisplay.filter { isMainAlbum(it) }
@@ -4311,11 +4330,12 @@
     @Composable
     fun AlbumsListContent(
         albums: List<Album>,
-        filterState: FilterState,
         isPlayerVisible: Boolean,
         playerUiState: PlayerStableState,
         playerViewModel: PlayerViewModel,
+        currentMediaEntryTypeOfMedia : Int?,
         listState: LazyListState,
+        minimiseMaximiseToggle: Boolean = true,
         currentFilterPathId: Int?,
         filterPath: List<FilterPath>,
         albumArtistsMap: Map<Int, List<MainViewModel.AlbumArtistInfo>>,
@@ -4325,7 +4345,21 @@
         onRefresh: () -> Unit,
         modifier: Modifier = Modifier
     ) {
+
+        // Log when specific keys change
+        LaunchedEffect(albums) {
+            Log.d("AlbumsListContent", "albums parameter changed, new size=${albums.size}")
+        }
+
+
+
         val currentPlayingSongId by playerViewModel.currentVideoDbIdState.collectAsState()
+
+        LaunchedEffect(albums) {
+            if (albums.isEmpty()) {
+                playerViewModel.minimizePlayer()
+            }
+        }
 
 
         if (albums.isEmpty()) {
@@ -4364,7 +4398,10 @@
                         if (totalAlbums == 0) {
                             Spacer(modifier = Modifier.height(16.dp))
                             Button(onClick = onRefresh) {
-                                Icon(Icons.Default.Refresh, contentDescription = "Refresh")
+                                Icon(
+                                    Icons.Default.Refresh,
+                                    contentDescription = "Refresh"
+                                )
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text("Load Data")
                             }
@@ -4375,45 +4412,104 @@
             return
         }
 
-        // ---- LOG: monitor activeCardId changes ----
-        LaunchedEffect(playerUiState.activeCardId) {
-            Log.d("AlbumsListContent", "🔥 activeCardId changed to: ${playerUiState.activeCardId}")
-        }
-
-        // ---- LOG: monitor listState scroll position ----
-        LaunchedEffect(listState.firstVisibleItemIndex) {
-            Log.d("AlbumsListContent", "📜 Scroll to index ${listState.firstVisibleItemIndex}")
-        }
-
-            if (albums.isEmpty()) {
-                Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("No albums in this filter")
-                }
-                return
+        if (albums.isEmpty()) {
+            Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text("No albums in this filter")
             }
+            return
+        }
+
+
+        val album = albums.find { "album_${it.albumId}" == playerUiState.activeCardId } ?: albums.first()
+        val coroutineScope = rememberCoroutineScope()
+
+
+
 
         LazyColumn(
             state = listState,
             modifier = modifier,
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            items(
-                items = albums,
-                key = { "album_${it.albumId}" }   // ✅ MUST match activeCardId format
-            ) { album ->
-                // ---- LOG: building each card ----
-                Log.d("AlbumsListContent", "🃏 Building card for album_${album.albumId}, activeCardId = ${playerUiState.activeCardId}")
+
+
+            item {
+                Log.d("SingleArtistView", "AlbumsSection with size=${albums.size}")
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(460.dp)
+                ) {
+                    AlbumsSection(
+                        onAlbumSelected = { album ->
+                            val cardId = "album_${album.albumId}"
+                            if (playerUiState.activeCardId == cardId) {
+                                // Close the player
+                                playerViewModel.closePlayer(currentFilterPathId)
+                            } else {
+                                coroutineScope.launch {
+                                    val songs =
+                                        viewModel.loadAlbumSongsCached(album.albumId)
+                                    if (songs.isNotEmpty()) {
+                                        val firstSong = songs.first()
+                                        val playlist =
+                                            songs.map {
+                                                PlaylistItem.SongItem(
+                                                    it,
+                                                    album.albumId
+                                                )
+                                            }
+                                        firstSong.ytVideoId?.let { videoId ->
+                                            playerViewModel.loadVideo(
+                                                videoId = videoId,
+                                                cardId = "album_${album.albumId}",
+                                                currentFilterPath = filterPath,
+                                                startInMiniMode = true,
+                                                mediaDbId = firstSong.songId,
+                                                filterPathId = currentFilterPathId,
+                                                typeOfMedia = 1,
+                                                playlist = playlist,
+                                                startIndex = 0
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        },
+                        currentMediaEntryTypeOfMedia = currentMediaEntryTypeOfMedia,
+                        albumsDisplay = albums,
+                        currentFilterPathId = currentFilterPathId,
+                        minimiseMaximiseToggle = minimiseMaximiseToggle,
+                        showMainAndFeaturedChips = true,
+                        albumArtistsMap = albumArtistsMap,
+                        activeCardId = playerUiState.activeCardId,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
+            }
+
+
+            item(key = "album_${album.albumId}") {
+                Log.d(
+                    "AlbumsListContent",
+                    "🃏 Building card for album_${album.albumId}, activeCardId = ${playerUiState.activeCardId}"
+                )
 
                 var songs by remember { mutableStateOf<List<Song>>(emptyList()) }
                 LaunchedEffect(album.albumId) {
                     songs = viewModel.loadAlbumSongsCached(album.albumId)
-                    Log.d("AlbumsListContent", "Loaded ${songs.size} songs for album ${album.title}")
+                    Log.d(
+                        "AlbumsListContent",
+                        "Loaded ${songs.size} songs for album ${album.title}"
+                    )
                 }
 
                 val thumbnailUrl = album.getThumbnailUrl()
                 val firstSong = songs.firstOrNull()
                 val youtubeVideoId = firstSong?.ytVideoId
-                val albumArtists = albumArtistsMap[album.albumId]?.map { it.artist } ?: emptyList()
+                val albumArtists =
+                    albumArtistsMap[album.albumId]?.map { it.artist } ?: emptyList()
+
 
                 AlbumPlayerCard(
                     album = album,
@@ -4421,10 +4517,17 @@
                     isActive = playerUiState.activeCardId == "album_${album.albumId}",
                     isPlayerVisible = isPlayerVisible,
                     onAlbumClick = {
-                        Log.d("AlbumsListContent", "🎯 Album thumbnail clicked: ${album.title} (album_${album.albumId})")
+                        Log.d(
+                            "AlbumsListContent",
+                            "🎯 Album thumbnail clicked: ${album.title} (album_${album.albumId})"
+                        )
                         firstSong?.ytVideoId?.let { videoId ->
-                            Log.d("AlbumsListContent", "▶️ Playing first song, cardId = album_${album.albumId}")
-                            val playlist = songs.map { PlaylistItem.SongItem(it, album.albumId) }
+                            Log.d(
+                                "AlbumsListContent",
+                                "▶️ Playing first song, cardId = album_${album.albumId}"
+                            )
+                            val playlist =
+                                songs.map { PlaylistItem.SongItem(it, album.albumId) }
                             playerViewModel.loadVideo(
                                 videoId = videoId,
                                 cardId = "album_${album.albumId}",
@@ -4436,11 +4539,18 @@
                                 playlist = playlist,
                                 startIndex = 0
                             )
-                        } ?: Log.w("AlbumsListContent", "❌ No first song found for album ${album.title}")
+                        } ?: Log.w(
+                            "AlbumsListContent",
+                            "❌ No first song found for album ${album.title}"
+                        )
                     },
                     onSongClick = { song ->
-                        Log.d("AlbumsListContent", "🎵 Song clicked: ${song.songTitle}, album=${album.title}")
-                        val playlist = songs.map { PlaylistItem.SongItem(it, album.albumId) }
+                        Log.d(
+                            "AlbumsListContent",
+                            "🎵 Song clicked: ${song.songTitle}, album=${album.title}"
+                        )
+                        val playlist =
+                            songs.map { PlaylistItem.SongItem(it, album.albumId) }
                         val startIndex = songs.indexOfFirst { it.songId == song.songId }
                         song.ytVideoId?.let { videoId ->
                             playerViewModel.loadVideo(

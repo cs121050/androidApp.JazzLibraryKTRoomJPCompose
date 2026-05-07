@@ -490,6 +490,7 @@ class MainViewModel @Inject constructor(
                 },
                 launch {
                     albumRepository.getAllAlbums().collect { albums ->
+                        Log.d("FilterDebug", "loadInitialData: albums collected, size=${albums.size}")
                         _uiState.update { it.copy(albums = albums) }
                         Log.d("AlbumDebug", "Initial load: albums = ${albums.size}")
                     }
@@ -551,8 +552,10 @@ class MainViewModel @Inject constructor(
     private fun loadFilterPath() {
         viewModelScope.launch {
             val latestMeta = filterPathRepository.getLatestFilterPathWithMeta()
+            Log.d("FilterDebug", "loadFilterPath: latestMeta=$latestMeta")
             if (latestMeta != null) {
                 val enriched = enrichFilterPathNames(latestMeta.filters)
+                Log.d("FilterDebug", "Setting _currentFilterPath to $enriched")
                 _currentFilterPath.value = enriched
                 currentStateTimestamp = latestMeta.timestamp
                 applyFiltersFromPath(enriched)
@@ -570,11 +573,12 @@ class MainViewModel @Inject constructor(
 
     // Replace filterManager with filterOrchestrator and adapt types
     private fun applyFiltersFromPath(filterPaths: List<FilterPath>) {
+        Log.d("FilterDebug", "applyFiltersFromPath called with filterPaths=$filterPaths")
         // Cancel previous job to avoid multiple collectors
         filterJob?.cancel()
         filterJob = viewModelScope.launch {
             _filterState.update { it.copy(isFiltering = true) }
-
+            Log.d("FilterDebug", "Starting filterJob, collecting filtered data flow")
             combine(
                 filterOrchestrator.getFilteredDataFlow(filterPaths),  // was filterManager
                 settingsRepository.randomiseVideoList,
@@ -582,7 +586,7 @@ class MainViewModel @Inject constructor(
             ) { filteredData, shouldRandomise, _ ->
                 filteredData to shouldRandomise
             }.collect { (filteredData, shouldRandomise) ->
-
+                Log.d("FilterDebug", "Filtered data emitted: albums=${filteredData.albums.size}, videos=${filteredData.videos.size}")
                 val finalVideos = if (shouldRandomise) filteredData.videos.shuffled() else filteredData.videos
                 val finalAlbums = if (shouldRandomise) {
                     filteredData.albums.shuffleWithNullThumbnailsAtEnd()
@@ -595,6 +599,7 @@ class MainViewModel @Inject constructor(
 
 
 
+                Log.d("MainViewModel", "Updating availableAlbumsDisplay to size=${displayAlbums.size}")
                 _uiState.update { uiState ->
                     uiState.copy(
                         filteredVideos = finalVideos,
@@ -606,6 +611,7 @@ class MainViewModel @Inject constructor(
                         availableDurations = filteredData.durations,
                         availableTypes = filteredData.types
                     )
+
                 }
                 Log.d("AlbumDebug", "Filters applied: filterPath = $filterPaths, filteredAlbums size = ${filteredData.albums.size}")
 
