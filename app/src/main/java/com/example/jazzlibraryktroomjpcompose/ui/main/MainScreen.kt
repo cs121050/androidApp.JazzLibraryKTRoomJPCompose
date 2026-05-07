@@ -148,6 +148,9 @@
 
     import com.example.jazzlibraryktroomjpcompose.presentation.player.PlaylistItem
 
+    import androidx.compose.foundation.clickable
+    import androidx.compose.foundation.interaction.MutableInteractionSource
+
     enum class AlbumGridTab { MAIN, FEATURED }
     enum class SortDirection { ASC, DESC }
     
@@ -410,6 +413,8 @@
                             .zIndex(7f)
                     )
                 }
+
+
     
     
                 // LOCK all the scrolling gestures to ensure that a nested item consume all of it
@@ -449,6 +454,22 @@
                                     )
                                 }
                         ) {
+
+                            if (isDropdownOpen) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .clickable(
+                                            interactionSource = remember { MutableInteractionSource() },
+                                            indication = null
+                                        ) {
+                                            focusManager.clearFocus()
+                                            keyboardController?.hide()
+                                        }
+                                        .zIndex(5f)
+                                )
+                            }
+
                             // ----- TOOLBAR (unchanged) -----
                             Column(
                                 modifier = Modifier
@@ -797,10 +818,15 @@
                                                 .zIndex(10f)
                                         )
                                     }
+
+
                                 }
                             }
                         }
                     }
+
+
+
                 }
     
                 // ----- LEFT DRAWER, BOTTOM SHEET, SNACKBAR (unchanged) -----
