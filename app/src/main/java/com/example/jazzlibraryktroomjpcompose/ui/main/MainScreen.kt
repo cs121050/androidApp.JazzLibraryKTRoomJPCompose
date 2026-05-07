@@ -1656,6 +1656,12 @@
                             }
                         )
                     }
+
+                    // Add spacer at bottom
+                    item {
+                        if (isPlayerVisible)
+                        Spacer(modifier = Modifier.height(220.dp))
+                    }
                 }
     
                 PlayerCardVisibilityMonitor(
@@ -2542,62 +2548,6 @@
                     }
                 }
             }
-    
-            // 2. 👇 NEW: Album grid below the artists
-            item {
-                Log.d(
-                    "ArtistContent",
-                    "📦 Rendering bottom AlbumsSection with albumsDisplay size=${albumsDisplay.size}"
-                )
-    
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(460.dp)   // ✅ provide finite height
-                ) {
-                    AlbumsSection(
-                        onAlbumSelected = { album ->
-                            val cardId = "album_${album.albumId}"
-                            if (playerUiState.activeCardId == cardId) {
-                                // Close the player
-                                playerViewModel.closePlayer(currentFilterPathId)
-                            } else {
-                                // Play this album in mini mode
-                                coroutineScope.launch {
-                                    val songs = viewModel.loadAlbumSongsCached(album.albumId)
-                                    if (songs.isNotEmpty()) {
-                                        val firstSong = songs.first()
-                                        val playlist =
-                                            songs.map { PlaylistItem.SongItem(it, album.albumId) }
-                                        firstSong.ytVideoId?.let { videoId ->
-                                            playerViewModel.loadVideo(
-                                                videoId = videoId,
-                                                cardId = "album_${album.albumId}",
-                                                currentFilterPath = filterPath,
-                                                startInMiniMode = true,
-                                                mediaDbId = firstSong.songId,
-                                                filterPathId = currentFilterPathId,
-                                                typeOfMedia = 1,
-                                                playlist = playlist,
-                                                startIndex = 0
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        },
-                        currentMediaEntryTypeOfMedia = currentMediaEntryTypeOfMedia,
-                        albumsDisplay = albumsDisplay,
-                        currentFilterPathId = currentFilterPathId,
-                        minimiseMaximiseToggle = minimiseMaximiseToggle,
-                        showMainAndFeaturedChips = false,
-                        albumArtistsMap = albumArtistsMap,
-                        activeCardId = playerUiState.activeCardId,
-                        modifier = Modifier.fillMaxSize()
-                    )
-                }
-            }
-    
         }
     
         PlayerCardVisibilityMonitor(
@@ -2870,6 +2820,12 @@
                             }
                         )
                         Spacer(modifier = Modifier.height(8.dp))
+                    }
+
+                    // Add spacer at bottom
+                    item {
+                        if (isPlayerVisible)
+                        Spacer(modifier = Modifier.height(220.dp))
                     }
                 }
             }
@@ -3248,6 +3204,11 @@
                         modifier = Modifier.fillMaxSize()
                     )
                 }
+            }
+
+            // Add spacer at bottom
+            item {
+                Spacer(modifier = Modifier.height(220.dp))
             }
 
             // 5. No player card – removed
@@ -4605,6 +4566,9 @@
                     currentPlayingSongId = currentPlayingSongId
                 )
             }
+
+
+
         }
 
         // ---- VISIBILITY MONITOR (will log everything) ----
