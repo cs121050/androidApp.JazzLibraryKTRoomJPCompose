@@ -154,19 +154,51 @@ fun SmartSearchBar(
     }
 
     fun performSearch(query: String, searchMode: Int, isMedia: Int = 0) {
-        if (query.isNotBlank()) {
-            viewModel.handleChipSelection(
-                categoryId = FilterPath.CATEGORY_SEARCH,
-                entityId = searchMode,
-                entityName = query,
-                isSelected = true,
-                isMedia = isMedia
-            )
-            text = ""
-            showSuggestions = false
-            focusManager.clearFocus()
-            keyboardController?.hide()
+        if (query.isBlank()) return
+
+        when (searchMode) {
+            1 -> { // Artist mode → add artist filter
+                val artist = allArtists.find { it.fullName.equals(query, ignoreCase = true) }
+                if (artist != null) {
+                    viewModel.handleChipSelection(
+                        categoryId = FilterPath.CATEGORY_ARTIST,
+                        entityId = artist.id,
+                        entityName = artist.fullName,
+                        isSelected = true,
+                        isMedia = 0   // not a search history entry
+                    )
+                } else {
+                    // fallback to search chip if artist not found
+                    viewModel.handleChipSelection(
+                        categoryId = FilterPath.CATEGORY_SEARCH,
+                        entityId = searchMode,
+                        entityName = query,
+                        isSelected = true,
+                        isMedia = isMedia
+                    )
+                }
+            }
+            else -> { // Video mode (0) or any other → search chip
+                viewModel.handleChipSelection(
+                    categoryId = FilterPath.CATEGORY_SEARCH,
+                    entityId = searchMode,
+                    entityName = query,
+                    isSelected = true,
+                    isMedia = isMedia
+                )
+            }
         }
+
+
+        val newFilterPathId = viewModel.currentFilterPathId.value
+        if (newFilterPathId != null) {
+            viewModel.addSearchHistoryEntry(query, searchMode, newFilterPathId, isMedia)
+        }
+        // Clean up UI after selection
+        text = ""
+        showSuggestions = false
+        focusManager.clearFocus()
+        keyboardController?.hide()
     }
 
     Box(
