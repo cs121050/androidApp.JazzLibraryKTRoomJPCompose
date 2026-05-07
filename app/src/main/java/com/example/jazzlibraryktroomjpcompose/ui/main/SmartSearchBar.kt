@@ -153,13 +153,14 @@ fun SmartSearchBar(
         }
     }
 
-    fun performSearch(query: String, searchMode: Int) {
+    fun performSearch(query: String, searchMode: Int, isMedia: Int = 0) {
         if (query.isNotBlank()) {
             viewModel.handleChipSelection(
                 categoryId = FilterPath.CATEGORY_SEARCH,
                 entityId = searchMode,
                 entityName = query,
-                isSelected = true
+                isSelected = true,
+                isMedia = isMedia
             )
             text = ""
             showSuggestions = false
@@ -281,7 +282,7 @@ fun SmartSearchBar(
                                     mode = mode,
                                     onClick = {
                                         Log.d(TAG, "Autocomplete selected: $title")
-                                        performSearch(title, mode)
+                                        performSearch(title, mode, 1)
                                     }
                                 )
                             }
@@ -290,10 +291,18 @@ fun SmartSearchBar(
                                 SuggestionItem(
                                     entry = entry,
                                     onClick = {
-                                        text = entry.query
-                                        mode = entry.mode
-                                        showSuggestions = false
-                                        isScrollLocked = false
+                                        if (entry.isMedia == 1) {
+                                            // Immediate filter/search (like autocomplete)
+                                            performSearch(entry.query, entry.mode, 1)
+                                        } else {
+                                            // Fill the search bar (no auto-search)
+                                            text = entry.query
+                                            mode = entry.mode
+                                            showSuggestions = false
+                                            isScrollLocked = false
+                                            focusManager.clearFocus()
+                                            keyboardController?.hide()
+                                        }
                                     },
                                     onDelete = {
                                         coroutineScope.launch { viewModel.deleteSearchHistoryEntry(entry) }
@@ -384,6 +393,21 @@ private fun SuggestionItem(
     onClick: () -> Unit,
     onDelete: () -> Unit
 ) {
+    val icon = when (entry.isMedia) {
+        1 -> when (entry.mode) {   // isMedia == 1 → mode-specific icon
+            0 -> Icons.Default.PlayArrow
+            1 -> Icons.Default.Person
+            2 -> Icons.Default.Album
+            else -> Icons.Default.Search
+        }   // isMedia == 0 → search icon
+        else -> Icons.Default.Search // fallback for null or other values
+    }
+
+    val customTint = when (entry.isMedia) {
+        1 -> MaterialTheme.colorScheme.primary
+        else -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -420,10 +444,10 @@ private fun SuggestionItem(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
-                imageVector = Icons.Default.History,
+                imageVector = icon,
                 contentDescription = "Search history",
                 modifier = Modifier.size(16.dp),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                tint = customTint
             )
             IconButton(
                 onClick = onDelete,

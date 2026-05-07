@@ -270,13 +270,14 @@ class MainViewModel @Inject constructor(
     }
 
     // NEW: Insert a search history entry (called when user performs a search)
-    fun addSearchHistoryEntry(query: String, mode: Int, filterPathId: Int) {
+    fun addSearchHistoryEntry(query: String, mode: Int, filterPathId: Int, isMedia: Int = 0) {
         viewModelScope.launch {
             if (query.isNotBlank()) {
                 val entry = SearchHistoryRoomEntity(
                     filterPathId = filterPathId,
                     query = query,
-                    mode = mode
+                    mode = mode,
+                    isMedia = isMedia
                 )
                 searchHistoryRepository.insertSearchHistory(entry)
                 // No need to call loadSearchHistory() because the Flow will auto-update
@@ -618,7 +619,7 @@ class MainViewModel @Inject constructor(
         }
     }
 
-    fun handleChipSelection(categoryId: Int, entityId: Int, entityName: String, isSelected: Boolean) {
+    fun handleChipSelection(categoryId: Int, entityId: Int, entityName: String, isSelected: Boolean, isMedia: Int = 0) {
         viewModelScope.launch {
             val currentPath = _currentFilterPath.value
             Log.d("MainViewModel", "Before: currentPath = $currentPath")
@@ -654,11 +655,11 @@ class MainViewModel @Inject constructor(
             _filterState.update { it.copy(currentFilterPath = newPath) }
 
 
-            if (categoryId == FilterPath.CATEGORY_SEARCH && entityName.isNotBlank()) {
+            if (isSelected && categoryId == FilterPath.CATEGORY_SEARCH && entityName.isNotBlank()) {
                 Log.d("MainViewModel", "Adding search chip: query='$entityName', mode=$entityId, filterPathId=${_currentFilterPathId.value}")
                 val newFilterPathId = _currentFilterPathId.value
                 if (newFilterPathId != null) {
-                    addSearchHistoryEntry(entityName, entityId, newFilterPathId)
+                    addSearchHistoryEntry(entityName, entityId, newFilterPathId, isMedia)
                 }
             }
 
