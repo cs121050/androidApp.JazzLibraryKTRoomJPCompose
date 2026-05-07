@@ -1183,14 +1183,7 @@
         }
     
         val isOnAlbumPages = pagerState.currentPage == 3 || pagerState.currentPage == 4
-    
-        LaunchedEffect(isVideoPlaying) {
-            if (!isOnAlbumPages) {
-                if (controlsAccessible && pagerState.currentPage != 1)
-                    pagerState.animateScrollToPage(1)
-            }
-            Log.d("VIDEOSTATROW", "controlsAccessible: $controlsAccessible")
-        }
+
     
     
     
