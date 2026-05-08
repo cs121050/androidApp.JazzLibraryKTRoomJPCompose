@@ -423,7 +423,7 @@
         }
 
 
-        fun closePlayer(filterPathId: Int?) {
+        fun closePlayer(filterPathId: Int? = null) {
             _stableState.update { PlayerStableState() }
             _dynamicState.update { PlayerDynamicState() }
             _uiState.update {

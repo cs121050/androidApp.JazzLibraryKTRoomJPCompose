@@ -834,7 +834,10 @@
                     isOpen = leftDrawerState == DrawerState.OPEN,
                     onClose = { viewModel.toggleLeftDrawer() },
                     onRefreshClick = { viewModel.safeRefreshDataFromAPI() },
-                    onClearHistoryClick = { viewModel.clearHistory() },
+                    onClearHistoryClick = {
+                        playerViewModel.closePlayer()
+                        viewModel.clearHistory()
+                    },
                     modifier = Modifier
                         .fillMaxHeight()
                         .width(280.dp)
