@@ -316,7 +316,7 @@
         if (loadingState == LoadingState.LOADING && uiState.videos.isEmpty()) {
             LoadingScreen()
         } else {
-            Box(modifier = Modifier.fillMaxSize()) {
+            Box(modifier = Modifier.fillMaxSize().padding(horizontal = 4.dp)) {
                 // --- Chips row measurement ---
                 val chipsHeightPx = remember { mutableIntStateOf(0) }
                 val toolbarHeightPx = remember { mutableIntStateOf(0) }
@@ -1659,7 +1659,7 @@
 
                     // Add spacer at bottom
                     item {
-                        if (isPlayerVisible)
+                        if(videosToShow.isNotEmpty())
                         Spacer(modifier = Modifier.height(220.dp))
                     }
                 }
@@ -1694,7 +1694,7 @@
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(16.dp)
+                    .padding(vertical = 12.dp, horizontal = 12.dp)
             ) {
                 // Title row
                 Row(
@@ -1848,7 +1848,7 @@
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(16.dp)
+                    .padding(vertical = 12.dp, horizontal = 12.dp)
             ) {
                 // --- Title row (same as before) ---
                 Row(
@@ -2824,7 +2824,7 @@
 
                     // Add spacer at bottom
                     item {
-                        if (isPlayerVisible)
+                        if (items.isNotEmpty())
                         Spacer(modifier = Modifier.height(220.dp))
                     }
                 }
@@ -3208,6 +3208,7 @@
 
             // Add spacer at bottom
             item {
+                if(albumsDisplay.isNotEmpty())
                 Spacer(modifier = Modifier.height(220.dp))
             }
 
