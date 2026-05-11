@@ -1,4 +1,4 @@
-package com.example.jazzlibraryktroomjpcompose.ui.main.util
+package com.example.jazzlibraryktroomjpcompose.ui.common.util
 
 import androidx.compose.foundation.gestures.FlingBehavior
 import androidx.compose.foundation.gestures.ScrollScope
