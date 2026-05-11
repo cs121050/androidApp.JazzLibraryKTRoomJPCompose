@@ -1,4 +1,4 @@
-package com.example.jazzlibraryktroomjpcompose.ui.main.player
+package com.example.jazzlibraryktroomjpcompose.ui.common.player
 
 import android.util.Log
 import android.view.View

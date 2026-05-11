@@ -1,8 +1,7 @@
-package com.example.jazzlibraryktroomjpcompose.ui.main
+package com.example.jazzlibraryktroomjpcompose.ui.search
 
 import android.util.Log
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -36,7 +35,6 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import com.example.jazzlibraryktroomjpcompose.data.local.db.entities.SearchHistoryRoomEntity
@@ -44,6 +42,7 @@ import com.example.jazzlibraryktroomjpcompose.domain.models.Album
 import com.example.jazzlibraryktroomjpcompose.domain.models.Artist
 import com.example.jazzlibraryktroomjpcompose.domain.models.FilterPath
 import com.example.jazzlibraryktroomjpcompose.domain.models.Video
+import com.example.jazzlibraryktroomjpcompose.ui.main.MainViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch

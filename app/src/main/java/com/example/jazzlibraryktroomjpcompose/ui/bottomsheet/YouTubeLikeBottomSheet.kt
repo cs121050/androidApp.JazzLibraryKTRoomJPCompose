@@ -1,4 +1,4 @@
-package com.example.jazzlibraryktroomjpcompose.ui.main
+package com.example.jazzlibraryktroomjpcompose.ui.bottomsheet
 
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
@@ -31,9 +31,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import com.example.jazzlibraryktroomjpcompose.domain.models.Artist
 import com.example.jazzlibraryktroomjpcompose.domain.models.FilterPath
-import com.example.jazzlibraryktroomjpcompose.domain.models.Instrument
+import com.example.jazzlibraryktroomjpcompose.ui.main.BottomSheetState
+import com.example.jazzlibraryktroomjpcompose.ui.main.FilterState
+import com.example.jazzlibraryktroomjpcompose.ui.main.MainUiState
+import com.example.jazzlibraryktroomjpcompose.ui.main.MainViewModel
 import com.example.jazzlibraryktroomjpcompose.ui.theme.Dimens
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
