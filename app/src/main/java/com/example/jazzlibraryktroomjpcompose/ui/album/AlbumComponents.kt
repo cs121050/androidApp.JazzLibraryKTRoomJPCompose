@@ -133,13 +133,6 @@ fun AlbumsListContent(
     modifier: Modifier = Modifier
 ) {
 
-    // Log when specific keys change
-    LaunchedEffect(albums) {
-        Log.d("AlbumsListContent", "albums parameter changed, new size=${albums.size}")
-    }
-
-
-
     val currentPlayingSongId by playerViewModel.currentVideoDbIdState.collectAsState()
 
     LaunchedEffect(albums) {
@@ -553,7 +546,6 @@ fun AlbumPlayerCard(
             }
 
             // ─── NEW: PAGER AREA (replaces the old fixed song list) ───
-            if (songs.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(12.dp))
 
                 // Fixed height container for the pager
@@ -563,6 +555,7 @@ fun AlbumPlayerCard(
                         .height(250.dp)
                         .nestedScroll(nestedScrollConnection)   // 👈 consumes scroll when locked
                 ) {
+
                     HorizontalPager(
                         state = pagerState,
                         modifier = Modifier.fillMaxSize()
@@ -574,10 +567,12 @@ fun AlbumPlayerCard(
                                 onSongClick = onSongClick,
                                 scrollLockState = scrollLockState
                             )
+
                             else -> DummyPageContent(page = page)
                         }
                     }
                 }
+
 
                 // Dots row for pager navigation (same as in WikiInfoCard)
                 DotsRow(
@@ -592,7 +587,7 @@ fun AlbumPlayerCard(
                         .fillMaxWidth()
                         .padding(top = 12.dp)
                 )
-            }
+
         }
     }
 }
@@ -1073,7 +1068,7 @@ fun AlbumGridView(
                     modifier = Modifier.fillMaxSize(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
-                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)
+                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp)
                 ) {
                     val cardWidth = if (minimiseMaximiseToggle) 120.dp else 250.dp
 
@@ -1349,7 +1344,7 @@ fun AlbumFilterChipsRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
+            .padding(horizontal = 10.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         if (showMainAndFeaturedChips) {
