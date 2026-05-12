@@ -7,6 +7,7 @@ plugins {
     id("kotlin-kapt")                        // Apply the Kotlin annotation processor plugin for Room
     alias(libs.plugins.dagger.hilt.android)
     alias(libs.plugins.compose.compiler)
+    alias(libs.plugins.google.services)
 }
 
 android {
@@ -117,6 +118,15 @@ dependencies {
     debugImplementation(libs.androidx.ui.test.manifest)      // Test manifest for Compose UI tests in debug
 
     implementation(libs.accompanist.systemuicontroller)
+
+
+    // Firebase (BOM + Auth)
+    implementation(platform(libs.firebase.bom))
+    implementation(libs.firebase.auth.ktx)
+    implementation(libs.firebase.auth)
+
+    // Google Sign-In
+    implementation(libs.play.services.auth)
 
 }
 

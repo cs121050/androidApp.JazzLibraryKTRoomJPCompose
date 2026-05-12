@@ -1,4 +1,4 @@
-package com.example.jazzlibraryktroomjpcompose.di
+package com.example.jazzlibraryktroomjpcompose.ui.history.di
 
 
 import android.content.Context
