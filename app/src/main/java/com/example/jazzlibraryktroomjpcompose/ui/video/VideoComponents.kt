@@ -46,6 +46,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.example.jazzlibraryktroomjpcompose.R
@@ -66,34 +67,39 @@ import com.example.jazzlibraryktroomjpcompose.ui.main.MainViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 
 @Composable
 fun VideoListContent(
-    uiState: MainUiState,
-    filterState: FilterState,
-    videosToShow: List<Video>,
-    isPlayerVisible: Boolean,
-    playerUiState: PlayerStableState,
-    onRefresh: () -> Unit,
-    listState: LazyListState,
-    playerViewModel: PlayerViewModel,
-    onActiveCardBoundsChanged: (String, IntOffset, IntSize) -> Unit,
     modifier: Modifier = Modifier,
-    cardUiStates: Map<String, CardUiState>,
-    currentFilterPathId: Int?,
-    videoArtistsMap: Map<Int, List<Artist>>,
-    viewModel: MainViewModel,
-    currentTab: MainTab,
-    onCardTitleClick: (String) -> Unit
-) {
+    viewModel: MainViewModel = hiltViewModel(),
+    playerViewModel: PlayerViewModel = hiltViewModel(),
+    listState: LazyListState = rememberLazyListState(),
+
+    onActiveCardBoundsChanged: (String, IntOffset, IntSize) -> Unit,
+    onCardTitleClick: (String) -> Unit,
+    onRefresh: () -> Unit
+    ) {
+
+    val uiState by viewModel.uiState.collectAsState()
+    val filterState by viewModel.filterState.collectAsState()
+    val playerUiState by playerViewModel.stableState.collectAsState()
+    val isPlayerVisible by viewModel.isPlayerVisible.collectAsState()
+    val videoArtistsMap by viewModel.videoArtistsMap.collectAsState()
+    val currentFilterPathId by viewModel.currentFilterPathId.collectAsState()
+    val currentTab by viewModel.currentTab.collectAsState()
+
+    val videosToShow = if (filterState.currentFilterPath.isEmpty())
+        uiState.videos else uiState.filteredVideos
+
     // Find the index of the currently active video card
     val activeCardIndex = videosToShow.indexOfFirst { it.locationId == playerUiState.activeCardId }
     val context = LocalContext.current
     val imageLoader = coil.ImageLoader(context)
 
     val typeOfMedia = 0 // educational videos only here.
-
-
 
     //helps with loading the thubnails faster while scrolling
     LaunchedEffect(listState) {

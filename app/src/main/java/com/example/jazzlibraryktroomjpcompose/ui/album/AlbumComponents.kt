@@ -89,6 +89,7 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
+import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.example.jazzlibraryktroomjpcompose.R
@@ -116,24 +117,30 @@ import kotlin.math.roundToInt
 
 @Composable
 fun AlbumsListContent(
-    albums: List<Album>,
-    isPlayerVisible: Boolean,
-    playerUiState: PlayerStableState,
-    playerViewModel: PlayerViewModel,
-    currentMediaEntryTypeOfMedia : Int?,
+    modifier: Modifier = Modifier,
+    viewModel: MainViewModel = hiltViewModel(),
+    playerViewModel: PlayerViewModel = hiltViewModel(),
+
     listState: LazyListState,
     minimiseMaximiseToggle: Boolean = true,
-    currentFilterPathId: Int?,
-    filterPath: List<FilterPath>,
-    albumArtistsMap: Map<Int, List<MainViewModel.AlbumArtistInfo>>,
-    viewModel: MainViewModel,
     onActiveCardBoundsChanged: (String, IntOffset, IntSize) -> Unit,
-    onAlbumSelected: (Album) -> Unit,
-    onRefresh: () -> Unit,
-    modifier: Modifier = Modifier
+    onRefresh: () -> Unit
 ) {
 
+    val uiState by viewModel.uiState.collectAsState()
+    val filterState by viewModel.filterState.collectAsState()
+    val currentFilterPathId by viewModel.currentFilterPathId.collectAsState()
+    val playerUiState by playerViewModel.stableState.collectAsState()
+    val albumArtistsMap by viewModel.albumArtistsMap.collectAsState()
+    val isPlayerVisible by viewModel.isPlayerVisible.collectAsState()
     val currentPlayingSongId by playerViewModel.currentVideoDbIdState.collectAsState()
+
+    val currentMediaEntry by playerViewModel.currentFilterPathMedia.collectAsState()
+    val currentMediaEntryTypeOfMedia = currentMediaEntry?.typeOfMedia
+
+    // Now extract the needed values
+    val albums = uiState.filteredAlbums
+    val filterPath = filterState.currentFilterPath
 
     LaunchedEffect(albums) {
         if (albums.isEmpty()) {

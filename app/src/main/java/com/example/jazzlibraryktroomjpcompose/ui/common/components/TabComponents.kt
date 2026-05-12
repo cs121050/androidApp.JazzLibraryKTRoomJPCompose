@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
@@ -55,6 +56,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.jazzlibraryktroomjpcompose.domain.models.FilterPath
 import com.example.jazzlibraryktroomjpcompose.domain.models.Song
 import com.example.jazzlibraryktroomjpcompose.domain.models.Video
@@ -62,6 +64,7 @@ import com.example.jazzlibraryktroomjpcompose.presentation.player.PlayerViewMode
 import com.example.jazzlibraryktroomjpcompose.presentation.player.PlaylistItem
 import com.example.jazzlibraryktroomjpcompose.ui.common.util.extractYouTubeVideoId
 import com.example.jazzlibraryktroomjpcompose.ui.main.MainTab
+import com.example.jazzlibraryktroomjpcompose.ui.main.MainViewModel
 import com.example.jazzlibraryktroomjpcompose.ui.theme.Dimens
 import kotlinx.coroutines.launch
 
@@ -97,46 +100,43 @@ fun TabText(
 
 @Composable
 fun VideoStatsRow(
-    videoCount: Int,
-    artistCount: Int,
-    albumCount: Int,
-    historyCount: Int,
-    currentTab: MainTab,                         // already there
+    modifier: Modifier = Modifier,
+    listState: LazyListState = rememberLazyListState(),
     onTabSelected: (MainTab) -> Unit,
-    isPlayerVisible: Boolean,
-    onTogglePlayerVisibility: () -> Unit,
-    onPrevious: () -> Unit,
-    onNext: () -> Unit,
-    onClose: () -> Unit,
-    playerViewModel: PlayerViewModel,
-    videos: List<Video>,
-    listState: LazyListState,
-    currentFilterPath: List<FilterPath>,
-    currentFilterPathId: Int?,
-    currentAlbumSongs: List<Song>,           // songs of the currently selected album (empty if none)
-    currentPlayingSongId: Int?,              // from playerViewModel.currentVideoDbIdState
-    isAlbumCardVisible: () -> Boolean,
-    currentAlbumId: Int?,
-    currentMediaEntryTypeOfMedia: Int?,
     onVideoTabClick: () -> Unit,
     onAlbumTabClick: () -> Unit,
-    modifier: Modifier = Modifier
+    viewModel: MainViewModel = hiltViewModel(),
+    playerViewModel: PlayerViewModel = hiltViewModel()
 ) {
-
+    val currentTab by viewModel.currentTab.collectAsState()
+    val uiState by viewModel.uiState.collectAsState()
+    val filterState by viewModel.filterState.collectAsState()
+    val isPlayerVisible by viewModel.isPlayerVisible.collectAsState()
+    val currentFilterPath by viewModel.currentFilterPath.collectAsState()
+    val currentFilterPathId by viewModel.currentFilterPathId.collectAsState()
+    val currentAlbumId by viewModel.currentAlbumId.collectAsState()
+    val currentAlbumSongs by viewModel.albumSongs.collectAsState()
+    val playerUiState by playerViewModel.uiState.collectAsState()
     val playerSession by playerViewModel.playerSession.collectAsState()
+    val isActiveCardVisible by playerViewModel.isActiveCardVisible.collectAsState()
+    val enrichedHistory by viewModel.enrichedHistory.collectAsState()
+
+    val videoCount = if (filterState.currentFilterPath.isEmpty()) uiState.videos.size else uiState.filteredVideos.size
+    val artistCount = uiState.availableArtists.size
+    val albumCount = uiState.filteredAlbums.size
+    val historyCount = enrichedHistory.size
+
+    val videos = if (filterState.currentFilterPath.isEmpty())
+        uiState.videos else uiState.filteredVideos
 
     val canGoPrev = playerSession?.let { it.currentIndex > 0 } ?: false
     val canGoNext = playerSession?.let { it.currentIndex < it.playlist.size - 1 } ?: false
-
-    val isActiveCardVisible by playerViewModel.isActiveCardVisible.collectAsState()
-
-    val playerUiState by playerViewModel.uiState.collectAsState()
     val isVideoPlaying = playerUiState.isVisible && playerUiState.currentVideoId != null
     val controlsAccessible = isPlayerVisible && isVideoPlaying
 
     val pagerState = rememberPagerState(
         initialPage = if (controlsAccessible) 1 else 2,
-        pageCount = { 3 }   // 3 pages (0..2)
+        pageCount = { 3 }
     )
     val coroutineScope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -145,17 +145,15 @@ fun VideoStatsRow(
     var currentTypeOfMedia by remember { mutableStateOf<Int?>(null) }
 
 
+
+
+
     // Keep pager on minimise page when controls become inaccessible
     LaunchedEffect(controlsAccessible) {
         if (!controlsAccessible && pagerState.currentPage != 2) {
             pagerState.animateScrollToPage(2)
         }
     }
-
-    val isOnAlbumPages = pagerState.currentPage == 3 || pagerState.currentPage == 4
-
-
-
 
     fun isVideoIndexVisible(index: Int): Boolean {
         return if (index in 0 until videos.size) {
@@ -351,7 +349,7 @@ fun VideoStatsRow(
                         // Close button (unchanged)
                         IconButton(onClick = {
                             coroutineScope.launch {
-                                onClose()
+                                playerViewModel.closePlayer(viewModel.currentFilterPathId.value)
                                 pagerState.animateScrollToPage(2)
                                 currentTypeOfMedia = null
                             }
@@ -369,7 +367,7 @@ fun VideoStatsRow(
                     ) {
                         IconToggleButton(
                             checked = isPlayerVisible,
-                            onCheckedChange = { onTogglePlayerVisibility() }
+                            onCheckedChange = { viewModel.toggleBottomSheet() }
                         ) {
                             Icon(
                                 imageVector = if (isPlayerVisible) Icons.Default.ViewList else Icons.Default.ViewModule,
