@@ -139,12 +139,32 @@ fun LoginScreen(
         // Toggle between Sign In / Sign Up
         TextButton(
             onClick = { isSignUp = !isSignUp },
-            modifier = Modifier.padding(bottom = 24.dp)
+            modifier = Modifier.padding(bottom = 0.dp)
         ) {
             Text(
                 if (isSignUp) "Already have an account? Sign In"
                 else "Don't have an account? Sign Up"
             )
+        }
+
+        //Forgot Password button (only shown in Sign In mode, not Sign Up)
+        if (!isSignUp) {
+            TextButton(
+                onClick = {
+                    if (email.isNotBlank()) {
+                        authViewModel.sendPasswordResetEmail(email)
+                    } else {
+                        authViewModel.setError("Please enter your email address first")
+                    }
+                },
+                modifier = Modifier.padding( bottom = 16.dp)
+            ) {
+                Text(
+                    text = "Forgot password?",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
         }
 
         Divider(modifier = Modifier.padding(vertical = 16.dp))

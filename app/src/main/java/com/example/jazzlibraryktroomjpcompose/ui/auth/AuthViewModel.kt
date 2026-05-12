@@ -150,8 +150,30 @@ class AuthViewModel @Inject constructor(
         _error.value = null
     }
 
+    fun setError(message: String) {
+        _error.value = message
+    }
+
     fun clearError() {
         _error.value = null
+    }
+
+    fun sendPasswordResetEmail(email: String) {
+        viewModelScope.launch {
+            _loading.value = true
+            _error.value = null
+
+            val result = authUseCase.sendPasswordResetEmail(email)
+
+            result.onSuccess {
+                _loading.value = false
+                _error.value = "Password reset email sent! Check your inbox."
+            }
+            result.onFailure { exception ->
+                _loading.value = false
+                _error.value = exception.message ?: "Failed to send reset email"
+            }
+        }
     }
 
     private fun clearForm() {

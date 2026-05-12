@@ -67,6 +67,16 @@ class AuthUseCase @Inject constructor(
         return authRepository.signOut()
     }
 
+    suspend fun sendPasswordResetEmail(email: String): Result<Unit> {
+        if (email.isBlank()) {
+            return Result.failure(IllegalArgumentException("Email cannot be empty"))
+        }
+        if (!isValidEmail(email)) {
+            return Result.failure(IllegalArgumentException("Invalid email format"))
+        }
+        return authRepository.sendPasswordResetEmail(email)
+    }
+
     fun isAuthenticated(): Boolean = authRepository.isAuthenticated()
 
     private fun isValidEmail(email: String): Boolean {
