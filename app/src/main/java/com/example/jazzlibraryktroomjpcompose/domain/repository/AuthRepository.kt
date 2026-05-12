@@ -49,4 +49,10 @@ interface AuthRepository {
      * Check if user is authenticated
      */
     fun isAuthenticated(): Boolean
+
+    /**
+     * Send password reset email to the given email address
+     */
+    suspend fun sendPasswordResetEmail(email: String): Result<Unit>
+
 }

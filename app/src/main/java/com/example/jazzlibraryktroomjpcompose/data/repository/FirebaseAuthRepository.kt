@@ -131,6 +131,15 @@ class FirebaseAuthRepository(
         return auth.currentUser != null
     }
 
+    override suspend fun sendPasswordResetEmail(email: String): Result<Unit> = try {
+        auth.sendPasswordResetEmail(email).await()
+        Log.d(TAG, "Password reset email sent to: $email")
+        Result.success(Unit)
+    } catch (e: Exception) {
+        Log.e(TAG, "Password reset email failed", e)
+        Result.failure(e)
+    }
+
     /**
      * Helper: Convert Firebase user to domain user
      */
