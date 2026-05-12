@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
@@ -45,6 +46,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.example.jazzlibraryktroomjpcompose.domain.models.Video
@@ -62,27 +64,23 @@ import com.example.jazzlibraryktroomjpcompose.ui.theme.Dimens
 @Composable
 fun HistoryContent(
     modifier: Modifier = Modifier,
-    viewModel: MainViewModel,
-    playerUiState: PlayerStableState,
-    playerViewModel: PlayerViewModel,
-    onRefresh: () -> Unit,
-    isPlayerVisible: Boolean
+    listState: LazyListState = rememberLazyListState(),
+    viewModel: MainViewModel = hiltViewModel(),
+    playerViewModel: PlayerViewModel = hiltViewModel(),
+
+    onRefresh: () -> Unit
 ) {
     val enrichedHistory by viewModel.enrichedHistory.collectAsState()
-
+    val playerUiState by playerViewModel.stableState.collectAsState()
     val currentPlayingDbId by playerViewModel.currentVideoDbIdState.collectAsState()
-
-    val listState = rememberLazyListState()   // ADD THIS
+    val isPlayerVisible by viewModel.isPlayerVisible.collectAsState()
 
     // Load data when this screen appears
     LaunchedEffect(Unit) {
+        viewModel.loadEnrichedHistory()
         playerViewModel.videoChangedEvent.collect {
             viewModel.loadEnrichedHistory()
         }
-    }
-
-    LaunchedEffect(Unit) {
-        viewModel.loadEnrichedHistory()
     }
 
     // Group by date (today, yesterday, older)

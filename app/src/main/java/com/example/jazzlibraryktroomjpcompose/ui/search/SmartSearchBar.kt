@@ -37,11 +37,13 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.jazzlibraryktroomjpcompose.data.local.db.entities.SearchHistoryRoomEntity
 import com.example.jazzlibraryktroomjpcompose.domain.models.Album
 import com.example.jazzlibraryktroomjpcompose.domain.models.Artist
 import com.example.jazzlibraryktroomjpcompose.domain.models.FilterPath
 import com.example.jazzlibraryktroomjpcompose.domain.models.Video
+import com.example.jazzlibraryktroomjpcompose.presentation.player.PlayerViewModel
 import com.example.jazzlibraryktroomjpcompose.ui.main.MainViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -53,18 +55,17 @@ private const val TAG = "SmartSearchBar"
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SmartSearchBar(
-    viewModel: MainViewModel,
-    onFilterClick: () -> Unit,
     hideSearchDropdown: Boolean,
     onSearchBarClicked: () -> Unit,
     onDropdownVisibilityChanged: (Boolean) -> Unit,
-    allVideos: List<Video>,   // <-- filtered videos (respect current filter path)
-    onVideoSelected: (Video) -> Unit,
-    allArtists: List<Artist>,
-    allAlbums: List<Album>,
     onExpandToolbar: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    viewModel: MainViewModel = hiltViewModel()
 ) {
+
+    val uiState by viewModel.uiState.collectAsState()
+    val filterState by viewModel.filterState.collectAsState()
+
     var isScrollLocked by remember { mutableStateOf(false) }
     var unlockJob by remember { mutableStateOf<Job?>(null) }
     var text by remember { mutableStateOf("") }
@@ -75,6 +76,11 @@ fun SmartSearchBar(
     val coroutineScope = rememberCoroutineScope()
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
+
+    val allArtists = uiState.availableArtists
+    val allAlbums = uiState.filteredAlbums
+    val allVideos = if (filterState.currentFilterPath.isEmpty())
+        uiState.videos else uiState.filteredVideos
 
     // Compute autocomplete items – NO LIMIT, shows all matching video titles
     val autocompleteItems = remember(text, mode, allVideos, allArtists, allAlbums) {
@@ -87,7 +93,6 @@ fun SmartSearchBar(
             else -> emptyList()
         }
     }
-
 
     // Decide what to show: autocomplete or history
     val showAutocomplete = autocompleteItems.isNotEmpty()
@@ -188,7 +193,6 @@ fun SmartSearchBar(
             }
         }
 
-
         val newFilterPathId = viewModel.currentFilterPathId.value
         if (newFilterPathId != null) {
             viewModel.addSearchHistoryEntry(query, searchMode, newFilterPathId, isMedia)
@@ -249,7 +253,7 @@ fun SmartSearchBar(
                                 Icon(Icons.Default.Close, contentDescription = "Clear")
                             }
                         }
-                        IconButton(onClick = onFilterClick) {
+                        IconButton(onClick = { viewModel.toggleBottomSheet() }) {
                             Icon(Icons.Default.FilterList, contentDescription = "Open Filters", tint = MaterialTheme.colorScheme.primary)
                         }
                     }

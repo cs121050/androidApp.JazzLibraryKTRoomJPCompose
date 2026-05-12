@@ -105,7 +105,6 @@
             targetValue = if (leftDrawerState == DrawerState.OPEN) 0.dp else (-320).dp
         )
     
-        val bottomSheetState by viewModel.bottomSheetState.collectAsState()
         val context = LocalContext.current
         val isRefreshing by viewModel.isRefreshing.collectAsState()
     
@@ -118,15 +117,10 @@
         //i have made the isPlayerVisible global (placed it in the viewmodel) so to access it independently
         val isPlayerVisible by viewModel.isPlayerVisible.collectAsState()
     
-        val cardUiStates by viewModel.cardUiStates.collectAsState()
         //witch tab is the main tab
         val currentTab by viewModel.currentTab.collectAsState()
         val hasArtistFilter = filterState.currentFilterPath.any { it.categoryId == 2 }
-        val artistCount = if (hasArtistFilter) 1 else uiState.availableArtists.size
-        val albumCount = uiState.filteredAlbums.size
-    
-        val historyCount = 0 // Placeholder – you can later replace with a real count
-    
+
         val scrollLockState =
             remember { ScrollLockState() }   // That is for the singleartistvie's wikidatacard scrolling, it locks the scrolling in order for items to consume the whole scrolling gesture
     
@@ -151,12 +145,8 @@
         val currentFilterPathId by viewModel.currentFilterPathId.collectAsState()
     
         val currentMediaEntry by playerViewModel.currentFilterPathMedia.collectAsState()
-        val currentMediaEntryTypeOfMedia = currentMediaEntry?.typeOfMedia
-    
+
         val scrollToAlbumsTrigger = remember { mutableStateOf(0) }
-    
-        val currentAlbumSongs by viewModel.albumSongs.collectAsState()
-        val currentPlayingSongId by playerViewModel.currentVideoDbIdState.collectAsState()
     
         var hideSearchDropdown by remember { mutableStateOf(false) }
     
@@ -166,21 +156,6 @@
         val keyboardController = LocalSoftwareKeyboardController.current
     
         val coroutineScope = rememberCoroutineScope()
-
-        LaunchedEffect(currentFilterPathId) {
-            Log.d("MainScreen", "currentFilterPathId changed to: $currentFilterPathId")
-        }
-
-        //DEBUGLOG
-        LaunchedEffect(isFullscreen) {
-            Log.d(
-                "Fullscreen",
-                "isFullscreen: $isFullscreen, isLandscape: $isLandscape, playerVisible: ${playerStableState.isVisible}"
-            )
-        }
-
-
-
 
         LaunchedEffect(Unit) {
             playerViewModel.clearBoundsEvent.collect {
@@ -204,7 +179,6 @@
         // Apply system UI visibility and colors based on fullscreen state
         // Then replace the system UI control LaunchedEffect with this:
         LaunchedEffect(isFullscreen, showBars) {
-            Log.d("Fullscreen", "System UI effect: isFullscreen=$isFullscreen, showBars=$showBars")
             if (isFullscreen) {
                 // Immersive sticky flags prevent swipe from revealing bars
                 view.systemUiVisibility = (
@@ -227,10 +201,7 @@
         }
     
         BackHandler {
-            Log.d("MainScreen-BackHandler", "Back pressed – hideSearchDropdown=$hideSearchDropdown, showSuggestions state unknown (inside SmartSearchBar)")
             hideSearchDropdown = true
-            Log.d("MainScreen-BackHandler", "set hideSearchDropdown=true")
-    
             // Normal back handling (double back, bottom sheet, history)
             viewModel.handleBackPress { (context as? Activity)?.finish() }
         }
@@ -254,7 +225,6 @@
                         ): Offset {
                             // If the search dropdown is open, do NOT move the toolbar
                             if (isDropdownOpen) {
-                                Log.d("MainScreen-NestedScroll", "Dropdown open → ignoring scroll")
                                 return Offset.Zero
                             }
                             // Original logic for wiki card lock and toolbar movement
@@ -277,9 +247,6 @@
                     uiState.filteredVideos
                 }
                 val albumsToShow = uiState.filteredAlbums
-                LaunchedEffect(albumsToShow) {
-                    Log.d("UIRecomposition", "albumsToShow changed, size=${albumsToShow.size}")
-                }
 
                 val albumsListState = rememberLazyListState()
 
@@ -337,15 +304,9 @@
                     )
                 }
 
-
-    
-    
                 // LOCK all the scrolling gestures to ensure that a nested item consume all of it
                 CompositionLocalProvider(LocalScrollLock provides scrollLockState) {
-    
-    
                     // ----- PULL TO REFRESH + CONTENT -----
-    
                     //for hiding the top bar when on fullscreen
                     val topPadding = if (isFullscreen) {
                         0.dp
@@ -370,7 +331,6 @@
                                 .fillMaxSize()
                                 .nestedScroll(nestedScrollConnection)
                                 .onGloballyPositioned { coordinates ->
-                                    Log.d("Fullscreen", "Parent box size: ${coordinates.size}")
                                     contentBoxRootPosition = IntOffset(
                                         x = coordinates.positionInRoot().x.roundToInt(),
                                         y = coordinates.positionInRoot().y.roundToInt()
@@ -408,57 +368,16 @@
                                     .zIndex(6f)
                             ) {
                                 toolbarBox(
-                                    onFilterClick = { viewModel.toggleBottomSheet() },
-                                    videoCount = videosToShow.size,
-                                    artistCount = artistCount,
                                     onVideoTabClick = { scrollToPlayingVideo() },
                                     onAlbumTabClick = { scrollToPlayingAlbum() },
-                                    albumCount = albumCount,
-                                    historyCount = historyCount,
-                                    currentTab = currentTab,
                                     onExpandToolbar = expandToolbar,
                                     onTabSelected = { tab ->
                                         viewModel.setCurrentTab(tab)          // MainViewModel
                                         playerViewModel.setCurrentTab(tab)    // PlayerViewModel (new)
                                     },
-                                    isPlayerVisible = isPlayerVisible,
-                                    onPrevious = { playerViewModel.previousVideo() },
-                                    onNext = { playerViewModel.nextVideo() },
-                                    onClose = { playerViewModel.closePlayer(currentFilterPathId) },
-                                    playerViewModel = playerViewModel,
-                                    videos = videosToShow,
-                                    listState = listState,
-                                    currentFilterPath = filterState.currentFilterPath,
-                                    currentFilterPathId = currentFilterPathId,
-                                    viewModel = viewModel,
-                                    currentAlbumSongs = currentAlbumSongs,
-                                    currentPlayingSongId = currentPlayingSongId,
-                                    currentAlbumId = viewModel.currentAlbumId.value,
                                     hideSearchDropdown = hideSearchDropdown,
-                                    isDropdownOpen = isDropdownOpen,
                                     onDropdownVisibilityChanged = { isDropdownOpen = it },
-                                    onSearchBarClicked = { hideSearchDropdown = false },
-                                    currentMediaEntryTypeOfMedia = currentMediaEntryTypeOfMedia,
-                                    allVideos = videosToShow,
-                                    allArtists = uiState.availableArtists,
-                                    allAlbums = albumsToShow,
-                                    onVideoSelected = { video ->
-                                        // Find the index of the video in the current videosToShow list
-                                        val index = videosToShow.indexOfFirst { it.id == video.id }
-                                        if (index != -1) {
-                                            // Scroll to that item
-                                            coroutineScope.launch {
-                                                listState.animateScrollToItem(index)
-                                                // Optional: you may also want to highlight the card briefly
-                                            }
-                                            // If currently not on Videos tab, switch to it
-                                            if (currentTab != MainTab.VIDEOS) {
-                                                viewModel.setCurrentTab(MainTab.VIDEOS)
-                                                playerViewModel.setCurrentTab(MainTab.VIDEOS)
-                                            }
-                                        }
-                                    },
-                                    onTogglePlayerVisibility = { viewModel.togglePlayerVisibility() }
+                                    onSearchBarClicked = { hideSearchDropdown = false }
                                 )
                             }
     
@@ -478,9 +397,6 @@
                                     //depending of witch tab of the toolbarbox is selected give me the relevant screen
                                     when (currentTab) {
                                         MainTab.VIDEOS -> VideoListContent(
-                                            uiState = uiState,
-                                            filterState = filterState,
-                                            videosToShow = videosToShow,
                                             onRefresh = { viewModel.safeRefreshDataFromAPI() },
                                             onActiveCardBoundsChanged = { cardId, rootPosition, size ->
                                                 if (cardId == playerStableState.activeCardId) {
@@ -490,80 +406,33 @@
                                                     activeCardSize = size
                                                 }
                                             },
-                                            playerUiState = playerStableState,
-                                            playerViewModel = playerViewModel,
-                                            listState = listState,
-                                            isPlayerVisible = isPlayerVisible,
-                                            cardUiStates = cardUiStates,
-                                            currentFilterPathId = currentFilterPathId,
-                                            videoArtistsMap = viewModel.videoArtistsMap.collectAsState().value,
                                             onCardTitleClick = { videoId ->
                                                 viewModel.onCardTitleClick(
                                                     videoId
                                                 )
-                                            },
-                                            currentTab = currentTab,
-                                            viewModel = viewModel
+                                            }
                                         )
     
                                         MainTab.ALBUMS -> {
-                                            Log.d("UIRecomposition", "Rendering AlbumsListContent with albumsToShow.size=${albumsToShow.size}")
                                             // ✅ No LaunchedEffect – no auto‑selection of first album
                                             AlbumsListContent(
-                                                albums = albumsToShow,
-                                                currentMediaEntryTypeOfMedia = currentMediaEntryTypeOfMedia,
-                                                isPlayerVisible = isPlayerVisible,
-                                                playerUiState = playerStableState,
                                                 playerViewModel = playerViewModel,
                                                 listState = albumsListState,
-                                                currentFilterPathId = currentFilterPathId,
-                                                filterPath = filterState.currentFilterPath,
-                                                albumArtistsMap = viewModel.albumArtistsMap.collectAsState().value,
                                                 viewModel = viewModel,
                                                 onActiveCardBoundsChanged = { cardId, position, size ->
-                                                    Log.d("ShuffleDebug-Album", "📐 Bounds update: card=$cardId, pos=$position, size=$size")
                                                     if (cardId == playerStableState.activeCardId) {
                                                         val relativePos = position - contentBoxRootPosition
-                                                        Log.d("ShuffleDebug-Album", "✅ Active album card bounds stored: relativePos=$relativePos, contentRoot=$contentBoxRootPosition")
                                                         activeCardRelativePosition = relativePos
                                                         activeCardSize = size
-                                                    } else {
-                                                        Log.d("ShuffleDebug-Album", "⚠️ Bounds for non-active album: $cardId (active=${playerStableState.activeCardId})")
                                                     }
                                                 },
-                                                onRefresh = { viewModel.safeRefreshDataFromAPI() },
-                                                onAlbumSelected = { album ->
-                                                    val alreadyFiltered = filterState.currentFilterPath.any {
-                                                        it.categoryId == FilterPath.CATEGORY_ARTIST && it.entityId == album.artistId
-                                                    }
-                                                    if (!alreadyFiltered && album.artistId != null) {
-                                                        viewModel.handleChipSelection(
-                                                            FilterPath.CATEGORY_ARTIST,
-                                                            album.artistId,
-                                                            album.artistFullName ?: "Unknown Artist",
-                                                            true
-                                                        )
-                                                    }
-                                                }
+                                                onRefresh = { viewModel.safeRefreshDataFromAPI() }
                                             )
                                         }
     
                                         MainTab.ARTISTS -> ArtistContent(
                                             modifier = Modifier.fillMaxSize(),
-                                            artistsShuffled = uiState.availableArtistsDisplay,
-                                            artistsBase = uiState.availableArtists,
-                                            albumsDisplay = uiState.availableAlbumsDisplay,
-                                            filterPath = filterState.currentFilterPath, // pass filter path
                                             onRefresh = { viewModel.shuffleArtists() },
-                                            onActiveCardBoundsChanged = { cardId, rootPosition, size ->
-                                                if (cardId == playerStableState.activeCardId) {
-                                                    val relativePos =
-                                                        rootPosition - contentBoxRootPosition
-                                                    activeCardRelativePosition = relativePos
-                                                    activeCardSize = size
-                                                }
-                                            },
-                                            playerUiState = playerStableState,
                                             onArtistSelected = { artist ->
                                                 viewModel.handleChipSelection(
                                                     FilterPath.CATEGORY_ARTIST,
@@ -572,10 +441,6 @@
                                                     true // add filter
                                                 )
                                             },
-                                            filteredAlbums = uiState.filteredAlbums,
-                                            currentMediaEntryTypeOfMedia = currentMediaEntryTypeOfMedia,
-                                            currentFilterPathId = currentFilterPathId,
-                                            minimiseMaximiseToggle = isPlayerVisible,
                                             onAlbumSelected = { album ->
                                                 val alreadyFiltered =
                                                     filterState.currentFilterPath.any {
@@ -592,8 +457,6 @@
                                                 // Always scroll to albums section after clicking an album card
                                                 scrollToAlbumsTrigger.value++
                                             },
-                                            scrollToAlbumsTrigger = scrollToAlbumsTrigger,
-                                            albumArtistsMap = viewModel.albumArtistsMap.collectAsState().value,
                                             playerViewModel = playerViewModel,
                                             viewModel = viewModel
                                         )
@@ -601,10 +464,8 @@
                                         MainTab.HISTORY -> HistoryContent(
                                             modifier = Modifier.fillMaxSize(),
                                             viewModel = viewModel,
-                                            playerUiState = playerStableState,
                                             playerViewModel = playerViewModel,
-                                            onRefresh = { viewModel.refreshHistory() },
-                                            isPlayerVisible = isPlayerVisible
+                                            onRefresh = { viewModel.refreshHistory() }
                                         )
                                     }
                                 }
@@ -643,10 +504,6 @@
                                         .pointerInput(Unit) {
                                             detectTapGestures { offset ->
                                                 if (offset.y < topTapThresholdPx) {
-                                                    Log.d(
-                                                        "Fullscreen",
-                                                        "Top edge tap detected, showing bars"
-                                                    )
                                                     viewModel.setShowBars(true)
                                                 }
                                             }
@@ -686,7 +543,6 @@
                                         .onGloballyPositioned { coordinates ->
                                             miniPlayerHeight =
                                                 with(density) { coordinates.size.height.toDp() }
-                                            Log.d("Fullscreen", "Player box size: ${coordinates.size}")
                                         }
                                 ) {
                                     SmartYoutubePlayerHost(
@@ -804,87 +660,29 @@
 
     @Composable
     fun toolbarBox(
-        onFilterClick: () -> Unit,
-        videoCount: Int,
-        artistCount: Int,
-        historyCount: Int,
-        currentTab: MainTab,
         onTabSelected: (MainTab) -> Unit,
-
-        isPlayerVisible: Boolean,
-        onPrevious: () -> Unit,
-        onNext: () -> Unit,
-        onClose: () -> Unit,
-        playerViewModel: PlayerViewModel,
-        videos: List<Video>,
-        currentFilterPath: List<FilterPath>,
-        listState: LazyListState,
-        currentFilterPathId: Int?,
-        viewModel: MainViewModel,
-        onTogglePlayerVisibility: () -> Unit,
-        currentAlbumSongs: List<Song>,
-        currentPlayingSongId: Int?,
-        currentAlbumId: Int?,
         hideSearchDropdown: Boolean,
         onSearchBarClicked: () -> Unit,
-        isDropdownOpen: Boolean,
         onDropdownVisibilityChanged: (Boolean) -> Unit,
-        allVideos: List<Video>,   // <-- new parameter
-        allAlbums: List<Album>,
-        allArtists: List<Artist>,
-        currentMediaEntryTypeOfMedia: Int?,
-        albumCount: Int,
         onVideoTabClick: () -> Unit,
         onAlbumTabClick: () -> Unit,
         onExpandToolbar: () -> Unit,
-        onVideoSelected: (Video) -> Unit,
     ) {
     
-        Log.d("toolbarBox", "Rendering SmartSearchBar with hideSearchDropdown=$hideSearchDropdown")
         SmartSearchBar(
-            viewModel = viewModel,
-            onFilterClick = onFilterClick,
             hideSearchDropdown = hideSearchDropdown,
-            onVideoSelected = onVideoSelected,
-
             onExpandToolbar = onExpandToolbar,
             onSearchBarClicked = {
-                Log.d("toolbarBox", "onSearchBarClicked called – resetting hideSearchDropdown flag")
                 onSearchBarClicked()
             },
             onDropdownVisibilityChanged = onDropdownVisibilityChanged,
-            allVideos = allVideos,
-            allAlbums = allAlbums,
-            allArtists = allArtists,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 4.dp)
+            modifier = Modifier.fillMaxWidth().padding(top = 4.dp)
         )
         // rest of the function unchanged
         VideoStatsRow(
-            videoCount = videoCount,
-            artistCount = artistCount,
             onVideoTabClick = onVideoTabClick,
             onAlbumTabClick = onAlbumTabClick,
-            historyCount = historyCount,
-            albumCount = albumCount,
-            currentTab = currentTab,
             onTabSelected = onTabSelected,
-            isPlayerVisible = isPlayerVisible,
-            onTogglePlayerVisibility = onTogglePlayerVisibility,
-            onNext = onNext,
-            onClose = onClose,
-            onPrevious = onPrevious,
-            playerViewModel = playerViewModel,
-            videos = videos,
-            listState = listState,
-            currentFilterPath = currentFilterPath,
-            currentFilterPathId = currentFilterPathId,
-            isAlbumCardVisible = { viewModel.isCurrentAlbumCardVisible.value },
-            currentAlbumSongs = currentAlbumSongs,
-            currentPlayingSongId = currentPlayingSongId,
-            currentAlbumId = currentAlbumId,
-            currentMediaEntryTypeOfMedia = currentMediaEntryTypeOfMedia,
             modifier = Modifier.fillMaxWidth()
         )
     }

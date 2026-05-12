@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
@@ -42,6 +43,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
@@ -75,6 +77,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.example.jazzlibraryktroomjpcompose.R
@@ -97,39 +100,34 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.coroutines.cancellation.CancellationException
 
+
 @Composable
 fun ArtistContent(
     modifier: Modifier = Modifier,
-    artistsShuffled: List<Artist>,
-    artistsBase: List<Artist>,
-    filteredAlbums: List<Album>,
-    albumsDisplay: List<Album>,
-    playerUiState: PlayerStableState,
-    onRefresh: () -> Unit = {},
-    onActiveCardBoundsChanged: (String, IntOffset, IntSize) -> Unit,
-    filterPath: List<FilterPath>, // new parameter
+    viewModel: MainViewModel = hiltViewModel(),
+    playerViewModel: PlayerViewModel = hiltViewModel(),
+    listState: LazyListState = rememberLazyListState(),
+
     onArtistSelected: (Artist) -> Unit = {},
     onAlbumSelected: (Album) -> Unit = {},
-    scrollToAlbumsTrigger: MutableState<Int>,
-    currentFilterPathId: Int?,
-    minimiseMaximiseToggle: Boolean,
-    viewModel: MainViewModel,
-    playerViewModel: PlayerViewModel,
-    albumArtistsMap: Map<Int, List<MainViewModel.AlbumArtistInfo>>,
-    currentMediaEntryTypeOfMedia: Int?
+    onRefresh: () -> Unit = {}
 ) {
+    val uiState by viewModel.uiState.collectAsState()
+    val filterState by viewModel.filterState.collectAsState()
+    val playerUiState by playerViewModel.stableState.collectAsState()
+    val albumArtistsMap by viewModel.albumArtistsMap.collectAsState()
+    val currentFilterPathId by viewModel.currentFilterPathId.collectAsState()
+    val minimiseMaximiseToggle by viewModel.isPlayerVisible.collectAsState()
+    val scrollToAlbumsTrigger = remember { mutableStateOf(0) }
 
+    val currentMediaEntry by playerViewModel.currentFilterPathMedia.collectAsState()
+    val currentMediaEntryTypeOfMedia = currentMediaEntry?.typeOfMedia
 
-    Log.d("ArtistContent", "🎨 ArtistContent recompose: filterPath=$filterPath")
-    Log.d(
-        "ArtistContent",
-        "📀 albumsDisplay size=${albumsDisplay.size}, first 3 titles=${
-            albumsDisplay.take(3).joinToString { it.title ?: "null" }
-        }"
-    )
-
-    val listState = rememberLazyListState()     // lazy list state for scrolling
-
+    val artistsShuffled = uiState.availableArtistsDisplay
+    val artistsBase = uiState.availableArtists
+    val filteredAlbums = uiState.filteredAlbums
+    val albumsDisplay = uiState.availableAlbumsDisplay
+    val filterPath = filterState.currentFilterPath
 
     // Check if there's an artist filter
     val selectedArtist = filterPath
@@ -141,12 +139,10 @@ fun ArtistContent(
 
     // State to remember which album was clicked from the multi-artist grid
     var selectedAlbum by remember { mutableStateOf<Album?>(null) }
-    Log.d("ArtistContent", "selectedAlbum initialized as ${selectedAlbum?.title}")
 
 
     // Clear selected album when no artist filter is active (so you don't see old album later)
     LaunchedEffect(filterPath) {
-        Log.d("ArtistContent", "🔍 filterPath changed: $filterPath")
         val artistFilter = filterPath.firstOrNull { it.categoryId == FilterPath.CATEGORY_ARTIST }
         if (artistFilter == null) {
             selectedAlbum = null
@@ -181,10 +177,6 @@ fun ArtistContent(
 
     // Wrap the original onAlbumSelected to also remember the clicked album
     val handleAlbumSelected: (Album) -> Unit = { album ->
-        Log.d(
-            "ArtistContent",
-            "🖱️ handleAlbumSelected called with album: ${album.title} (id=${album.albumId})"
-        )
         selectedAlbum = album
         onAlbumSelected(album)  // this adds the artist filter and triggers scroll
     }
@@ -195,10 +187,6 @@ fun ArtistContent(
     if (selectedArtist != null) {
         // Single artist view
 
-        Log.d(
-            "ArtistContent",
-            "🎤 Single artist mode: ${selectedArtist.fullName}, passing initialSelectedAlbum=${selectedAlbum?.title}"
-        )
         SingleArtistView(
             artist = selectedArtist,
             filteredAlbums = filteredAlbums,
@@ -214,7 +202,6 @@ fun ArtistContent(
             currentFilterPath = filterPath,
             initialSelectedAlbum = selectedAlbum,
             playerUiState = playerUiState,
-            onActiveCardBoundsChanged = onActiveCardBoundsChanged,
             modifier = modifier
         )
         Log.d(
@@ -246,7 +233,6 @@ fun ArtistContent(
             albumArtistsMap = albumArtistsMap,
             playerViewModel = playerViewModel,
             currentFilterPath = filterPath,
-            onActiveCardBoundsChanged = onActiveCardBoundsChanged,
             playerUiState = playerUiState,
             modifier = modifier
         )
@@ -383,7 +369,6 @@ fun SingleArtistView(
     playerViewModel: PlayerViewModel,
     initialSelectedAlbum: Album? = null,
     albumArtistsMap: Map<Int, List<MainViewModel.AlbumArtistInfo>>,
-    onActiveCardBoundsChanged: (String, IntOffset, IntSize) -> Unit,
     playerUiState: PlayerStableState,
     modifier: Modifier = Modifier
 ) {
