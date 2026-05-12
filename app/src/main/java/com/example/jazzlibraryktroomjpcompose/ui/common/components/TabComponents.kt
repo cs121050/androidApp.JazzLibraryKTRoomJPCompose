@@ -145,8 +145,13 @@ fun VideoStatsRow(
     var currentTypeOfMedia by remember { mutableStateOf<Int?>(null) }
 
 
-
-
+    val isOnAlbumPages = pagerState.currentPage == 3 || pagerState.currentPage == 4
+    LaunchedEffect(isVideoPlaying) {
+        if (!isOnAlbumPages) {
+            if (controlsAccessible && pagerState.currentPage != 1)
+                pagerState.animateScrollToPage(1)
+        }
+    }
 
     // Keep pager on minimise page when controls become inaccessible
     LaunchedEffect(controlsAccessible) {

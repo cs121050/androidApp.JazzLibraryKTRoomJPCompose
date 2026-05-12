@@ -31,6 +31,10 @@ animation = "1.8.2"
 composeMaterial = "1.5.6"
 coil = "2.7.0"
 
+firebaseBom = "32.7.0"      # Latest stable Firebase BoM (Bill of Materials)[reference:0][reference:1]
+play-services-auth = "21.3.0" # Latest Google Play Services Auth (for Google Sign-In)[reference:2]
+google-services = "4.4.0"    # Google Services Gradle plugin
+
 [libraries]
 # This table defines library dependencies referenced by alias, specifying group, name, and version reference.
 # Each entry creates a reusable alias for a specific library dependency.
@@ -94,6 +98,15 @@ androidx-compose-material = { group = "androidx.compose.material", name = "mater
 
 coil-compose = { module = "io.coil-kt:coil-compose", version.ref = "coil" }
 
+
+# Firebase BOM (platform)
+firebase-bom = { module = "com.google.firebase:firebase-bom", version.ref = "firebaseBom" }
+# Firebase Auth (version is managed by the BOM)
+firebase-auth-ktx = { module = "com.google.firebase:firebase-auth-ktx" }
+firebase-auth = { module = "com.google.firebase:firebase-auth" }
+# Google Play Services Auth
+play-services-auth = { module = "com.google.android.gms:play-services-auth", version.ref = "play-services-auth" }
+
 [plugins]
 # This table defines Gradle plugins with their IDs and version references.
 android-application = { id = "com.android.application", version.ref = "agp" }             # Android application plugin for building APKs
@@ -101,3 +114,5 @@ kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 kotlin-kapt = { id = "org.jetbrains.kotlin.kapt" }                                       # Kotlin annotation processing tool (kapt) plugin
 dagger-hilt-android = { id = "com.google.dagger.hilt.android", version.ref = "hilt" }
 compose-compiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
+# Google Services Gradle plugin
+google-services = { id = "com.google.gms.google-services", version.ref = "google-services" }

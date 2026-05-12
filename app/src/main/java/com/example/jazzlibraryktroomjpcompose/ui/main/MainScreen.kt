@@ -76,7 +76,7 @@
     import com.example.jazzlibraryktroomjpcompose.ui.history.*
     import com.example.jazzlibraryktroomjpcompose.domain.models.Album
     import com.example.jazzlibraryktroomjpcompose.domain.models.Artist
-
+    import com.example.jazzlibraryktroomjpcompose.ui.auth.LoginScreen
 
 
     enum class AlbumGridTab { MAIN, FEATURED }
@@ -157,6 +157,19 @@
     
         val coroutineScope = rememberCoroutineScope()
 
+        var showLoginScreen by remember { mutableStateOf(false) }
+        if (showLoginScreen) {
+            LoginScreen(
+                onLoginSuccess = {
+                    showLoginScreen = false
+                    // User is now logged in - main screen will refresh automatically
+                    // because AuthState changed
+                },
+                onNavigateBack = { showLoginScreen = false }
+            )
+            return  // Don't show main screen
+        }
+
         LaunchedEffect(Unit) {
             playerViewModel.clearBoundsEvent.collect {
                 activeCardRelativePosition = null
@@ -199,11 +212,16 @@
                 view.systemUiVisibility = View.SYSTEM_UI_FLAG_VISIBLE
             }
         }
-    
+
         BackHandler {
-            hideSearchDropdown = true
-            // Normal back handling (double back, bottom sheet, history)
-            viewModel.handleBackPress { (context as? Activity)?.finish() }
+            // If drawer is open -> close it
+            if (leftDrawerState == DrawerState.OPEN) {
+                viewModel.toggleLeftDrawer()
+            } else {
+                hideSearchDropdown = true
+                // Normal back handling (double back, bottom sheet, history)
+                viewModel.handleBackPress { (context as? Activity)?.finish() }
+            }
         }
     
     
@@ -607,22 +625,43 @@
 
 
                 }
-    
-                // ----- LEFT DRAWER, BOTTOM SHEET, SNACKBAR (unchanged) -----
-                LeftDrawer(
-                    isOpen = leftDrawerState == DrawerState.OPEN,
-                    onClose = { viewModel.toggleLeftDrawer() },
-                    onRefreshClick = { viewModel.safeRefreshDataFromAPI() },
-                    onClearHistoryClick = {
-                        playerViewModel.closePlayer()
-                        viewModel.clearHistory()
-                    },
-                    modifier = Modifier
-                        .fillMaxHeight()
-                        .width(280.dp)
-                        .offset(x = leftDrawerOffset)
-                        .zIndex(8f)
-                )
+
+                // ----- LEFT DRAWER with scrim -----
+                if (leftDrawerState == DrawerState.OPEN) {
+                    // Scrim - fills whole screen and closes drawer on tap
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.32f))
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null
+                            ) {
+                                viewModel.toggleLeftDrawer()
+                            }
+                            .zIndex(7f)
+                    )
+
+                    // Drawer content
+                    LeftDrawer(
+                        isOpen = true,
+                        onClose = { viewModel.toggleLeftDrawer() },
+                        onRefreshClick = { viewModel.safeRefreshDataFromAPI() },
+                        onClearHistoryClick = {
+                            playerViewModel.closePlayer()
+                            viewModel.clearHistory()
+                        },
+                        onLoginClick = {
+                            showLoginScreen = true
+                            viewModel.toggleLeftDrawer()
+                        },
+                        modifier = Modifier
+                            .fillMaxHeight()
+                            .width(280.dp)
+                            .offset(x = leftDrawerOffset)
+                            .zIndex(8f)
+                    )
+                }
     
                 YouTubeLikeBottomSheet(
                     viewModel = viewModel,
