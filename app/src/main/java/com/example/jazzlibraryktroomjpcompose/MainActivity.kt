@@ -1,5 +1,6 @@
 package com.example.jazzlibraryktroomjpcompose
 
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -12,15 +13,26 @@ import com.example.jazzlibraryktroomjpcompose.ui.main.MainScreen
 import com.example.jazzlibraryktroomjpcompose.ui.theme.JazzLibraryKTRoomJPComposeTheme
 import dagger.hilt.android.AndroidEntryPoint
 import android.util.Log
+import androidx.annotation.RequiresApi
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.lifecycle.lifecycleScope
+import com.example.jazzlibraryktroomjpcompose.ui.update.BlockingUpdateScreen
 import com.example.jazzlibraryktroomjpcompose.ui.update.UpdateManager
 import kotlinx.coroutines.launch
+
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     private lateinit var updateManager: UpdateManager
     private var forceUpdateTriggered = false
+    private var showBlockingUpdateScreen by mutableStateOf(false)
+    private var pendingUpdateUrl by mutableStateOf("")
 
+    @RequiresApi(Build.VERSION_CODES.P)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         updateManager = UpdateManager(this)
@@ -28,34 +40,52 @@ class MainActivity : ComponentActivity() {
         checkForForceUpdate()
         setContent {
             JazzLibraryKTRoomJPComposeTheme {
-                Surface(
-                    modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colorScheme.background
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(MaterialTheme.colorScheme.background)
                 ) {
-                    MainScreen()
+                    if (showBlockingUpdateScreen) {
+                        BlockingUpdateScreen(
+                            updateUrl = pendingUpdateUrl,
+                            onUpdateStarted = {
+                                // After the screen shows the message, we close the app.
+                                // The browser will already be opened by openDownloadUrl() inside the screen.
+                                // We delay finishing to ensure the intent is sent.
+                                android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                                    finishAffinity()
+                                }, 300)
+                            }
+                        )
+                    } else {
+                        Surface(
+                            modifier = Modifier.fillMaxSize(),
+                            color = MaterialTheme.colorScheme.background
+                        ) {
+                            MainScreen()
+                        }
+                    }
                 }
             }
         }
     }
 
+    @RequiresApi(Build.VERSION_CODES.P)
     private fun checkForForceUpdate() {
         lifecycleScope.launch {
             try {
                 val updateInfo = updateManager.fetchUpdateInfo()
-                val currentVersion = updateManager.getCurrentVersion()
-                val forceMinVersion = updateInfo.forceMinVersion
+                val currentCode = updateManager.getCurrentVersionCode()
+                val forceMinCode = updateInfo.forceMinVersionCode
 
-                Log.d("MainActivity", "Current: $currentVersion, Force min: $forceMinVersion")
-
-                // If current version is older than the forced minimum version, trigger force update
-                if (updateManager.compareVersions(currentVersion, forceMinVersion) < 0 && !forceUpdateTriggered) {
+                if (currentCode < forceMinCode && !forceUpdateTriggered) {
                     forceUpdateTriggered = true
-                    Log.d("MainActivity", "🚨 Force update triggered! Opening download URL...")
-                    updateManager.openDownloadUrl()
-                    // Optional: finish() to close the app? Usually leave it open, user can install then come back.
+                    pendingUpdateUrl = updateInfo.downloadUrl
+                    showBlockingUpdateScreen = true
+                    // Do NOT open URL here – let the button do it
                 }
             } catch (e: Exception) {
-                Log.e("MainActivity", "Force update check failed", e)
+                Log.e("ForceUpdate", "Error", e)
             }
         }
     }

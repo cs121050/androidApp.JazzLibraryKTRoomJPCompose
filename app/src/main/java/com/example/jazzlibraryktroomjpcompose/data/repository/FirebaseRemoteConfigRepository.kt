@@ -31,6 +31,9 @@ class FirebaseRemoteConfigRepository(
 
         // Default cache duration (1 hour in production, 0 for testing)
         private const val CACHE_EXPIRATION_SECONDS = 3600L
+        // Force updates
+        private const val CACHE_EXPIRATION_SECONDS_FORCE_UPDATE = 0L
+
 
         // Remote Config keys
         private const val KEY_LATEST_VERSION = "latest_version_code"
@@ -55,7 +58,7 @@ class FirebaseRemoteConfigRepository(
     init {
         // Configure Remote Config settings
         val settings = FirebaseRemoteConfigSettings.Builder()
-            .setMinimumFetchIntervalInSeconds(CACHE_EXPIRATION_SECONDS)
+            .setMinimumFetchIntervalInSeconds(CACHE_EXPIRATION_SECONDS_FORCE_UPDATE)
             .build()
         remoteConfig.setConfigSettingsAsync(settings)
 

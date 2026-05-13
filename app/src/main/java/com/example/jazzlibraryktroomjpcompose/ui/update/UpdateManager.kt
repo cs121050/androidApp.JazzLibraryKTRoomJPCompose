@@ -3,6 +3,9 @@ package com.example.jazzlibraryktroomjpcompose.ui.update
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
+import android.util.Log
+import androidx.annotation.RequiresApi
 import com.example.jazzlibraryktroomjpcompose.domain.models.UpdateInfo
 import com.google.firebase.remoteconfig.FirebaseRemoteConfig
 import com.google.firebase.remoteconfig.ktx.get
@@ -14,9 +17,9 @@ class UpdateManager(private val context: Context) {
         // Set default values (used when no network or first launch)
         setDefaultsAsync(
             mapOf(
-                "latest_version" to "1.0",
-                "force_min_version" to "1.0",
-                "download_url" to "https://your-server.com/app.apk",
+                "latest_version" to 1,
+                "force_min_version" to 1,
+                "download_url" to "https://google.com",
                 "changelog" to "New update available",
                 "last_update_timestamp" to System.currentTimeMillis()
             )
@@ -32,10 +35,14 @@ class UpdateManager(private val context: Context) {
     }
 
     suspend fun fetchUpdateInfo(): UpdateInfo {
+        // Force a fresh fetch (ignore cache)
+        remoteConfig.fetch().await()
+        remoteConfig.activate().await()
+
         remoteConfig.fetchAndActivate().await()
         return UpdateInfo(
-            latestVersion = remoteConfig["latest_version"].asString(),
-            forceMinVersion = remoteConfig["force_min_version"].asString(),
+            latestVersionCode = remoteConfig["latest_version"].asLong().toInt(),
+            forceMinVersionCode = remoteConfig["force_min_version"].asLong().toInt(),
             downloadUrl = remoteConfig["download_url"].asString(),
             changeLog = remoteConfig["changelog"].asString(),
             lastUpdateTimestamp = remoteConfig["last_update_timestamp"].asLong()
@@ -44,17 +51,35 @@ class UpdateManager(private val context: Context) {
 
     fun openDownloadUrl() {
         val url = remoteConfig["download_url"].asString()
-        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
-        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        context.startActivity(intent)
+        Log.d("UpdateManager", "Opening URL: '$url'")
+        if (url.isNullOrEmpty()) {
+            Log.e("UpdateManager", "Download URL is empty")
+            return
+        }
+        try {
+            // Try with a simple intent first (no extra flags)
+            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+            context.startActivity(intent)
+        } catch (e: Exception) {
+            Log.e("UpdateManager", "Failed to open with simple intent", e)
+            // Fallback: use a chooser
+            try {
+                val chooser = Intent.createChooser(
+                    Intent(Intent.ACTION_VIEW, Uri.parse(url)),
+                    "Open with..."
+                )
+                context.startActivity(chooser)
+            } catch (e2: Exception) {
+                Log.e("UpdateManager", "Chooser also failed", e2)
+            }
+        }
     }
 
-    fun getCurrentVersion(): String {
+    @RequiresApi(Build.VERSION_CODES.P)
+    fun getCurrentVersionCode(): Int {
         return try {
-            context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "1.0"
-        } catch (e: Exception) {
-            "1.0"
-        }
+            context.packageManager.getPackageInfo(context.packageName, 0).longVersionCode.toInt()
+        } catch (e: Exception) { 1 }
     }
 
     fun compareVersions(v1: String, v2: String): Int {
