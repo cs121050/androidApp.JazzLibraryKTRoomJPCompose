@@ -27,6 +27,7 @@ import com.example.jazzlibraryktroomjpcompose.domain.repository.SearchHistoryRep
 import com.example.jazzlibraryktroomjpcompose.domain.repository.SongRepository
 import com.example.jazzlibraryktroomjpcompose.domain.repository.TypeRepository
 import com.example.jazzlibraryktroomjpcompose.domain.repository.VideoRepository
+import com.example.jazzlibraryktroomjpcompose.domain.usecases.RemoteConfigUseCase
 import com.example.jazzlibraryktroomjpcompose.ui.settings.SettingsRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
@@ -49,7 +50,8 @@ class MainViewModel @Inject constructor(
     private val jazzRepository: JazzRepositoryImpl,
     private val filterOrchestrator: FilterOrchestrator,
     private val settingsRepository: SettingsRepository,
-    private val searchHistoryRepository: SearchHistoryRepository
+    private val searchHistoryRepository: SearchHistoryRepository,
+    private val remoteConfigUseCase: RemoteConfigUseCase
 ) : ViewModel() {
 
     private var lastBackPressTime = 0L
@@ -255,9 +257,16 @@ class MainViewModel @Inject constructor(
     private val _enrichedHistory = MutableStateFlow<List<HistoryGroupItem>>(emptyList())
     val enrichedHistory: StateFlow<List<HistoryGroupItem>> = _enrichedHistory.asStateFlow()
 
+    private val _maintenanceMode = MutableStateFlow(false)
+    val maintenanceMode: StateFlow<Boolean> = _maintenanceMode.asStateFlow()
+
+    private val _maintenanceMessage = MutableStateFlow("")
+    val maintenanceMessage: StateFlow<String> = _maintenanceMessage.asStateFlow()
+
     init {
         checkAndLoadData()
         loadSearchHistory()
+        checkMaintenanceMode()
     }
 
     // NEW: Load search history from repository
@@ -297,6 +306,16 @@ class MainViewModel @Inject constructor(
     fun clearAllSearchHistory() {
         viewModelScope.launch {
             searchHistoryRepository.deleteAllSearchHistory()
+        }
+    }
+
+    private fun checkMaintenanceMode() {
+        viewModelScope.launch {
+            remoteConfigUseCase.getFeatureFlags().collect { flags ->
+                _maintenanceMode.value = flags.maintenanceMode
+                _maintenanceMessage.value = flags.maintenanceMessage
+                Log.d("MainVM", "Maintenance mode: ${flags.maintenanceMode}")
+            }
         }
     }
 

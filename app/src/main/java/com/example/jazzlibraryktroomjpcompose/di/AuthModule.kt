@@ -1,4 +1,4 @@
-package com.example.jazzlibraryktroomjpcompose.ui.history.di
+package com.example.jazzlibraryktroomjpcompose.di
 
 import com.example.jazzlibraryktroomjpcompose.data.repository.FirebaseAuthRepository
 import com.example.jazzlibraryktroomjpcompose.domain.repository.AuthRepository

@@ -1,4 +1,4 @@
-package com.example.jazzlibraryktroomjpcompose.ui.history.di
+package com.example.jazzlibraryktroomjpcompose.di
 
 import android.util.Log
 import com.example.jazzlibraryktroomjpcompose.data.local.db.JazzDatabase

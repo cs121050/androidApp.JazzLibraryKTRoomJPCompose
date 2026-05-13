@@ -107,6 +107,9 @@ firebase-auth = { module = "com.google.firebase:firebase-auth" }
 # Google Play Services Auth
 play-services-auth = { module = "com.google.android.gms:play-services-auth", version.ref = "play-services-auth" }
 
+firebase-config-ktx = { module = "com.google.firebase:firebase-config-ktx" }
+firebase-config = { module = "com.google.firebase:firebase-config" }
+
 [plugins]
 # This table defines Gradle plugins with their IDs and version references.
 android-application = { id = "com.android.application", version.ref = "agp" }             # Android application plugin for building APKs
