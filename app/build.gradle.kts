@@ -128,6 +128,8 @@ dependencies {
     // Google Sign-In
     implementation(libs.play.services.auth)
 
+    implementation(libs.firebase.config.ktx)
+    implementation(libs.firebase.config)
 }
 
 // Allow references to generated code for Hilt
