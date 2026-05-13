@@ -33,6 +33,7 @@ fun LeftDrawer(
     onClearHistoryClick: () -> Unit,
     onLoginClick: () -> Unit,
     modifier: Modifier = Modifier,
+    onAboutClick: () -> Unit,
     authViewModel: AuthViewModel = hiltViewModel()
 ) {
     val authState by authViewModel.authState.collectAsState()
@@ -62,6 +63,7 @@ fun LeftDrawer(
         // Build menu items in desired order
         val menuItems = buildMenuItems(
             currentUser = currentUser,
+            onAboutClick = { onAboutClick() },
             onRefreshClick = { onRefreshClick(); onClose() },
             onClearHistoryClick = { onClearHistoryClick(); onClose() },
             onLoginOrSignOut = {
@@ -91,7 +93,8 @@ private fun buildMenuItems(
     currentUser: User?,
     onRefreshClick: () -> Unit,
     onClearHistoryClick: () -> Unit,
-    onLoginOrSignOut: () -> Unit
+    onLoginOrSignOut: () -> Unit,
+    onAboutClick: () -> Unit
 ): List<MenuItem> {
     val items = mutableListOf<MenuItem>()
 
@@ -112,8 +115,8 @@ private fun buildMenuItems(
     items.add(MenuItem("Bookmarks", Icons.Default.Bookmark, { }, enabled = false))
     items.add(MenuItem("Playlists", Icons.Default.PlaylistPlay, { }, enabled = false))
     items.add(MenuItem("Settings", Icons.Default.Settings, { }, enabled = false))
-    items.add(MenuItem("About", Icons.Default.Info, { }, enabled = false))
 
+    items.add(MenuItem("About", Icons.Default.Info, onAboutClick))
     return items
 }
 

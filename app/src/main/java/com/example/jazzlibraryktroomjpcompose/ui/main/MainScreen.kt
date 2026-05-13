@@ -77,7 +77,7 @@
     import com.example.jazzlibraryktroomjpcompose.domain.models.Album
     import com.example.jazzlibraryktroomjpcompose.domain.models.Artist
     import com.example.jazzlibraryktroomjpcompose.ui.auth.LoginScreen
-
+    import com.example.jazzlibraryktroomjpcompose.ui.about.AboutScreen
 
     enum class AlbumGridTab { MAIN, FEATURED }
     enum class SortDirection { ASC, DESC }
@@ -170,6 +170,12 @@
             return  // Don't show main screen
         }
 
+        var showAboutScreen by remember { mutableStateOf(false) }
+        if (showAboutScreen) {
+            AboutScreen(onNavigateBack = { showAboutScreen = false })
+            return
+        }
+
         LaunchedEffect(Unit) {
             playerViewModel.clearBoundsEvent.collect {
                 activeCardRelativePosition = null
@@ -214,16 +220,16 @@
         }
 
         BackHandler {
-            // If drawer is open -> close it
-            if (leftDrawerState == DrawerState.OPEN) {
-                viewModel.toggleLeftDrawer()
-            } else {
-                hideSearchDropdown = true
-                // Normal back handling (double back, bottom sheet, history)
-                viewModel.handleBackPress { (context as? Activity)?.finish() }
+            when {
+                showLoginScreen -> showLoginScreen = false
+                showAboutScreen -> showAboutScreen = false
+                leftDrawerState == DrawerState.OPEN -> viewModel.toggleLeftDrawer()
+                else -> {
+                    hideSearchDropdown = true
+                    viewModel.handleBackPress { (context as? Activity)?.finish() }
+                }
             }
         }
-    
     
         if (loadingState == LoadingState.LOADING && uiState.videos.isEmpty()) {
             LoadingScreen()
@@ -645,7 +651,7 @@
                     // Drawer content
                     LeftDrawer(
                         isOpen = true,
-                        onClose = { viewModel.toggleLeftDrawer() },
+                        onClose = {  },
                         onRefreshClick = { viewModel.safeRefreshDataFromAPI() },
                         onClearHistoryClick = {
                             playerViewModel.closePlayer()
@@ -653,7 +659,11 @@
                         },
                         onLoginClick = {
                             showLoginScreen = true
-                            viewModel.toggleLeftDrawer()
+                            //viewModel.toggleLeftDrawer()
+                        },
+                        onAboutClick = {
+                            showAboutScreen = true
+                            //viewModel.toggleLeftDrawer()
                         },
                         modifier = Modifier
                             .fillMaxHeight()

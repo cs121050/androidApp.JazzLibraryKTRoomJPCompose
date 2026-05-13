@@ -26,13 +26,13 @@ import androidx.activity.compose.BackHandler
  * ✅ CLEAN LOGIN SCREEN
  * Email login, Google sign-in, Anonymous login
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LoginScreen(
     onLoginSuccess: () -> Unit,
     onNavigateBack: () -> Unit,
     authViewModel: AuthViewModel = hiltViewModel()
 ) {
-    BackHandler(onBack = onNavigateBack)
 
     val authState by authViewModel.authState.collectAsState()
     val email by authViewModel.email.collectAsState()
@@ -43,6 +43,8 @@ fun LoginScreen(
 
     var passwordVisible by remember { mutableStateOf(false) }
     var isSignUp by remember { mutableStateOf(false) }
+
+    BackHandler { onNavigateBack() }
 
     // Check if user is authenticated
     LaunchedEffect(authState) {
@@ -55,139 +57,157 @@ fun LoginScreen(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(24.dp),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // Logo/Title
-        Text(
-            text = "Jazz Library",
-            style = MaterialTheme.typography.headlineLarge,
-            modifier = Modifier.padding(bottom = 32.dp)
-        )
-
-        // Email TextField
-        OutlinedTextField(
-            value = email,
-            onValueChange = { authViewModel.updateEmail(it) },
-            label = { Text("Email") },
-            leadingIcon = { Icon(Icons.Default.Email, contentDescription = "Email") },
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 12.dp),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
-            enabled = !loading,
-            singleLine = true
-        )
-
-        // Password TextField
-        OutlinedTextField(
-            value = password,
-            onValueChange = { authViewModel.updatePassword(it) },
-            label = { Text("Password") },
-            leadingIcon = { Icon(Icons.Default.Lock, contentDescription = "Password") },
-            trailingIcon = {
-                IconButton(onClick = { passwordVisible = !passwordVisible }) {
-                    Icon(
-                        if (passwordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
-                        contentDescription = "Toggle password visibility"
-                    )
+        TopAppBar(
+            title = { Text("Login / Sign Up") },
+            navigationIcon = {
+                IconButton(onClick = onNavigateBack) {
+                    Icon(Icons.Default.ArrowBack, contentDescription = "Back")
                 }
             },
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 12.dp),
-            visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-            enabled = !loading,
-            singleLine = true
+            modifier = Modifier.padding(bottom = 96.dp)
         )
 
-        // Error Message
-        if (error != null) {
-            Text(
-                text = error ?: "",
-                color = MaterialTheme.colorScheme.error,
-                style = MaterialTheme.typography.bodySmall,
-                modifier = Modifier.padding(bottom = 16.dp)
-            )
-        }
-
-        // Sign In / Sign Up Button
-        Button(
-            onClick = {
-                if (isSignUp) authViewModel.signUpWithEmail()
-                else authViewModel.signInWithEmail()
-            },
+        Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .height(50.dp)
-                .padding(bottom = 12.dp),
-            enabled = !loading
+                .fillMaxSize()
+                .padding(24.dp),
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            if (loading) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(24.dp),
-                    color = MaterialTheme.colorScheme.onPrimary,
-                    strokeWidth = 2.dp
-                )
-            } else {
-                Text(if (isSignUp) "Sign Up" else "Sign In")
-            }
-        }
 
-        // Toggle between Sign In / Sign Up
-        TextButton(
-            onClick = { isSignUp = !isSignUp },
-            modifier = Modifier.padding(bottom = 0.dp)
-        ) {
+
+
+            // Logo/Title
             Text(
-                if (isSignUp) "Already have an account? Sign In"
-                else "Don't have an account? Sign Up"
+                text = "Jazz Library",
+                style = MaterialTheme.typography.headlineLarge,
+                modifier = Modifier.padding(bottom = 32.dp)
             )
-        }
 
-        //Forgot Password button (only shown in Sign In mode, not Sign Up)
-        if (!isSignUp) {
-            TextButton(
-                onClick = {
-                    if (email.isNotBlank()) {
-                        authViewModel.sendPasswordResetEmail(email)
-                    } else {
-                        authViewModel.setError("Please enter your email address first")
+            // Email TextField
+            OutlinedTextField(
+                value = email,
+                onValueChange = { authViewModel.updateEmail(it) },
+                label = { Text("Email") },
+                leadingIcon = { Icon(Icons.Default.Email, contentDescription = "Email") },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 12.dp),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                enabled = !loading,
+                singleLine = true
+            )
+
+            // Password TextField
+            OutlinedTextField(
+                value = password,
+                onValueChange = { authViewModel.updatePassword(it) },
+                label = { Text("Password") },
+                leadingIcon = { Icon(Icons.Default.Lock, contentDescription = "Password") },
+                trailingIcon = {
+                    IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                        Icon(
+                            if (passwordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+                            contentDescription = "Toggle password visibility"
+                        )
                     }
                 },
-                modifier = Modifier.padding( bottom = 16.dp)
-            ) {
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 12.dp),
+                visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                enabled = !loading,
+                singleLine = true
+            )
+
+            // Error Message
+            if (error != null) {
                 Text(
-                    text = "Forgot password?",
+                    text = error ?: "",
+                    color = MaterialTheme.colorScheme.error,
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.primary
+                    modifier = Modifier.padding(bottom = 16.dp)
                 )
             }
-        }
 
-        Divider(modifier = Modifier.padding(vertical = 16.dp))
+            // Sign In / Sign Up Button
+            Button(
+                onClick = {
+                    if (isSignUp) authViewModel.signUpWithEmail()
+                    else authViewModel.signInWithEmail()
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(50.dp)
+                    .padding(bottom = 12.dp),
+                enabled = !loading
+            ) {
+                if (loading) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(24.dp),
+                        color = MaterialTheme.colorScheme.onPrimary,
+                        strokeWidth = 2.dp
+                    )
+                } else {
+                    Text(if (isSignUp) "Sign Up" else "Sign In")
+                }
+            }
 
-        // Google Sign-In Button
-        OutlinedButton(
-            onClick = {
-                // TODO: Implement Google Sign-In (see Step 9)
-            },
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(50.dp)
-                .padding(bottom = 12.dp),
-            enabled = !loading
-        ) {
-            Icon(
-                painter = rememberAsyncImagePainter("https://www.gstatic.com/images/branding/product/1x/googleg_64dp.png"),
-                contentDescription = "Google",
-                modifier = Modifier.size(24.dp),
-                tint = MaterialTheme.colorScheme.onSurface
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Text("Continue with Google")
+            // Toggle between Sign In / Sign Up
+            TextButton(
+                onClick = { isSignUp = !isSignUp },
+                modifier = Modifier.padding(bottom = 0.dp)
+            ) {
+                Text(
+                    if (isSignUp) "Already have an account? Sign In"
+                    else "Don't have an account? Sign Up"
+                )
+            }
+
+            //Forgot Password button (only shown in Sign In mode, not Sign Up)
+            if (!isSignUp) {
+                TextButton(
+                    onClick = {
+                        if (email.isNotBlank()) {
+                            authViewModel.sendPasswordResetEmail(email)
+                        } else {
+                            authViewModel.setError("Please enter your email address first")
+                        }
+                    },
+                    modifier = Modifier.padding(bottom = 16.dp)
+                ) {
+                    Text(
+                        text = "Forgot password?",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
+
+            Divider(modifier = Modifier.padding(vertical = 16.dp))
+
+            // Google Sign-In Button
+            OutlinedButton(
+                onClick = {
+                    // TODO: Implement Google Sign-In (see Step 9)
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(50.dp)
+                    .padding(bottom = 12.dp),
+                enabled = !loading
+            ) {
+                Icon(
+                    painter = rememberAsyncImagePainter("https://www.gstatic.com/images/branding/product/1x/googleg_64dp.png"),
+                    contentDescription = "Google",
+                    modifier = Modifier.size(24.dp),
+                    tint = MaterialTheme.colorScheme.onSurface
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Continue with Google")
+            }
         }
     }
 }
