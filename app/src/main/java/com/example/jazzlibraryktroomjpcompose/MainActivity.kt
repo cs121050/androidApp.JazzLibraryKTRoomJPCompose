@@ -21,6 +21,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.lifecycleScope
 import com.example.jazzlibraryktroomjpcompose.ui.update.BlockingUpdateScreen
+import com.example.jazzlibraryktroomjpcompose.ui.update.ForceUpdateManager
 import com.example.jazzlibraryktroomjpcompose.ui.update.UpdateManager
 import kotlinx.coroutines.launch
 
@@ -70,6 +71,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+
     @RequiresApi(Build.VERSION_CODES.P)
     private fun checkForForceUpdate() {
         lifecycleScope.launch {
@@ -80,12 +82,12 @@ class MainActivity : ComponentActivity() {
 
                 if (currentCode < forceMinCode && !forceUpdateTriggered) {
                     forceUpdateTriggered = true
-                    pendingUpdateUrl = updateInfo.downloadUrl
-                    showBlockingUpdateScreen = true
-                    // Do NOT open URL here – let the button do it
+                    Log.d("ForceUpdate", "🚨 Starting automatic force update download")
+                    // Start silent download + installation
+                    ForceUpdateManager(this@MainActivity).startForceUpdate(updateInfo.downloadUrl)
                 }
             } catch (e: Exception) {
-                Log.e("ForceUpdate", "Error", e)
+                Log.e("ForceUpdate", "Error during check", e)
             }
         }
     }
