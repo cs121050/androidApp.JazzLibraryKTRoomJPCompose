@@ -1,7 +1,9 @@
 package com.example.jazzlibraryktroomjpcompose
 
+import android.content.Intent
 import android.os.Build
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -19,13 +21,10 @@ import androidx.lifecycle.lifecycleScope
 import com.example.jazzlibraryktroomjpcompose.ui.main.MainScreen
 import com.example.jazzlibraryktroomjpcompose.ui.theme.JazzLibraryKTRoomJPComposeTheme
 import com.example.jazzlibraryktroomjpcompose.ui.update.BlockingUpdateScreen
-import com.example.jazzlibraryktroomjpcompose.ui.update.ForceUpdateManager
+import com.example.jazzlibraryktroomjpcompose.ui.update.ForceUpdateService
 import com.example.jazzlibraryktroomjpcompose.ui.update.UpdateManager
 import dagger.hilt.android.AndroidEntryPoint
-import android.util.Log
 import kotlinx.coroutines.launch
-
-private const val TAG = "MainActivity"
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
@@ -33,47 +32,38 @@ class MainActivity : ComponentActivity() {
     private var forceUpdateTriggered = false
     private var showBlockingUpdateScreen by mutableStateOf(false)
     private var pendingUpdateUrl by mutableStateOf("")
-    private var forceUpdateManager: ForceUpdateManager? = null
 
     @RequiresApi(Build.VERSION_CODES.P)
     override fun onCreate(savedInstanceState: Bundle?) {
-        Log.d(TAG, "onCreate: starting, savedInstanceState=$savedInstanceState")
         super.onCreate(savedInstanceState)
-        Log.d(TAG, "onCreate: super.onCreate finished")
-        //enableEdgeToEdge()
-        Log.d(TAG, "onCreate: initializing UpdateManager")
-        updateManager = UpdateManager(this)
-        Log.d(TAG, "onCreate: UpdateManager initialized")
+        Log.d("MainActivity", "onCreate: called")
 
-        Log.d(TAG, "onCreate: calling checkForForceUpdate()")
+        enableEdgeToEdge()
+        updateManager = UpdateManager(this)
+
         // Check for force update immediately
         checkForForceUpdate()
 
-        Log.d(TAG, "onCreate: setting Compose content")
         setContent {
-            Log.d(TAG, "setContent: JazzLibraryKTRoomJPComposeTheme composition")
             JazzLibraryKTRoomJPComposeTheme {
-                Log.d(TAG, "setContent: inside JazzLibraryKTRoomJPComposeTheme")
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
                         .background(MaterialTheme.colorScheme.background)
                 ) {
-                    Log.d(TAG, "setContent: Box composition, showBlockingUpdateScreen=$showBlockingUpdateScreen")
                     if (showBlockingUpdateScreen) {
-                        Log.d(TAG, "setContent: showing BlockingUpdateScreen with url=$pendingUpdateUrl")
+                        Log.d("MainActivity", "setContent: showing BlockingUpdateScreen")
                         BlockingUpdateScreen(
                             updateUrl = pendingUpdateUrl,
                             onUpdateStarted = {
-                                Log.d(TAG, "BlockingUpdateScreen onUpdateStarted: invoked, finishing affinity after delay")
-                                android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                                    Log.d(TAG, "BlockingUpdateScreen onUpdateStarted: delayed finishAffinity called")
-                                    finishAffinity()
-                                }, 300)
+                                Log.d("MainActivity", "BlockingUpdateScreen onUpdateStarted: update started")
+                                // 🔥 CRITICAL CHANGE: Do NOT finish the activity here.
+                                // Let the service complete the download and installation.
+                                // The user can stay on this screen, or you can finish it after installation succeeds.
+                                // For now, we just log and leave the screen open.
                             }
                         )
                     } else {
-                        Log.d(TAG, "setContent: showing MainScreen")
                         Surface(
                             modifier = Modifier.fillMaxSize(),
                             color = MaterialTheme.colorScheme.background
@@ -84,59 +74,47 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
-        Log.d(TAG, "onCreate: finished")
     }
 
     @RequiresApi(Build.VERSION_CODES.P)
     private fun checkForForceUpdate() {
-        Log.d(TAG, "checkForForceUpdate: entered, forceUpdateTriggered=$forceUpdateTriggered")
+        Log.d("MainActivity", "checkForForceUpdate: starting check")
+
         lifecycleScope.launch {
-            Log.d(TAG, "checkForForceUpdate: coroutine started")
             try {
-                Log.d(TAG, "checkForForceUpdate: fetching update info from UpdateManager")
                 val updateInfo = updateManager.fetchUpdateInfo()
-                Log.d(TAG, "checkForForceUpdate: fetchUpdateInfo result = $updateInfo")
-
                 val currentCode = updateManager.getCurrentVersionCode()
-                Log.d(TAG, "checkForForceUpdate: getCurrentVersionCode = $currentCode")
-
                 val forceMinCode = updateInfo.forceMinVersionCode
-                Log.d(TAG, "checkForForceUpdate: forceMinVersionCode = $forceMinCode")
 
-                Log.d(TAG, "ForceUpdate")
+                Log.d("MainActivity", "checkForForceUpdate: current=$currentCode, forceMin=$forceMinCode")
 
                 if (currentCode < forceMinCode && !forceUpdateTriggered) {
-                    Log.d(TAG, "checkForForceUpdate: condition met (currentCode < forceMinCode AND not triggered)")
                     forceUpdateTriggered = true
-                    Log.d(TAG, "checkForForceUpdate: forceUpdateTriggered set to true")
-                    Log.d(TAG, "ForceUpdate")
+                    Log.d("MainActivity", "🚨 Force update detected! Starting ForceUpdateService")
+
                     showBlockingUpdateScreen = true
-                    Log.d(TAG, "checkForForceUpdate: showBlockingUpdateScreen set to true")
                     pendingUpdateUrl = updateInfo.downloadUrl
-                    Log.d(TAG, "checkForForceUpdate: pendingUpdateUrl = $pendingUpdateUrl")
-                    forceUpdateManager = ForceUpdateManager(this@MainActivity)
-                    Log.d(TAG, "checkForForceUpdate: ForceUpdateManager created, calling startForceUpdate")
-                    forceUpdateManager!!.startForceUpdate(updateInfo.downloadUrl)
-                    Log.d(TAG, "checkForForceUpdate: startForceUpdate finished")
-                } else {
-                    Log.d(TAG, "checkForForceUpdate: condition NOT met - currentCode=$currentCode, forceMinCode=$forceMinCode, forceUpdateTriggered=$forceUpdateTriggered")
+
+                    // Start the foreground service
+                    val serviceIntent = Intent(this@MainActivity, ForceUpdateService::class.java).apply {
+                        putExtra("APK_URL", updateInfo.downloadUrl)
+                    }
+
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        startForegroundService(serviceIntent)
+                    } else {
+                        startService(serviceIntent)
+                    }
+                    Log.d("MainActivity", "checkForForceUpdate: ForceUpdateService started")
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "checkForForceUpdate: exception caught", e)
-                Log.e(TAG, "checkForForceUpdate: exception message = ${e.message}", e)
+                Log.e("MainActivity", "checkForForceUpdate: error", e)
             }
-            Log.d(TAG, "checkForForceUpdate: coroutine finished")
         }
-        Log.d(TAG, "checkForForceUpdate: launched coroutine, exiting method")
     }
 
     override fun onDestroy() {
-        Log.d(TAG, "onDestroy: entered")
+        Log.d("MainActivity", "onDestroy: called")
         super.onDestroy()
-        Log.d(TAG, "onDestroy: super.onDestroy finished")
-        Log.d(TAG, "onDestroy: calling forceUpdateManager?.cleanup()")
-        forceUpdateManager?.cleanup()
-        Log.d(TAG, "onDestroy: cleanup finished")
-        Log.d(TAG, "onDestroy: exiting")
     }
 }
