@@ -35,6 +35,8 @@ firebaseBom = "32.7.0"      # Latest stable Firebase BoM (Bill of Materials)[ref
 play-services-auth = "21.3.0" # Latest Google Play Services Auth (for Google Sign-In)[reference:2]
 google-services = "4.4.0"    # Google Services Gradle plugin
 
+firebase-crashlytics-gradle = "3.0.2"   # Crashlytics Gradle plugin
+
 [libraries]
 # This table defines library dependencies referenced by alias, specifying group, name, and version reference.
 # Each entry creates a reusable alias for a specific library dependency.
@@ -110,6 +112,8 @@ play-services-auth = { module = "com.google.android.gms:play-services-auth", ver
 firebase-config-ktx = { module = "com.google.firebase:firebase-config-ktx" }
 firebase-config = { module = "com.google.firebase:firebase-config" }
 
+firebase-crashlytics-ktx = { module = "com.google.firebase:firebase-crashlytics-ktx" }
+
 [plugins]
 # This table defines Gradle plugins with their IDs and version references.
 android-application = { id = "com.android.application", version.ref = "agp" }             # Android application plugin for building APKs
@@ -119,3 +123,5 @@ dagger-hilt-android = { id = "com.google.dagger.hilt.android", version.ref = "hi
 compose-compiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 # Google Services Gradle plugin
 google-services = { id = "com.google.gms.google-services", version.ref = "google-services" }
+
+firebase-crashlytics = { id = "com.google.firebase.crashlytics", version.ref = "firebase-crashlytics-gradle" }

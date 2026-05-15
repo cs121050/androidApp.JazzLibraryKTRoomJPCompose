@@ -648,6 +648,29 @@
                             .zIndex(7f)
                     )
 
+                    // Drawer content
+                    LeftDrawer(
+                        isOpen = true,
+                        onClose = {  },
+                        onRefreshClick = { viewModel.safeRefreshDataFromAPI() },
+                        onClearHistoryClick = {
+                            playerViewModel.closePlayer()
+                            viewModel.clearHistory()
+                        },
+                        onLoginClick = {
+                            showLoginScreen = true
+                            //viewModel.toggleLeftDrawer()
+                        },
+                        onAboutClick = {
+                            showAboutScreen = true
+                            //viewModel.toggleLeftDrawer()
+                        },
+                        modifier = Modifier
+                            .fillMaxHeight()
+                            .width(280.dp)
+                            .offset(x = leftDrawerOffset)
+                            .zIndex(8f)
+                    )
                 }
     
                 YouTubeLikeBottomSheet(
