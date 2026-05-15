@@ -130,6 +130,9 @@ dependencies {
 
     implementation(libs.firebase.config.ktx)
     implementation(libs.firebase.config)
+
+    // Firebase Crashlytics (version managed by BoM)
+    implementation(libs.firebase.crashlytics.ktx)
 }
 
 // Allow references to generated code for Hilt
