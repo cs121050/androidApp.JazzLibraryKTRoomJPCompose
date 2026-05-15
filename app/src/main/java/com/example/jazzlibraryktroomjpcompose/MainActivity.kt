@@ -38,7 +38,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         Log.d("MainActivity", "onCreate: called")
 
-        enableEdgeToEdge()
+        //enableEdgeToEdge()
         updateManager = UpdateManager(this)
 
         // Check for force update immediately

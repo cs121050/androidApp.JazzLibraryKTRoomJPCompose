@@ -60,12 +60,6 @@ fun LeftDrawer(
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        Button(onClick = {
-            throw RuntimeException("Test crash from Crashlytics")
-        }) {
-            Text("Test Crash")
-        }
-
         // Build menu items in desired order
         val menuItems = buildMenuItems(
             currentUser = currentUser,
