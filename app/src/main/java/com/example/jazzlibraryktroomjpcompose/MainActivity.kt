@@ -1,3 +1,5 @@
+// app/src/main/java/com/example/jazzlibraryktroomjpcompose/MainActivity.kt
+
 package com.example.jazzlibraryktroomjpcompose
 
 import android.content.Intent
@@ -13,18 +15,18 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.lifecycle.lifecycleScope
-import com.example.jazzlibraryktroomjpcompose.ui.main.MainScreen
+import com.example.jazzlibraryktroomjpcompose.ui.RootNavigation  // ← ADD THIS IMPORT
 import com.example.jazzlibraryktroomjpcompose.ui.theme.JazzLibraryKTRoomJPComposeTheme
 import com.example.jazzlibraryktroomjpcompose.ui.update.BlockingUpdateScreen
 import com.example.jazzlibraryktroomjpcompose.ui.update.ForceUpdateService
 import com.example.jazzlibraryktroomjpcompose.ui.update.UpdateManager
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.lifecycle.lifecycleScope
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
@@ -57,10 +59,6 @@ class MainActivity : ComponentActivity() {
                             updateUrl = pendingUpdateUrl,
                             onUpdateStarted = {
                                 Log.d("MainActivity", "BlockingUpdateScreen onUpdateStarted: update started")
-                                // 🔥 CRITICAL CHANGE: Do NOT finish the activity here.
-                                // Let the service complete the download and installation.
-                                // The user can stay on this screen, or you can finish it after installation succeeds.
-                                // For now, we just log and leave the screen open.
                             }
                         )
                     } else {
@@ -68,7 +66,7 @@ class MainActivity : ComponentActivity() {
                             modifier = Modifier.fillMaxSize(),
                             color = MaterialTheme.colorScheme.background
                         ) {
-                            MainScreen()
+                            RootNavigation()  // ← CHANGED FROM MainScreen()
                         }
                     }
                 }
@@ -95,7 +93,6 @@ class MainActivity : ComponentActivity() {
                     showBlockingUpdateScreen = true
                     pendingUpdateUrl = updateInfo.downloadUrl
 
-                    // Start the foreground service
                     val serviceIntent = Intent(this@MainActivity, ForceUpdateService::class.java).apply {
                         putExtra("APK_URL", updateInfo.downloadUrl)
                     }
