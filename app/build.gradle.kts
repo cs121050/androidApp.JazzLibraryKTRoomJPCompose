@@ -8,6 +8,7 @@ plugins {
     alias(libs.plugins.dagger.hilt.android)
     alias(libs.plugins.compose.compiler)
     alias(libs.plugins.google.services)
+    alias(libs.plugins.firebase.crashlytics)
 }
 
 android {
