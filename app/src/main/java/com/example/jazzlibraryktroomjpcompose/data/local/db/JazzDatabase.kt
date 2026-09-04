@@ -25,7 +25,7 @@ import com.example.jazzlibraryktroomjpcompose.data.local.db.entities.*
         SearchHistoryRoomEntity::class
     ],
     version = 17,
-    exportSchema = true
+    exportSchema = true //gives json for fun
 )
 abstract class JazzDatabase : RoomDatabase() {
 
@@ -46,17 +46,18 @@ abstract class JazzDatabase : RoomDatabase() {
 
 
     companion object {
-        @Volatile
+        @Volatile  //Do not cache this variable in threads. Whenever a thread reads INSTANCE, read it straight from main memory.
         private var INSTANCE: JazzDatabase? = null
 
         fun getDatabase(context: Context): JazzDatabase {
-            return INSTANCE ?: synchronized(this) {
+            return INSTANCE ?: synchronized(JazzDatabase::class.java) { //ensure that only one instance of db is ever created,  This is the lock. If 100 threads call getDatabase at the exact same millisecond, only one thread is allowed past the lock. The other 99 wait in line.
                 val instance = Room.databaseBuilder(
                     context.applicationContext,
                     JazzDatabase::class.java,
                     "jazz_library.db"
                 )
-                    .fallbackToDestructiveMigration() // For simplicity during development
+                    // For simplicity during development, it will clean all the db, instead do -> addMigrations(
+                    .fallbackToDestructiveMigration()
                     .build()
 
                 INSTANCE = instance
