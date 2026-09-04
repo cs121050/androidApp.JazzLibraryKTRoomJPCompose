@@ -7,22 +7,25 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 interface VideoDao {
 
-    @Query("SELECT * FROM videos " +
-            "WHERE video_availability = '1' " +
-            "ORDER BY video_name ASC")
-    fun getAllVideos(): Flow<List<VideoRoomEntity>>
-
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertVideo(video: VideoRoomEntity)
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAllVideos(videos: List<VideoRoomEntity>)
 
+
+
     @Update
     suspend fun updateVideo(video: VideoRoomEntity)
 
-    @Delete
-    suspend fun deleteVideo(video: VideoRoomEntity)
+
+
+
+    @Query("SELECT * FROM videos " +
+            "WHERE video_availability = '1' " +
+            "ORDER BY video_name ASC")
+    fun getAllVideos(): Flow<List<VideoRoomEntity>>
+
 
     @Query("SELECT COUNT(*) FROM videos")
     suspend fun getCount(): Int
@@ -47,6 +50,7 @@ interface VideoDao {
 
     @Query("SELECT * FROM videos WHERE video_availability = :availability")
     fun getVideosByAvailability(availability: String): Flow<List<VideoRoomEntity>>
+
 
 
     @Query("""
@@ -239,5 +243,8 @@ interface VideoDao {
     ): Flow<List<VideoRoomEntity>>
 
 
+
+    @Delete
+    suspend fun deleteVideo(video: VideoRoomEntity)
 
 }

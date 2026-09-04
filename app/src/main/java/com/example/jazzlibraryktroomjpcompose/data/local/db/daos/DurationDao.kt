@@ -8,6 +8,26 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 interface DurationDao {
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertDuration(duration: DurationRoomEntity)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAllDurations(durations: List<DurationRoomEntity>)
+
+
+
+    @Update
+    suspend fun updateDuration(duration: DurationRoomEntity)
+
+
+
+    @Query("SELECT * FROM durations WHERE duration_id = :id")
+    fun getDurationById(id: Int): Flow<DurationRoomEntity>
+
+    @Query("SELECT * FROM durations WHERE duration_name LIKE '%' || :query || '%' OR duration_description LIKE '%' || :query || '%'")
+    fun searchDurations(query: String): Flow<List<DurationRoomEntity>>
+
+
     @Query("SELECT * FROM durations ORDER BY duration_name ASC")
     fun getAllDurations(): Flow<List<DurationRoomEntity>>
 
@@ -21,28 +41,6 @@ interface DurationDao {
     ORDER BY d.duration_name ASC
 """)
     fun getAllDurationsWithCount(): Flow<List<DurationWithVideoCount>>
-
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertDuration(duration: DurationRoomEntity)
-
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertAllDurations(durations: List<DurationRoomEntity>)
-
-    @Update
-    suspend fun updateDuration(duration: DurationRoomEntity)
-
-    @Delete
-    suspend fun deleteDuration(duration: DurationRoomEntity)
-
-    @Query("DELETE FROM durations")
-    suspend fun deleteAllDurations()
-
-    @Query("SELECT * FROM durations WHERE duration_id = :id")
-    fun getDurationById(id: Int): Flow<DurationRoomEntity>
-
-    @Query("SELECT * FROM durations WHERE duration_name LIKE '%' || :query || '%' OR duration_description LIKE '%' || :query || '%'")
-    fun searchDurations(query: String): Flow<List<DurationRoomEntity>>
-
 
 
     // Filtering queries with composition
@@ -165,5 +163,14 @@ GROUP BY d.duration_id, d.duration_name, d.duration_description
         typeId: Int = 0,
         artistId: Int = 0
     ): Flow<List<DurationWithVideoCount>>
+
+
+
+
+    @Delete
+    suspend fun deleteDuration(duration: DurationRoomEntity)
+
+    @Query("DELETE FROM durations")
+    suspend fun deleteAllDurations()
 
 }

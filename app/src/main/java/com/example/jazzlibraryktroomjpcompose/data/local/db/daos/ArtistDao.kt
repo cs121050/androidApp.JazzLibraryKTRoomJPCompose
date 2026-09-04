@@ -8,6 +8,20 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 interface ArtistDao {
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertArtist(artist: ArtistRoomEntity)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAllArtists(artists: List<ArtistRoomEntity>)
+
+
+
+    @Update
+    suspend fun updateArtist(artist: ArtistRoomEntity)
+
+
+
+
     @Query("SELECT * FROM artists ORDER BY artist_rank DESC, artist_name ASC")
     fun getAllArtists(): Flow<List<ArtistRoomEntity>>
 
@@ -21,21 +35,6 @@ interface ArtistDao {
 """)
     fun getAllArtistsWithVideoCount(): Flow<List<ArtistWithVideoCount>>
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertArtist(artist: ArtistRoomEntity)
-
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertAllArtists(artists: List<ArtistRoomEntity>)
-
-    @Update
-    suspend fun updateArtist(artist: ArtistRoomEntity)
-
-    @Delete
-    suspend fun deleteArtist(artist: ArtistRoomEntity)
-
-    @Query("DELETE FROM artists")
-    suspend fun deleteAllArtists()
-
     @Query("""
     UPDATE artists SET embedable_video_count = (
         SELECT COUNT(v.video_id)
@@ -45,22 +44,6 @@ interface ArtistDao {
     )
 """)
     suspend fun updateAllEmbedableVideoCounts()
-
-
-    @Query("SELECT * FROM artists WHERE artist_id = :id")
-    fun getArtistById(id: Int): Flow<ArtistRoomEntity>
-
-    @Query("SELECT * FROM artists WHERE artist_name LIKE '%' || :query || '%' OR artist_surname LIKE '%' || :query || '%'")
-    fun getArtistByName(query: String): Flow<List<ArtistRoomEntity>>
-
-    @Query("SELECT * FROM artists WHERE instrument_id = :instrumentId")
-    fun getArtistsByInstrument(instrumentId: Int): Flow<List<ArtistRoomEntity>>
-
-    @Query("SELECT * FROM artists WHERE artist_rank = :rankId")
-    fun getArtistsByRank(rankId :Int): Flow<List<ArtistRoomEntity>>
-
-
-
 
     // Filtering queries with composition
     @Query("""
@@ -180,4 +163,29 @@ ORDER BY a.artist_name
         durationId: Int = 0,
         searchQuery: String = ""
     ): Flow<List<ArtistWithVideoCount>>
+
+
+
+    @Query("SELECT * FROM artists WHERE artist_id = :id")
+    fun getArtistById(id: Int): Flow<ArtistRoomEntity>
+
+    @Query("SELECT * FROM artists WHERE artist_name LIKE '%' || :query || '%' OR artist_surname LIKE '%' || :query || '%'")
+    fun getArtistByName(query: String): Flow<List<ArtistRoomEntity>>
+
+    @Query("SELECT * FROM artists WHERE instrument_id = :instrumentId")
+    fun getArtistsByInstrument(instrumentId: Int): Flow<List<ArtistRoomEntity>>
+
+    @Query("SELECT * FROM artists WHERE artist_rank = :rankId")
+    fun getArtistsByRank(rankId :Int): Flow<List<ArtistRoomEntity>>
+
+
+
+
+
+    @Delete
+    suspend fun deleteArtist(artist: ArtistRoomEntity)
+
+    @Query("DELETE FROM artists")
+    suspend fun deleteAllArtists()
+
 }

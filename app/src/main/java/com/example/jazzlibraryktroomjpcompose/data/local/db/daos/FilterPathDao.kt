@@ -6,28 +6,19 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface FilterPathDao {
+
+
+
+
     @Insert
     suspend fun insertFilterPath(filterPath: FilterPathRoomEntity)
-
-    @Query("SELECT * FROM filter_path ORDER BY timestamp DESC")
-    fun getAllFilterPaths(): Flow<List<FilterPathRoomEntity>>
-
-    @Query("SELECT * FROM filter_path ORDER BY timestamp DESC LIMIT 1")
-    suspend fun getLatestFilterPath(): FilterPathRoomEntity?
-
-    @Query("DELETE FROM filter_path WHERE timestamp > :timestamp")
-    suspend fun deleteFilterPathsAfter(timestamp: Long)
-
-    @Query("SELECT * FROM filter_path WHERE timestamp < :timestamp ORDER BY timestamp DESC LIMIT 1")
-    suspend fun getPreviousFilterPath(timestamp: Long): FilterPathRoomEntity?
-
-    @Query("DELETE FROM filter_path WHERE timestamp > :timestamp")
-    suspend fun deleteAllNewerThan(timestamp: Long)
 
     // Add this method to FilterPathDao
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertFilterPathAndGetId(filterPath: FilterPathRoomEntity): Long
 
+
+    // Ii have created this special class so to be able to retrieve columns of 3 different tables,,,  It prevents the "N+1 Query" ,,, DTO (Data Transfer Object)
     data class HistoryEntry(
         val filterPathId: Int,
         val serialNumber: String,
@@ -48,7 +39,7 @@ interface FilterPathDao {
         v.video_name AS videoName,
         v.video_path AS videoPath,
         v.location_id AS locationId,
-        fcv.type_of_media AS typeOfMedia   -- ← add this column
+        fcv.type_of_media AS typeOfMedia  
     FROM filter_path f
     LEFT JOIN filter_path_contains_media fcv ON fcv.filter_path_room_entity_id = f.id
     LEFT JOIN videos v ON v.video_id = fcv.video_id
@@ -56,10 +47,31 @@ interface FilterPathDao {
 """)
     suspend fun getAllHistoryEntries(): List<HistoryEntry>
 
-    @Query("DELETE FROM filter_path")
-    suspend fun deleteAll()
+
+
+
+
+    @Query("SELECT * FROM filter_path ORDER BY timestamp DESC")
+    fun getAllFilterPaths(): Flow<List<FilterPathRoomEntity>>
+
+    @Query("SELECT * FROM filter_path ORDER BY timestamp DESC LIMIT 1")
+    suspend fun getLatestFilterPath(): FilterPathRoomEntity?
+
+    @Query("SELECT * FROM filter_path WHERE timestamp < :timestamp ORDER BY timestamp DESC LIMIT 1")
+    suspend fun getPreviousFilterPath(timestamp: Long): FilterPathRoomEntity?
 
     @Query("SELECT COUNT(*) FROM filter_path")
     suspend fun getCount(): Int
+
+
+
+    @Query("DELETE FROM filter_path")
+    suspend fun deleteAll()
+
+    @Query("DELETE FROM filter_path WHERE timestamp > :timestamp")
+    suspend fun deleteFilterPathsAfter(timestamp: Long)
+
+    @Query("DELETE FROM filter_path WHERE timestamp > :timestamp")
+    suspend fun deleteAllNewerThan(timestamp: Long)
 
 }

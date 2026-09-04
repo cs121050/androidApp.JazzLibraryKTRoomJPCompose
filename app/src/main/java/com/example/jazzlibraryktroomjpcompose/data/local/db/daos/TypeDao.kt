@@ -9,8 +9,27 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 interface TypeDao {
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertType(type: TypeRoomEntity)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAllTypes(types: List<TypeRoomEntity>)
+
+
+
+    @Update
+    suspend fun updateType(type: TypeRoomEntity)
+
+
     @Query("SELECT * FROM types ORDER BY type_name ASC")
     fun getAllTypes(): Flow<List<TypeRoomEntity>>
+
+    @Query("SELECT * FROM types WHERE type_id = :id")
+    fun getTypeById(id: Int): Flow<TypeRoomEntity>
+
+    @Query("SELECT * FROM types WHERE type_name LIKE '%' || :query || '%'")
+    fun searchTypes(query: String): Flow<List<TypeRoomEntity>>
+
 
     @Query("""
     SELECT t.*, COUNT(DISTINCT v.video_id) as video_count 
@@ -21,28 +40,6 @@ interface TypeDao {
     ORDER BY t.type_name ASC
 """)
     fun getAllTypesWithCount(): Flow<List<TypeWithVideoCount>>
-
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertType(type: TypeRoomEntity)
-
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertAllTypes(types: List<TypeRoomEntity>)
-
-    @Update
-    suspend fun updateType(type: TypeRoomEntity)
-
-    @Delete
-    suspend fun deleteType(type: TypeRoomEntity)
-
-    @Query("DELETE FROM types")
-    suspend fun deleteAllTypes()
-
-    @Query("SELECT * FROM types WHERE type_id = :id")
-    fun getTypeById(id: Int): Flow<TypeRoomEntity>
-
-    @Query("SELECT * FROM types WHERE type_name LIKE '%' || :query || '%'")
-    fun searchTypes(query: String): Flow<List<TypeRoomEntity>>
-
 
     // Filtering queries with composition
     @Query("""
@@ -77,7 +74,6 @@ interface TypeDao {
         ORDER BY video_count DESC
     """)
     fun getTypesByInstrumentWithVideoCount(instrumentId: Int): Flow<List<TypeWithVideoCount>>
-
 
     // Combined filtering queries - ALL COMBINATIONS
     @Query("""
@@ -166,4 +162,11 @@ interface TypeDao {
         artistId: Int = 0
     ): Flow<List<TypeWithVideoCount>>
 
+
+
+    @Delete
+    suspend fun deleteType(type: TypeRoomEntity)
+
+    @Query("DELETE FROM types")
+    suspend fun deleteAllTypes()
 }

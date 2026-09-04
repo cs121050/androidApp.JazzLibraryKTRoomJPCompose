@@ -8,24 +8,19 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 interface AlbumDao {
 
-    // Basic queries
-    @Query("SELECT * FROM albums ORDER BY released DESC")
-    fun getAllAlbums(): Flow<List<AlbumRoomEntity>>
-
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAlbum(album: AlbumRoomEntity)
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAllAlbums(albums: List<AlbumRoomEntity>)
 
+
     @Update
     suspend fun updateAlbum(album: AlbumRoomEntity)
 
-    @Delete
-    suspend fun deleteAlbum(album: AlbumRoomEntity)
 
-    @Query("DELETE FROM albums")
-    suspend fun deleteAllAlbums()
+    @Query("SELECT * FROM albums ORDER BY released DESC")
+    fun getAllAlbums(): Flow<List<AlbumRoomEntity>>
 
     @Query("SELECT COUNT(*) FROM albums")
     suspend fun getCount(): Int
@@ -36,6 +31,7 @@ interface AlbumDao {
     @Query("SELECT * FROM albums WHERE title LIKE '%' || :query || '%' ORDER BY title ASC")
     fun searchAlbumsByTitle(query: String): Flow<List<AlbumRoomEntity>>
 
+    // Single filter – by title
     @Query("""
     SELECT DISTINCT a.*, aca.is_main, art.artist_id, art.artist_name || ' ' || art.artist_surname AS artist_full_name, art.instrument_id AS artist_instrument_id
     FROM albums a
@@ -50,7 +46,7 @@ interface AlbumDao {
         artistId: Int,
         instrumentId: Int,
         searchQuery: String = ""
-        ): Flow<List<AlbumWithIsMainFlag>>
+    ): Flow<List<AlbumWithIsMainFlag>>
 
     // Single filter – by instrument
     @Query("""
@@ -89,4 +85,17 @@ interface AlbumDao {
 
     @Query("SELECT * FROM albums ORDER BY rating_average IS NULL, rating_average DESC")
     fun getAllAlbumsSortedByRatingDesc(): Flow<List<AlbumRoomEntity>>
+
+
+
+    @Delete
+    suspend fun deleteAlbum(album: AlbumRoomEntity)
+
+    @Query("DELETE FROM albums")
+    suspend fun deleteAllAlbums()
+
+
+
+
+
 }
