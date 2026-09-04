@@ -6,6 +6,9 @@ import retrofit2.Response
 import retrofit2.http.GET
 
 interface JazzApiService {
+
+    //TODO just create a dedicated endpoint to check the database status -.-
+    //this is used for testing if the database is up, i should replace it with helth endpoint response sioon ....
     @GET("typeService/all")
     suspend fun getApiStatus(): Response<List<TypeResponse>>
 

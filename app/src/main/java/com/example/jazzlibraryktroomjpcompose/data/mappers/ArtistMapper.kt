@@ -76,15 +76,4 @@ object ArtistMapper {
         )
     }
 
-    // Remote Response → Domain (placeholder)
-    fun toDomain(response: ArtistResponse): Artist {
-        // TODO: Implement when remote model is updated
-        return TODO("Provide the return value")
-    }
-
-    // Domain → Remote Response (placeholder)
-    fun toResponse(domain: Artist): ArtistResponse {
-        // TODO: Implement when remote model is updated
-        return TODO("Provide the return value")
-    }
 }

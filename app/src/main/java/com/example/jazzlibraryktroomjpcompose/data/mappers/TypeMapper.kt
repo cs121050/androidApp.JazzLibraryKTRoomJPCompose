@@ -28,21 +28,4 @@ object TypeMapper {
         )
     }
 
-    //TODO//// Remote Response → Domain
-    fun toDomain(response: TypeRepository): Type {
-//        return Instrument(
-//            id = response.instrumentId,
-//            name = response.instrumentName
-//        )
-        return TODO("Provide the return value")
-    }
-
-    //TODO//// Domain → Remote Response (if needed for POST/PUT)
-    fun toResponse(domain: Type): TypeRepository {
-//        return InstrumentResponse(
-//            instrumentId = domain.id,
-//            instrumentName = domain.name
-//        )
-        return TODO("Provide the return value")
-    }
 }

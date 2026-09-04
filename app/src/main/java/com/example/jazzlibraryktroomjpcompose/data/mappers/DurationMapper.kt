@@ -31,22 +31,4 @@ object DurationMapper {
         )
     }
 
-    //TODO//// Remote Response → Domain
-    fun toDomain(response: DurationResponse): Duration {
-//        return Duration(
-//            id = response.durationId,
-//            name = response.durationName
-//        )
-        return TODO("Provide the return value")
-    }
-
-    //TODO//// Domain → Remote Response (if needed for POST/PUT)
-    fun toResponse(domain: Duration): DurationResponse {
-//        return DurationResponse(
-//            durationId = domain.id,
-//            durationName = domain.name
-//        )
-        return TODO("Provide the return value")
-    }
-
 }
