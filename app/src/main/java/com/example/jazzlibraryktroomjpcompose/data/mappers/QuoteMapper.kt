@@ -26,25 +26,4 @@ object QuoteMapper {
         )
     }
 
-    //TODO//// Remote Response → Domain
-    fun toDomain(response: QuoteResponse): Quote {
-//        return Quote(
-//            id = response.quoteId,
-//            text = response.quoteName,
-//            artistId = response.artistId ?: 0,
-
-//        )
-        return TODO("Provide the return value")
-    }
-
-    //TODO//// Domain → Remote Response (if needed for POST/PUT)
-    fun toResponse(domain: Quote): QuoteResponse {
-//        return QuoteResponse(
-//            quoteId = domain.id,
-//            quoteName = domain.name,
-////          artistId = domain.artistId ?: 0,
-
-//        )
-        return TODO("Provide the return value")
-    }
 }
