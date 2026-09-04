@@ -9,6 +9,29 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 interface InstrumentDao {
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertInstrument(instrument: InstrumentRoomEntity)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAllInstruments(instruments: List<InstrumentRoomEntity>)
+
+
+
+
+
+    @Query("SELECT * FROM instruments WHERE instrument_id = :id")
+    fun getInstrumentById(id: Int): Flow<InstrumentRoomEntity>
+
+    @Query("SELECT * FROM instruments WHERE instrument_name LIKE '%' || :query || '%'")
+    fun getInstrumentByName(query: String): Flow<List<InstrumentRoomEntity>>
+
+    @Query("SELECT COUNT(*) FROM instruments")
+    suspend fun getCount(): Int
+
+    @Query("SELECT COUNT(*) FROM instruments")
+    suspend fun getInstrumentCount(): Int
+
+
     @Query("SELECT * FROM instruments ORDER BY instrument_name ASC")
     fun getAllInstruments(): Flow<List<InstrumentRoomEntity>>
 
@@ -24,27 +47,6 @@ interface InstrumentDao {
 
 
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertInstrument(instrument: InstrumentRoomEntity)
-
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertAllInstruments(instruments: List<InstrumentRoomEntity>)
-
-    @Delete
-    suspend fun deleteInstrument(instrument: InstrumentRoomEntity)
-
-    @Query("DELETE FROM instruments")
-    suspend fun deleteAllInstruments()
-
-
-    @Query("SELECT * FROM instruments WHERE instrument_id = :id")
-    fun getInstrumentById(id: Int): Flow<InstrumentRoomEntity>
-
-    @Query("SELECT * FROM instruments WHERE instrument_name LIKE '%' || :query || '%'")
-    fun getInstrumentByName(query: String): Flow<List<InstrumentRoomEntity>>
-
-    @Query("SELECT COUNT(*) FROM instruments")
-    suspend fun getCount(): Int
 
     // Filtering queries with composition
     @Query("""
@@ -169,8 +171,12 @@ interface InstrumentDao {
     ): Flow<List<InstrumentWithVideoCount>>
 
 
-    @Query("SELECT COUNT(*) FROM instruments")
-    suspend fun getInstrumentCount(): Int
+
+    @Delete
+    suspend fun deleteInstrument(instrument: InstrumentRoomEntity)
+
+    @Query("DELETE FROM instruments")
+    suspend fun deleteAllInstruments()
 
 }
 

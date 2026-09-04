@@ -14,21 +14,21 @@ interface VideoContainsArtistDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAllVideoContainsArtists(videoArtists: List<VideoContainsArtistRoomEntity>)
 
-    @Delete
-    suspend fun deleteVideoContainsArtist(videoArtist: VideoContainsArtistRoomEntity)
 
-    @Query("DELETE FROM video_contains_artist")
-    suspend fun deleteAllVideoContainsArtists()
+
+
 
     @Query("SELECT * FROM video_contains_artist")
     fun getAllVideoContainsArtists(): Flow<List<VideoContainsArtistRoomEntity>>
-
 
     @Query("SELECT * FROM video_contains_artist WHERE artist_id = :artistId")
     fun getVideosByArtist(artistId: Int): Flow<List<VideoContainsArtistRoomEntity>>
 
     @Query("SELECT * FROM video_contains_artist WHERE video_id = :videoId")
     fun getArtistsByVideo(videoId: Int): Flow<List<VideoContainsArtistRoomEntity>>
+
+
+
 
     @Query("DELETE FROM video_contains_artist WHERE artist_id = :artistId AND video_id = :videoId")
     suspend fun deleteSpecificVideoArtist(artistId: Int, videoId: Int)
@@ -38,4 +38,10 @@ interface VideoContainsArtistDao {
 
     @Query("DELETE FROM video_contains_artist WHERE artist_id = :artistId")
     suspend fun deleteAllVideosForArtist(artistId: Int)
+
+    @Delete
+    suspend fun deleteVideoContainsArtist(videoArtist: VideoContainsArtistRoomEntity)
+
+    @Query("DELETE FROM video_contains_artist")
+    suspend fun deleteAllVideoContainsArtists()
 }

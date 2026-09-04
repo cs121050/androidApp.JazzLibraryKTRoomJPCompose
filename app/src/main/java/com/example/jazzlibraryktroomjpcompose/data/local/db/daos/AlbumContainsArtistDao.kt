@@ -13,11 +13,6 @@ interface AlbumContainsArtistDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAllAlbumContainsArtists(albumArtists: List<AlbumContainsArtistRoomEntity>)
 
-    @Delete
-    suspend fun deleteAlbumContainsArtist(albumArtist: AlbumContainsArtistRoomEntity)
-
-    @Query("DELETE FROM album_contains_artist")
-    suspend fun deleteAllAlbumContainsArtists()
 
     @Query("SELECT * FROM album_contains_artist")
     fun getAllAlbumContainsArtists(): Flow<List<AlbumContainsArtistRoomEntity>>
@@ -25,8 +20,12 @@ interface AlbumContainsArtistDao {
     @Query("SELECT * FROM album_contains_artist WHERE artist_id = :artistId")
     fun getAlbumsByArtist(artistId: Int): Flow<List<AlbumContainsArtistRoomEntity>>
 
+    @Query("SELECT album_id FROM album_contains_artist WHERE artist_id = :artistId")
+    fun getAlbumIdsByArtist(artistId: Int): Flow<List<Int>>
+
     @Query("SELECT * FROM album_contains_artist WHERE album_id = :albumId")
     fun getArtistsByAlbum(albumId: Int): Flow<List<AlbumContainsArtistRoomEntity>>
+
 
     @Query("DELETE FROM album_contains_artist WHERE artist_id = :artistId AND album_id = :albumId")
     suspend fun deleteSpecificAlbumArtist(artistId: Int, albumId: Int)
@@ -37,6 +36,10 @@ interface AlbumContainsArtistDao {
     @Query("DELETE FROM album_contains_artist WHERE artist_id = :artistId")
     suspend fun deleteAllAlbumsForArtist(artistId: Int)
 
-    @Query("SELECT album_id FROM album_contains_artist WHERE artist_id = :artistId")
-    fun getAlbumIdsByArtist(artistId: Int): Flow<List<Int>>
+    @Delete
+    suspend fun deleteAlbumContainsArtist(albumArtist: AlbumContainsArtistRoomEntity)
+
+    @Query("DELETE FROM album_contains_artist")
+    suspend fun deleteAllAlbumContainsArtists()
+
 }
