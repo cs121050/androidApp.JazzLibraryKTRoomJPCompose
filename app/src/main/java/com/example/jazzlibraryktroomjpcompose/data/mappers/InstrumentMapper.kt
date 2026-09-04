@@ -2,7 +2,6 @@ package com.example.jazzlibraryktroomjpcompose.data.mappers
 
 import com.example.jazzlibraryktroomjpcompose.data.local.db.entities.InstrumentRoomEntity
 import com.example.jazzlibraryktroomjpcompose.data.local.db.entities.InstrumentWithVideoCount
-import com.example.jazzlibraryktroomjpcompose.data.remote.models.InstrumentResponse
 import com.example.jazzlibraryktroomjpcompose.domain.models.Instrument
 
 object InstrumentMapper {
