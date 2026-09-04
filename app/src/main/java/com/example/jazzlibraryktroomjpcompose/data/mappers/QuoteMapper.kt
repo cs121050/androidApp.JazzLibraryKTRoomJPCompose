@@ -1,7 +1,6 @@
 package com.example.jazzlibraryktroomjpcompose.data.mappers
 
 import com.example.jazzlibraryktroomjpcompose.data.local.db.entities.QuoteRoomEntity
-import com.example.jazzlibraryktroomjpcompose.data.remote.models.QuoteResponse
 import com.example.jazzlibraryktroomjpcompose.domain.models.Quote
 
 object QuoteMapper {

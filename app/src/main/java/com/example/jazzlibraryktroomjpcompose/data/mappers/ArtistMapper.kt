@@ -2,7 +2,6 @@ package com.example.jazzlibraryktroomjpcompose.data.mappers
 
 import com.example.jazzlibraryktroomjpcompose.data.local.db.entities.ArtistRoomEntity
 import com.example.jazzlibraryktroomjpcompose.data.local.db.entities.ArtistWithVideoCount
-import com.example.jazzlibraryktroomjpcompose.data.remote.models.ArtistResponse
 import com.example.jazzlibraryktroomjpcompose.domain.models.Artist
 
 // Mapper ensures:
