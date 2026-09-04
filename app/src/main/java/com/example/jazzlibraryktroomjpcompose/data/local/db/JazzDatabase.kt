@@ -5,7 +5,6 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
 import android.content.Context
-import com.example.jazzlibraryktroomjpcompose.data.local.converters.Converters
 import com.example.jazzlibraryktroomjpcompose.data.local.db.daos.*
 import com.example.jazzlibraryktroomjpcompose.data.local.db.entities.*
 
@@ -28,7 +27,6 @@ import com.example.jazzlibraryktroomjpcompose.data.local.db.entities.*
     version = 17,
     exportSchema = true
 )
-@TypeConverters(Converters::class)
 abstract class JazzDatabase : RoomDatabase() {
 
     abstract fun artistDao(): ArtistDao
