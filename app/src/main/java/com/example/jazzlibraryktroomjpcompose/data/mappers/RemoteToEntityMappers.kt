@@ -4,6 +4,8 @@ package com.example.jazzlibraryktroomjpcompose.data.mappers
 import com.example.jazzlibraryktroomjpcompose.data.local.db.entities.*
 import com.example.jazzlibraryktroomjpcompose.data.remote.models.*
 
+// this is the mapper of retrofit / remote fetching system . It is responsible of converting the Gson
+// (the retrieved data from api and then translated from JSOPN Tgson ) toData form ready to go in room db
 object RemoteToEntityMappers {
 
     fun RemoteInstrument.toInstrumentEntity(): InstrumentRoomEntity {
@@ -119,6 +121,8 @@ object RemoteToEntityMappers {
 
     // Extension functions  that converts
     // a list of RemoteInstrument objects to a list of InstrumentRoomEntity
+    // So its like the List<> is an interface where i can add to it a new function called toInstrumentEntities ;)
+    // This , is reafering o List<RemoteInstrument>
     fun List<RemoteInstrument>.toInstrumentEntities(): List<InstrumentRoomEntity> {
         return this.map { it.toInstrumentEntity() }
     }

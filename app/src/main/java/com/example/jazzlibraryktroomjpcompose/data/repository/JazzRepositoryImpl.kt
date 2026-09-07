@@ -31,6 +31,8 @@ class JazzRepositoryImpl(
     private val database: JazzDatabase
 ) : FilterRepository {
 
+    //TODO that is a design flaw , try injecting the API servive , like you did for jazzdatabase.
+    // otherwise the code will be less testable and harder to read, creating unit test for this here is hard...
     private val apiService = RetrofitClient.jazzApiService
 
     // ========== BOOTSTRAP & INITIALISATION (keep your existing code) ==========
@@ -126,7 +128,7 @@ class JazzRepositoryImpl(
     }
 
     // ========== FILTER REPOSITORY IMPLEMENTATION ==========
-
+    // here dependent of the list of applied filters,, load all the resources form all duration,artist,video etc
     override fun getFilteredDataFlow(filterPath: List<FilterPath>): Flow<FilterRepository.FilteredData> {
         return flow {
             val instrumentFilter = filterPath.find { it.categoryId == FilterPath.CATEGORY_INSTRUMENT }
