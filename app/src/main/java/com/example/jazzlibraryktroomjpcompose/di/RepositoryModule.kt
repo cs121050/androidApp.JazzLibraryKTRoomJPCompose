@@ -16,6 +16,10 @@ import javax.inject.Singleton
 @InstallIn(SingletonComponent::class)
 abstract class RepositoryModule {
 
+    // if UI ask for the videorepository or any , here the hilt binds the 'videorepository' as a nickname,
+    // lets say to the videorepositoryimpl ... so to be able to access the roomdata throught the mappers..
+    // why im not using videorepositoryimpl dirtectly ? :: because it douse not have di dummy .. i collect here
+    // a di implementation for all repoimpl by binding the repo to the impl ;) .
     @Binds
     @Singleton
     abstract fun bindVideoRepository(impl: VideoRepositoryImpl): VideoRepository

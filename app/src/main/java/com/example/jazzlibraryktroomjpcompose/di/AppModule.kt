@@ -11,6 +11,8 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import javax.inject.Singleton
 
+//i have this hilt singleton , so to be able to use only one instanse across my backeend!
+// injecting it in the other classes ;)
 @Module
 @InstallIn(SingletonComponent::class)
 object AppModule {

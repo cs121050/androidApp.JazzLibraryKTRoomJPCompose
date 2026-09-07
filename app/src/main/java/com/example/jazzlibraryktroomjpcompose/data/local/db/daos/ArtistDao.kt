@@ -128,6 +128,10 @@ interface ArtistDao {
         durationId: Int
     ): Flow<List<ArtistWithVideoCount>>
 
+    //TODO ::: One Query to Rule Them All  >> I dont need allll the other queries!! this works fine for all the filtering scenarios!!
+    //TODO ::: One Query to Rule Them All  >> I dont need allll the other queries!! this works fine for all the filtering scenarios!!
+
+    //TODO ::: Clean the other ones , keep this one!!! Do that for all daos!!!
     @Query("""
     SELECT DISTINCT a.* FROM artists a
     INNER JOIN video_contains_artist vca ON a.artist_id = vca.artist_id

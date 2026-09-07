@@ -15,7 +15,10 @@ class YouTubePlayerControllerImpl @Inject constructor(
     private val coroutineScope: CoroutineScope // we'll inject this from module
 ) : VideoPlayerController {
 
+    // StateFlow Encapsulation , so all the system avrs are readonly in the outside world, only the private one used in the system's flow...
+    // 🔒 PRIVATE: Only this class can change the value
     private val _currentVideoId = MutableStateFlow<String?>(null)
+    // 🔓 PUBLIC: Everyone else can only READ the value. READONLY
     override val currentVideoId: StateFlow<String?> = _currentVideoId
 
     private val _isPlaying = MutableStateFlow(false)

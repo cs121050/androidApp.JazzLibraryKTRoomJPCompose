@@ -11,6 +11,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import javax.inject.Qualifier
 
+/*  If you rotate your phone, the activity is recreated. But the YouTube player should continue
+playing – so we keep it in a component that survives rotation. */
+
 @Module
 @InstallIn(ActivityRetainedComponent::class)
 object PlayerModule {
