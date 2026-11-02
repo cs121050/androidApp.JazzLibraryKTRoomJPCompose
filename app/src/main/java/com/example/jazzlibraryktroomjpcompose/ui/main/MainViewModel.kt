@@ -372,16 +372,19 @@ class MainViewModel @Inject constructor(
             val hasData = checkIfDatabaseHasData()
 
             if (hasData) {
-                println("DEBUG: Database has data, loading from local storage")
-                _loadingState.value = LoadingState.SUCCESS
-
-                ensureInitialFilterPath()
-
                 loadInitialData()
                 loadFilterPath()
+                _loadingState.value = LoadingState.SUCCESS
             } else {
-                println("DEBUG: Database is empty, fetching from API")
-                loadBootstrapData()
+                val result = jazzRepository.refreshDataPrimary()
+                if (result.isSuccess) {
+                    loadInitialData()
+                    loadFilterPath()
+                    _loadingState.value = LoadingState.SUCCESS
+                } else {
+                    _loadingState.value = LoadingState.ERROR
+                    showSnackbar("Sync failed: ${result.exceptionOrNull()?.message}")
+                }
             }
         }
     }
@@ -429,7 +432,6 @@ class MainViewModel @Inject constructor(
             _loadingState.value = LoadingState.LOADING
 
             try {
-                // Check API first
                 val apiAvailable = checkApiAvailability()
 
                 if (!apiAvailable) {
@@ -438,24 +440,23 @@ class MainViewModel @Inject constructor(
                     return@launch
                 }
 
-                // Fetch fresh data
-                val result = jazzRepository.loadBootstrapData()
+                val result = jazzRepository.refreshDataPrimary()
 
                 if (result.isSuccess) {
-                    // Success - update UI
                     loadInitialData()
                     loadFilterPath()
-                    showSnackbar("Data refreshed successfully!")
+                    showSnackbar("Sync refresh successful!")
                     _loadingState.value = LoadingState.SUCCESS
                 } else {
                     val errorMsg = result.exceptionOrNull()?.message ?: "Unknown error"
-                    showSnackbar("Refresh failed: $errorMsg. Local data preserved.")
-                    _loadingState.value = LoadingState.SUCCESS // Still success since we have local data
+                    showSnackbar("Sync refresh failed: $errorMsg")
+                    _loadingState.value = LoadingState.ERROR
                 }
 
             } catch (e: Exception) {
+                Log.e("MainVM", "safeRefreshDataFromAPI failed", e)
                 showSnackbar("Error: ${e.message}. Local data preserved.")
-                _loadingState.value = LoadingState.SUCCESS
+                _loadingState.value = LoadingState.ERROR
             }
         }
         Log.d("ShuffleDebug-Album", "🔄 Refresh finished")
