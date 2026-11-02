@@ -2,7 +2,6 @@ package com.example.jazzlibraryktroomjpcompose.data.mappers
 
 import com.example.jazzlibraryktroomjpcompose.data.local.db.entities.DurationRoomEntity
 import com.example.jazzlibraryktroomjpcompose.data.local.db.entities.DurationWithVideoCount
-import com.example.jazzlibraryktroomjpcompose.data.remote.models.DurationResponse
 import com.example.jazzlibraryktroomjpcompose.domain.models.Duration
 
 object DurationMapper {

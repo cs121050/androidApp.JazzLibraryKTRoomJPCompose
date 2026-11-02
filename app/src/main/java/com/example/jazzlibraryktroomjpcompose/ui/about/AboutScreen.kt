@@ -52,6 +52,8 @@ fun AboutScreen(onNavigateBack: () -> Unit) {
             }
         )
 
+
+
         Column(
             modifier = Modifier
                 .fillMaxWidth()
