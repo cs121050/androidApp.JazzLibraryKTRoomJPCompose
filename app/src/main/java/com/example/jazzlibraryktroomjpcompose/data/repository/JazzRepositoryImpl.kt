@@ -46,6 +46,7 @@ import javax.inject.Singleton
 import com.example.jazzlibraryktroomjpcompose.data.remote.models.SyncPage
 import com.google.gson.JsonObject
 import com.google.gson.Gson
+import java.io.IOException
 
 
 @Singleton
@@ -71,78 +72,68 @@ class JazzRepositoryImpl(
 
     suspend fun refreshDataPrimary(): Result<Unit> = withContext(Dispatchers.IO) {
         Log.i("Sync", "refreshDataPrimary: START")
+
         try {
-            Log.d("Sync", "refreshDataPrimary: fetching manifest")
             val manifestResponse = apiService.getSyncManifest()
             if (!manifestResponse.isSuccessful || manifestResponse.body() == null) {
-                Log.e("Sync", "manifest failed: code=${manifestResponse.code()} msg=${manifestResponse.message()}")
-                return@withContext Result.failure(Exception("Manifest fetch failed"))
+                return@withContext Result.failure(
+                    Exception("Manifest fetch failed: ${manifestResponse.code()}")
+                )
             }
 
             val manifest = manifestResponse.body()!!
-            Log.i("Sync", "manifest OK, ${manifest.size} resources: ${manifest.joinToString { "${it.name}(${it.count})" }}")
+            Log.i("Sync", "manifest OK, resources=${manifest.size}")
 
             for (resource in manifest) {
-                Log.d("Sync", "resource ${resource.name}: START (expected ${resource.count}, path='${resource.path}')")
+                Log.d("Sync", "resource ${resource.name}: START expected=${resource.count}")
+
                 var cursor: String? = null
                 var received = 0
-                var pageIdx = 0
 
                 while (true) {
                     val pageResponse = apiService.getSyncPage(
                         resource = resource.path.removePrefix("/sync/"),
                         cursor = cursor,
-                        limit = 1000
+                        limit = 500
                     )
-                    Log.d("Sync", "  ${resource.name} page#$pageIdx cursor=$cursor → code=${pageResponse.code()}, hasBody=${pageResponse.body() != null}")
 
                     if (!pageResponse.isSuccessful || pageResponse.body() == null) {
-                        Log.e("Sync", "  ${resource.name} page#$pageIdx FAILED code=${pageResponse.code()}")
-                        return@withContext Result.failure(
-                            Exception("Page fetch failed: ${resource.name}")
+                        throw IOException(
+                            "Page fetch failed: ${resource.name}, code=${pageResponse.code()}"
                         )
                     }
 
                     val page = pageResponse.body()!!
-                    Log.d("Sync", "  ${resource.name} page#$pageIdx items=${page.items.size} hasMore=${page.hasMore} nextCursor=${page.nextCursor}")
+                    Log.d("Sync", "page ${resource.name}: items=${page.items.size}, hasMore=${page.hasMore}, nextCursor=${page.nextCursor}")
 
                     if (page.hasMore && page.nextCursor == null) {
-                        Log.e("Sync", "  contract violation: hasMore=true nextCursor=null on ${resource.name}")
-                        return@withContext Result.failure(
-                            Exception("Contract violation: hasMore=true but nextCursor=null")
-                        )
+                        throw IllegalStateException("Contract violation: hasMore=true but nextCursor=null")
                     }
-                    if (page.hasMore && page.nextCursor == cursor) {
-                        Log.e("Sync", "  contract violation: cursor stuck on ${resource.name}")
-                        return@withContext Result.failure(
-                            Exception("Contract violation: nextCursor did not advance")
-                        )
-                    }
+
                     if (page.hasMore && page.items.isEmpty()) {
-                        Log.e("Sync", "  contract violation: empty page with hasMore=true on ${resource.name}")
-                        return@withContext Result.failure(
-                            Exception("Contract violation: empty page while hasMore=true")
-                        )
+                        throw IllegalStateException("Contract violation: empty page while hasMore=true")
+                    }
+
+                    if (page.hasMore && page.nextCursor == cursor) {
+                        throw IllegalStateException("Contract violation: cursor did not advance")
                     }
 
                     upsertPageIntoDb(resource.name, page.items)
                     received += page.items.size
-                    pageIdx++
 
                     if (!page.hasMore) break
                     cursor = page.nextCursor
                 }
 
-                Log.d("Sync", "resource ${resource.name}: DONE received=$received expected=${resource.count}")
                 if (received.toLong() != resource.count) {
-                    Log.e("Sync", "incomplete sync on ${resource.name}: received=$received expected=${resource.count}")
-                    return@withContext Result.failure(
-                        Exception("Incomplete sync for ${resource.name}: received=$received expected=${resource.count}")
+                    throw IllegalStateException(
+                        "Incomplete sync for ${resource.name}: received=$received expected=${resource.count}"
                     )
                 }
+
+                Log.d("Sync", "resource ${resource.name}: DONE received=$received")
             }
 
-            Log.i("Sync", "refreshDataPrimary: recomputing artist video counts")
             database.withTransaction {
                 updateArtistsEmbedableVideoCounts()
             }
@@ -150,50 +141,63 @@ class JazzRepositoryImpl(
             Log.i("Sync", "refreshDataPrimary: SUCCESS")
             Result.success(Unit)
         } catch (e: Exception) {
-            Log.e("Sync", "refreshDataPrimary: EXCEPTION → falling back to bootstrap", e)
-            loadBootstrapData().also { result ->
-                Log.i("Sync", "bootstrap fallback result: ${if (result.isSuccess) "SUCCESS" else "FAILURE ${result.exceptionOrNull()?.message}"}")
+            Log.e("Sync", "refreshDataPrimary failed", e)
+
+            if (e is java.io.IOException ||
+                e is java.net.SocketTimeoutException ||
+                e is java.net.UnknownHostException
+            ) {
+                return@withContext Result.failure(e)
             }
+
+            return@withContext Result.failure(e)
         }
     }
 
+//    suspend fun loadBootstrapData(): Result<Unit> = withContext(Dispatchers.IO) {
+//        Log.i("Bootstrap", "loadBootstrapData: START")
+//        try {
+//            val response = apiService.getBootstrapData()
+//            if (response.isSuccessful && response.body() != null) {
+//                val bootstrapData = response.body()!!
+//                // Convert to entities (use your existing mappers)
+//                val instruments = bootstrapData.instrumentList.toInstrumentEntities()
+//                val types = bootstrapData.typeList.toTypeEntities()
+//                val durations = bootstrapData.durationList.toDurationEntities()
+//                val videos = bootstrapData.videoList.toVideoEntities()
+//                val artists = bootstrapData.artistList.toArtistEntities()
+//                val quotes = bootstrapData.quoteList.toQuoteEntities()
+//                val videoContainsArtists = bootstrapData.videoContainsArtistList.toVideoContainsArtistEntities()
+//                val albums = bootstrapData.albumList.toAlbumEntities()
+//                val songs = bootstrapData.songList.toSongEntities()
+//                val albumContainsArtists = bootstrapData.albumContainsArtistList.toAlbumContainsArtistEntities()
+//
+//                database.withTransaction {
+//                    clearAllTablesWithinTransaction()
+//                    insertAllDataWithinTransaction(
+//                        instruments, types, durations, videos,
+//                        artists, quotes, videoContainsArtists,
+//                        albums, songs, albumContainsArtists
+//                    )
+//
+//                    updateArtistsEmbedableVideoCounts()
+//                }
+//                Log.i("Bootstrap", "loadBootstrapData: SUCCESS")
+//                Result.success(Unit)
+//            } else {
+//                Result.failure(Exception("Failed to load data: ${response.code()} ${response.message()}"))
+//            }
+//        } catch (e: Exception) {
+//            Log.e("Bootstrap", "loadBootstrapData: EXCEPTION", e)
+//            Result.failure(e)
+//        }
+//    }
+
     suspend fun loadBootstrapData(): Result<Unit> = withContext(Dispatchers.IO) {
-        Log.i("Bootstrap", "loadBootstrapData: START")
-        try {
-            val response = apiService.getBootstrapData()
-            if (response.isSuccessful && response.body() != null) {
-                val bootstrapData = response.body()!!
-                // Convert to entities (use your existing mappers)
-                val instruments = bootstrapData.instrumentList.toInstrumentEntities()
-                val types = bootstrapData.typeList.toTypeEntities()
-                val durations = bootstrapData.durationList.toDurationEntities()
-                val videos = bootstrapData.videoList.toVideoEntities()
-                val artists = bootstrapData.artistList.toArtistEntities()
-                val quotes = bootstrapData.quoteList.toQuoteEntities()
-                val videoContainsArtists = bootstrapData.videoContainsArtistList.toVideoContainsArtistEntities()
-                val albums = bootstrapData.albumList.toAlbumEntities()
-                val songs = bootstrapData.songList.toSongEntities()
-                val albumContainsArtists = bootstrapData.albumContainsArtistList.toAlbumContainsArtistEntities()
-
-                database.withTransaction {
-                    clearAllTablesWithinTransaction()
-                    insertAllDataWithinTransaction(
-                        instruments, types, durations, videos,
-                        artists, quotes, videoContainsArtists,
-                        albums, songs, albumContainsArtists
-                    )
-
-                    updateArtistsEmbedableVideoCounts()
-                }
-                Log.i("Bootstrap", "loadBootstrapData: SUCCESS")
-                Result.success(Unit)
-            } else {
-                Result.failure(Exception("Failed to load data: ${response.code()} ${response.message()}"))
-            }
-        } catch (e: Exception) {
-            Log.e("Bootstrap", "loadBootstrapData: EXCEPTION", e)
-            Result.failure(e)
-        }
+        Log.w("Bootstrap", "loadBootstrapData called - this is deprecated and dangerous")
+        return@withContext Result.failure(
+            IllegalStateException("Bootstrap endpoint disabled for safety; use sync endpoints")
+        )
     }
 
     suspend fun isDatabaseEmpty(): Boolean = withContext(Dispatchers.IO) {
