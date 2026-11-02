@@ -142,15 +142,7 @@ class JazzRepositoryImpl(
             Result.success(Unit)
         } catch (e: Exception) {
             Log.e("Sync", "refreshDataPrimary failed", e)
-
-            if (e is java.io.IOException ||
-                e is java.net.SocketTimeoutException ||
-                e is java.net.UnknownHostException
-            ) {
-                return@withContext Result.failure(e)
-            }
-
-            return@withContext Result.failure(e)
+            Result.failure(e)
         }
     }
 
