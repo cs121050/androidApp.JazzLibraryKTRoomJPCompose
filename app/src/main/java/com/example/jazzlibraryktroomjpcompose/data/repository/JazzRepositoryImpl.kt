@@ -6,16 +6,34 @@ import com.example.jazzlibraryktroomjpcompose.data.local.db.JazzDatabase
 import com.example.jazzlibraryktroomjpcompose.data.local.db.entities.*
 import com.example.jazzlibraryktroomjpcompose.data.mappers.*
 import com.example.jazzlibraryktroomjpcompose.data.mappers.RemoteToEntityMappers.toAlbumContainsArtistEntities
+import com.example.jazzlibraryktroomjpcompose.data.mappers.RemoteToEntityMappers.toAlbumContainsArtistEntity
 import com.example.jazzlibraryktroomjpcompose.data.mappers.RemoteToEntityMappers.toAlbumEntities
+import com.example.jazzlibraryktroomjpcompose.data.mappers.RemoteToEntityMappers.toAlbumEntity
 import com.example.jazzlibraryktroomjpcompose.data.mappers.RemoteToEntityMappers.toArtistEntities
+import com.example.jazzlibraryktroomjpcompose.data.mappers.RemoteToEntityMappers.toArtistEntity
 import com.example.jazzlibraryktroomjpcompose.data.mappers.RemoteToEntityMappers.toDurationEntities
+import com.example.jazzlibraryktroomjpcompose.data.mappers.RemoteToEntityMappers.toDurationEntity
 import com.example.jazzlibraryktroomjpcompose.data.mappers.RemoteToEntityMappers.toInstrumentEntities
+import com.example.jazzlibraryktroomjpcompose.data.mappers.RemoteToEntityMappers.toInstrumentEntity
 import com.example.jazzlibraryktroomjpcompose.data.mappers.RemoteToEntityMappers.toQuoteEntities
 import com.example.jazzlibraryktroomjpcompose.data.mappers.RemoteToEntityMappers.toSongEntities
+import com.example.jazzlibraryktroomjpcompose.data.mappers.RemoteToEntityMappers.toSongEntity
 import com.example.jazzlibraryktroomjpcompose.data.mappers.RemoteToEntityMappers.toTypeEntities
+import com.example.jazzlibraryktroomjpcompose.data.mappers.RemoteToEntityMappers.toTypeEntity
 import com.example.jazzlibraryktroomjpcompose.data.mappers.RemoteToEntityMappers.toVideoContainsArtistEntities
+import com.example.jazzlibraryktroomjpcompose.data.mappers.RemoteToEntityMappers.toVideoContainsArtistEntity
 import com.example.jazzlibraryktroomjpcompose.data.mappers.RemoteToEntityMappers.toVideoEntities
+import com.example.jazzlibraryktroomjpcompose.data.mappers.RemoteToEntityMappers.toVideoEntity
 import com.example.jazzlibraryktroomjpcompose.data.remote.api.RetrofitClient
+import com.example.jazzlibraryktroomjpcompose.data.remote.models.RemoteAlbum
+import com.example.jazzlibraryktroomjpcompose.data.remote.models.RemoteAlbumContainsArtist
+import com.example.jazzlibraryktroomjpcompose.data.remote.models.RemoteArtist
+import com.example.jazzlibraryktroomjpcompose.data.remote.models.RemoteDuration
+import com.example.jazzlibraryktroomjpcompose.data.remote.models.RemoteInstrument
+import com.example.jazzlibraryktroomjpcompose.data.remote.models.RemoteSong
+import com.example.jazzlibraryktroomjpcompose.data.remote.models.RemoteType
+import com.example.jazzlibraryktroomjpcompose.data.remote.models.RemoteVideo
+import com.example.jazzlibraryktroomjpcompose.data.remote.models.RemoteVideoContainsArtist
 import com.example.jazzlibraryktroomjpcompose.domain.models.*
 import com.example.jazzlibraryktroomjpcompose.domain.repository.FilterRepository
 import kotlinx.coroutines.Dispatchers
@@ -25,6 +43,10 @@ import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.withContext
 import javax.inject.Singleton
+import com.example.jazzlibraryktroomjpcompose.data.remote.models.SyncPage
+import com.google.gson.JsonObject
+import com.google.gson.Gson
+
 
 @Singleton
 class JazzRepositoryImpl(
@@ -47,7 +69,96 @@ class JazzRepositoryImpl(
         }
     }
 
+    suspend fun refreshDataPrimary(): Result<Unit> = withContext(Dispatchers.IO) {
+        Log.i("Sync", "refreshDataPrimary: START")
+        try {
+            Log.d("Sync", "refreshDataPrimary: fetching manifest")
+            val manifestResponse = apiService.getSyncManifest()
+            if (!manifestResponse.isSuccessful || manifestResponse.body() == null) {
+                Log.e("Sync", "manifest failed: code=${manifestResponse.code()} msg=${manifestResponse.message()}")
+                return@withContext Result.failure(Exception("Manifest fetch failed"))
+            }
+
+            val manifest = manifestResponse.body()!!
+            Log.i("Sync", "manifest OK, ${manifest.size} resources: ${manifest.joinToString { "${it.name}(${it.count})" }}")
+
+            for (resource in manifest) {
+                Log.d("Sync", "resource ${resource.name}: START (expected ${resource.count}, path='${resource.path}')")
+                var cursor: String? = null
+                var received = 0
+                var pageIdx = 0
+
+                while (true) {
+                    val pageResponse = apiService.getSyncPage(
+                        resource = resource.path.removePrefix("/sync/"),
+                        cursor = cursor,
+                        limit = 1000
+                    )
+                    Log.d("Sync", "  ${resource.name} page#$pageIdx cursor=$cursor → code=${pageResponse.code()}, hasBody=${pageResponse.body() != null}")
+
+                    if (!pageResponse.isSuccessful || pageResponse.body() == null) {
+                        Log.e("Sync", "  ${resource.name} page#$pageIdx FAILED code=${pageResponse.code()}")
+                        return@withContext Result.failure(
+                            Exception("Page fetch failed: ${resource.name}")
+                        )
+                    }
+
+                    val page = pageResponse.body()!!
+                    Log.d("Sync", "  ${resource.name} page#$pageIdx items=${page.items.size} hasMore=${page.hasMore} nextCursor=${page.nextCursor}")
+
+                    if (page.hasMore && page.nextCursor == null) {
+                        Log.e("Sync", "  contract violation: hasMore=true nextCursor=null on ${resource.name}")
+                        return@withContext Result.failure(
+                            Exception("Contract violation: hasMore=true but nextCursor=null")
+                        )
+                    }
+                    if (page.hasMore && page.nextCursor == cursor) {
+                        Log.e("Sync", "  contract violation: cursor stuck on ${resource.name}")
+                        return@withContext Result.failure(
+                            Exception("Contract violation: nextCursor did not advance")
+                        )
+                    }
+                    if (page.hasMore && page.items.isEmpty()) {
+                        Log.e("Sync", "  contract violation: empty page with hasMore=true on ${resource.name}")
+                        return@withContext Result.failure(
+                            Exception("Contract violation: empty page while hasMore=true")
+                        )
+                    }
+
+                    upsertPageIntoDb(resource.name, page.items)
+                    received += page.items.size
+                    pageIdx++
+
+                    if (!page.hasMore) break
+                    cursor = page.nextCursor
+                }
+
+                Log.d("Sync", "resource ${resource.name}: DONE received=$received expected=${resource.count}")
+                if (received.toLong() != resource.count) {
+                    Log.e("Sync", "incomplete sync on ${resource.name}: received=$received expected=${resource.count}")
+                    return@withContext Result.failure(
+                        Exception("Incomplete sync for ${resource.name}: received=$received expected=${resource.count}")
+                    )
+                }
+            }
+
+            Log.i("Sync", "refreshDataPrimary: recomputing artist video counts")
+            database.withTransaction {
+                updateArtistsEmbedableVideoCounts()
+            }
+
+            Log.i("Sync", "refreshDataPrimary: SUCCESS")
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Log.e("Sync", "refreshDataPrimary: EXCEPTION → falling back to bootstrap", e)
+            loadBootstrapData().also { result ->
+                Log.i("Sync", "bootstrap fallback result: ${if (result.isSuccess) "SUCCESS" else "FAILURE ${result.exceptionOrNull()?.message}"}")
+            }
+        }
+    }
+
     suspend fun loadBootstrapData(): Result<Unit> = withContext(Dispatchers.IO) {
+        Log.i("Bootstrap", "loadBootstrapData: START")
         try {
             val response = apiService.getBootstrapData()
             if (response.isSuccessful && response.body() != null) {
@@ -71,13 +182,16 @@ class JazzRepositoryImpl(
                         artists, quotes, videoContainsArtists,
                         albums, songs, albumContainsArtists
                     )
+
                     updateArtistsEmbedableVideoCounts()
                 }
+                Log.i("Bootstrap", "loadBootstrapData: SUCCESS")
                 Result.success(Unit)
             } else {
                 Result.failure(Exception("Failed to load data: ${response.code()} ${response.message()}"))
             }
         } catch (e: Exception) {
+            Log.e("Bootstrap", "loadBootstrapData: EXCEPTION", e)
             Result.failure(e)
         }
     }
@@ -121,6 +235,41 @@ class JazzRepositoryImpl(
         database.albumDao().insertAllAlbums(albums)
         database.songDao().insertAllSongs(songs)
         database.albumContainsArtistDao().insertAllAlbumContainsArtists(albumContainsArtists)
+    }
+
+    private suspend fun upsertPageIntoDb(resourceName: String, items: List<JsonObject>) {
+        database.withTransaction {
+            when (resourceName) {
+                "types" -> database.typeDao().insertAllTypes(
+                    items.map { it.toRemoteModel<RemoteType>().toTypeEntity() }
+                )
+                "durations" -> database.durationDao().insertAllDurations(
+                    items.map { it.toRemoteModel<RemoteDuration>().toDurationEntity() }
+                )
+                "instruments" -> database.instrumentDao().insertAllInstruments(
+                    items.map { it.toRemoteModel<RemoteInstrument>().toInstrumentEntity() }
+                )
+                "artists" -> database.artistDao().insertAllArtists(
+                    items.map { it.toRemoteModel<RemoteArtist>().toArtistEntity() }
+                )
+                "albums" -> database.albumDao().insertAllAlbums(
+                    items.map { it.toRemoteModel<RemoteAlbum>().toAlbumEntity() }
+                )
+                "songs" -> database.songDao().insertAllSongs(
+                    items.map { it.toRemoteModel<RemoteSong>().toSongEntity() }
+                )
+                "videos" -> database.videoDao().insertAllVideos(
+                    items.map { it.toRemoteModel<RemoteVideo>().toVideoEntity() }
+                )
+                "album-artists" -> database.albumContainsArtistDao().insertAllAlbumContainsArtists(
+                    items.map { it.toRemoteModel<RemoteAlbumContainsArtist>().toAlbumContainsArtistEntity() }
+                )
+                "video-artists" -> database.videoContainsArtistDao().insertAllVideoContainsArtists(
+                    items.map { it.toRemoteModel<RemoteVideoContainsArtist>().toVideoContainsArtistEntity() }
+                )
+                else -> Unit
+            }
+        }
     }
 
     private suspend fun updateArtistsEmbedableVideoCounts() {
@@ -246,4 +395,15 @@ class JazzRepositoryImpl(
             null
         }
     }
+
+
+
+
+
+
+    private val syncGson = Gson()
+
+    private inline fun <reified T> JsonObject.toRemoteModel(): T =
+        syncGson.fromJson(this, T::class.java)
+
 }
