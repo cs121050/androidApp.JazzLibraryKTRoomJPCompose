@@ -1,39 +1,26 @@
 package com.example.jazzlibraryktroomjpcompose.ui.common.components
 
 import android.widget.Toast
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.wrapContentWidth
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Cast
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material.icons.filled.ViewList
 import androidx.compose.material.icons.filled.ViewModule
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconToggleButton
@@ -49,23 +36,16 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.example.jazzlibraryktroomjpcompose.domain.models.FilterPath
-import com.example.jazzlibraryktroomjpcompose.domain.models.Song
-import com.example.jazzlibraryktroomjpcompose.domain.models.Video
 import com.example.jazzlibraryktroomjpcompose.presentation.player.PlayerViewModel
 import com.example.jazzlibraryktroomjpcompose.presentation.player.PlaylistItem
 import com.example.jazzlibraryktroomjpcompose.ui.common.util.extractYouTubeVideoId
 import com.example.jazzlibraryktroomjpcompose.ui.main.MainTab
 import com.example.jazzlibraryktroomjpcompose.ui.main.MainViewModel
-import com.example.jazzlibraryktroomjpcompose.ui.theme.Dimens
 import kotlinx.coroutines.launch
 
 
@@ -74,7 +54,8 @@ fun TabText(
     text: String,
     selected: Boolean,
     onClick: () -> Unit,
-    count: Int
+    count: Int,
+    showCount: Boolean = true
 ) {
     Column(
         modifier = Modifier
@@ -89,12 +70,22 @@ fun TabText(
             color = if (selected) MaterialTheme.colorScheme.primary
             else MaterialTheme.colorScheme.onSurface
         )
-        Text(
-            text = count.toString(),
-            style = MaterialTheme.typography.labelSmall,
-            fontSize = 10.sp,
-            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-        )
+        if (showCount) {
+            Text(
+                text = count.toString(),
+                style = MaterialTheme.typography.labelSmall,
+                fontSize = 10.sp,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+            )
+        }
+        else{
+            Text(
+                text = "",
+                style = MaterialTheme.typography.labelSmall,
+                fontSize = 10.sp,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+            )
+        }
     }
 }
 
@@ -206,28 +197,39 @@ fun VideoStatsRow(
                             loadFirstVideo()
                         }
                     }
-                    MainTab.ALBUMS -> {
-                        val albumId = currentAlbumId
-                        val songs = currentAlbumSongs
-                        if (albumId != null && songs.isNotEmpty()) {
-                            val firstSong = songs.first()
-                            val playlist = songs.map { PlaylistItem.SongItem(it, albumId) }
-                            val startIndex = 0
-                            playerViewModel.loadVideo(
-                                videoId = firstSong.ytVideoId!!,
-                                cardId = "album_$albumId",
-                                currentFilterPath = currentFilterPath,
-                                startInMiniMode = false,
-                                mediaDbId = firstSong.songId,
-                                filterPathId = currentFilterPathId,
-                                typeOfMedia = 1,
-                                playlist = playlist,
-                                startIndex = startIndex
-                            )
+                    MainTab.ARTISTS -> {
+                        if (videos.isNotEmpty()) {
+                            loadFirstVideo()
+                        }
+                    }
+//                    //removed for version v1.0.0
+//                    MainTab.ALBUMS -> {
+//                        val albumId = currentAlbumId
+//                        val songs = currentAlbumSongs
+//                        if (albumId != null && songs.isNotEmpty()) {
+//                            val firstSong = songs.first()
+//                            val playlist = songs.map { PlaylistItem.SongItem(it, albumId) }
+//                            val startIndex = 0
+//                            playerViewModel.loadVideo(
+//                                videoId = firstSong.ytVideoId!!,
+//                                cardId = "album_$albumId",
+//                                currentFilterPath = currentFilterPath,
+//                                startInMiniMode = false,
+//                                mediaDbId = firstSong.songId,
+//                                filterPathId = currentFilterPathId,
+//                                typeOfMedia = 1,
+//                                playlist = playlist,
+//                                startIndex = startIndex
+//                            )
+//                        }
+//                    }
+
+                    else -> { /* History tab */
+                        if (videos.isNotEmpty()) {
+                            loadFirstVideo()
                         }
                     }
 
-                    else -> { /* History tab – do nothing */ }
                 }
             }
         }
@@ -282,21 +284,27 @@ fun VideoStatsRow(
                 text = "History",
                 selected = currentTab == MainTab.HISTORY,
                 onClick = { onTabSelected(MainTab.HISTORY) },
-                count = historyCount
+                count = historyCount,
+                showCount = false
             )
         }
 
         // Pager area (controls / minimise)
+        // Width = widest page's content. Widest page has 3 IconButtons (48dp each).
+        // Page 0 (Share/Cast/Back) and Page 1 (Prev/Next/Close) both use 3 buttons.
+        // Page 2 (toggle) uses 1 button — it will sit at the right edge of the same slot.
+        val pagerControlsWidth = 144.dp   // the fixed width of the page 0 and 1
         HorizontalPager(
             state = pagerState,
             userScrollEnabled = true,
-            modifier = Modifier.wrapContentWidth()
+            modifier = Modifier.width(pagerControlsWidth)
         ) { page ->
             when (page) {
                 0 -> {
                     // Extra controls (share, cast, back)
                     Row(
-                        horizontalArrangement = Arrangement.spacedBy(0.dp)
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End
                     ) {
                         IconButton(onClick = {
                             Toast.makeText(context, "Share - to be implemented", Toast.LENGTH_SHORT)
@@ -326,7 +334,8 @@ fun VideoStatsRow(
                     // Determine if previous/next are possible (reuse your existing logic)
 
 
-                    Row(horizontalArrangement = Arrangement.spacedBy(0.dp)) {
+                    Row(modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End) {
                         // Previous button
                         IconButton(
                             onClick = {
