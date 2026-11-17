@@ -5,32 +5,18 @@ import androidx.room.withTransaction
 import com.example.jazzlibraryktroomjpcompose.data.local.db.JazzDatabase
 import com.example.jazzlibraryktroomjpcompose.data.local.db.entities.*
 import com.example.jazzlibraryktroomjpcompose.data.mappers.*
-import com.example.jazzlibraryktroomjpcompose.data.mappers.RemoteToEntityMappers.toAlbumContainsArtistEntities
-import com.example.jazzlibraryktroomjpcompose.data.mappers.RemoteToEntityMappers.toAlbumContainsArtistEntity
-import com.example.jazzlibraryktroomjpcompose.data.mappers.RemoteToEntityMappers.toAlbumEntities
 import com.example.jazzlibraryktroomjpcompose.data.mappers.RemoteToEntityMappers.toAlbumEntity
-import com.example.jazzlibraryktroomjpcompose.data.mappers.RemoteToEntityMappers.toArtistEntities
 import com.example.jazzlibraryktroomjpcompose.data.mappers.RemoteToEntityMappers.toArtistEntity
-import com.example.jazzlibraryktroomjpcompose.data.mappers.RemoteToEntityMappers.toDurationEntities
 import com.example.jazzlibraryktroomjpcompose.data.mappers.RemoteToEntityMappers.toDurationEntity
-import com.example.jazzlibraryktroomjpcompose.data.mappers.RemoteToEntityMappers.toInstrumentEntities
 import com.example.jazzlibraryktroomjpcompose.data.mappers.RemoteToEntityMappers.toInstrumentEntity
-import com.example.jazzlibraryktroomjpcompose.data.mappers.RemoteToEntityMappers.toQuoteEntities
-import com.example.jazzlibraryktroomjpcompose.data.mappers.RemoteToEntityMappers.toSongEntities
-import com.example.jazzlibraryktroomjpcompose.data.mappers.RemoteToEntityMappers.toSongEntity
-import com.example.jazzlibraryktroomjpcompose.data.mappers.RemoteToEntityMappers.toTypeEntities
 import com.example.jazzlibraryktroomjpcompose.data.mappers.RemoteToEntityMappers.toTypeEntity
-import com.example.jazzlibraryktroomjpcompose.data.mappers.RemoteToEntityMappers.toVideoContainsArtistEntities
 import com.example.jazzlibraryktroomjpcompose.data.mappers.RemoteToEntityMappers.toVideoContainsArtistEntity
-import com.example.jazzlibraryktroomjpcompose.data.mappers.RemoteToEntityMappers.toVideoEntities
 import com.example.jazzlibraryktroomjpcompose.data.mappers.RemoteToEntityMappers.toVideoEntity
 import com.example.jazzlibraryktroomjpcompose.data.remote.api.RetrofitClient
 import com.example.jazzlibraryktroomjpcompose.data.remote.models.RemoteAlbum
-import com.example.jazzlibraryktroomjpcompose.data.remote.models.RemoteAlbumContainsArtist
 import com.example.jazzlibraryktroomjpcompose.data.remote.models.RemoteArtist
 import com.example.jazzlibraryktroomjpcompose.data.remote.models.RemoteDuration
 import com.example.jazzlibraryktroomjpcompose.data.remote.models.RemoteInstrument
-import com.example.jazzlibraryktroomjpcompose.data.remote.models.RemoteSong
 import com.example.jazzlibraryktroomjpcompose.data.remote.models.RemoteType
 import com.example.jazzlibraryktroomjpcompose.data.remote.models.RemoteVideo
 import com.example.jazzlibraryktroomjpcompose.data.remote.models.RemoteVideoContainsArtist
@@ -42,7 +28,6 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.withContext
 import javax.inject.Singleton
-import com.example.jazzlibraryktroomjpcompose.data.remote.models.SyncPage
 import com.google.gson.JsonObject
 import com.google.gson.Gson
 import java.io.IOException
@@ -86,8 +71,36 @@ class JazzRepositoryImpl(
             val manifest = manifestResponse.body()!!
             Log.i("Sync", "manifest OK, resources=${manifest.size}")
 
+            // ============================================================
+            // v1.0.0 GOOGLE PLAY RELEASE — RESOURCES DISABLED
+            // ------------------------------------------------------------
+            // "albums"
+            //     HIDDEN for v1.0.0 — restorable.
+            //     Upsert case in upsertPageIntoDb is preserved.
+            //     Album query in getFilteredDataFlow is preserved as comment.
+            //     To restore: delete "albums" from this set + uncomment
+            //     the album DAO calls in getFilteredDataFlow.
+            //
+            // "songs" & "album-artists"
+            //     PERMANENTLY REMOVED from API sync.
+            //     Do NOT re-add them to sync. In a future version these
+            //     tables will be populated internally from the album
+            //     response, in the same transaction as the album insert.
+            // ============================================================
+            val disabledResources = setOf(
+                "albums",
+                "songs",
+                "album-artists"
+            )
+
             for (resource in manifest) {
+                if (resource.name.lowercase() in disabledResources) {
+                    Log.d("Sync", "resource ${resource.name}: SKIPPED (disabled for v1.0.0)")
+                    continue
+                }
+
                 Log.d("Sync", "resource ${resource.name}: START expected=${resource.count}")
+
 
                 var cursor: String? = null
                 var received = 0
@@ -253,14 +266,8 @@ class JazzRepositoryImpl(
                 "albums" -> database.albumDao().insertAllAlbums(
                     items.map { it.toRemoteModel<RemoteAlbum>().toAlbumEntity() }
                 )
-                "songs" -> database.songDao().insertAllSongs(
-                    items.map { it.toRemoteModel<RemoteSong>().toSongEntity() }
-                )
                 "videos" -> database.videoDao().insertAllVideos(
                     items.map { it.toRemoteModel<RemoteVideo>().toVideoEntity() }
-                )
-                "album-artists" -> database.albumContainsArtistDao().insertAllAlbumContainsArtists(
-                    items.map { it.toRemoteModel<RemoteAlbumContainsArtist>().toAlbumContainsArtistEntity() }
                 )
                 "video-artists" -> database.videoContainsArtistDao().insertAllVideoContainsArtists(
                     items.map { it.toRemoteModel<RemoteVideoContainsArtist>().toVideoContainsArtistEntity() }
