@@ -1,6 +1,6 @@
-    
+
     package com.example.jazzlibraryktroomjpcompose.ui.main
-    
+
     import android.app.Activity
     import androidx.activity.compose.BackHandler
     import androidx.compose.foundation.layout.*
@@ -59,6 +59,8 @@
     import android.view.View
     import android.view.ViewGroup
     import android.widget.Toast
+    import androidx.compose.animation.core.Spring
+    import androidx.compose.animation.core.VectorConverter
     import com.google.accompanist.systemuicontroller.rememberSystemUiController
     import androidx.compose.ui.platform.LocalView
     import androidx.compose.ui.platform.LocalFocusManager
@@ -98,10 +100,14 @@
     import androidx.compose.ui.geometry.Rect
     import androidx.compose.ui.layout.positionInRoot
     import kotlinx.coroutines.delay
+    import androidx.compose.animation.core.VectorConverter
+    import androidx.compose.animation.core.animate
+    import androidx.compose.ui.draw.clip
+    import kotlinx.coroutines.Job
 
     enum class AlbumGridTab { MAIN, FEATURED }
     enum class SortDirection { ASC, DESC }
-    
+
     private const val TAG = "AlbumGridView"
 
     @OptIn(ExperimentalMaterial3Api::class)
@@ -120,62 +126,62 @@
         val loadingState by viewModel.loadingState.collectAsState()
         val showError by viewModel.showError.collectAsState()
         val errorMessage by viewModel.errorMessage.collectAsState()
-    
+
         val leftDrawerOffset by animateDpAsState(
             targetValue = if (leftDrawerState == DrawerState.OPEN) 0.dp else (-320).dp
         )
-    
+
         val context = LocalContext.current
         val isRefreshing by viewModel.isRefreshing.collectAsState()
-    
+
         val playerStableState by playerViewModel.stableState.collectAsState()
         var activeCardRelativePosition by remember { mutableStateOf<IntOffset?>(null) }
         var activeCardSize by remember { mutableStateOf<IntSize?>(null) }
         var contentBoxRootPosition by remember { mutableStateOf(IntOffset.Zero) }
-    
-    
+
+
         //i have made the isPlayerVisible global (placed it in the viewmodel) so to access it independently
         val isPlayerVisible by viewModel.isPlayerVisible.collectAsState()
-    
+
         //witch tab is the main tab
         val currentTab by viewModel.currentTab.collectAsState()
         val hasArtistFilter = filterState.currentFilterPath.any { it.categoryId == 2 }
 
         val scrollLockState =
             remember { ScrollLockState() }   // That is for the singleartistvie's wikidatacard scrolling, it locks the scrolling in order for items to consume the whole scrolling gesture
-    
+
         //orientation detection
         val configuration = LocalConfiguration.current
         val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
         val isFullscreen = isLandscape && playerStableState.isVisible
-    
+
         var miniPlayerHeight by remember { mutableStateOf(0.dp) }
-    
+
         // --- System UI control for fullscreen ---
         val systemUiController = rememberSystemUiController()
         val showBars by viewModel.showBars.collectAsState()
-    
+
         val density = LocalDensity.current
         val topTapThresholdPx = remember { with(density) { 80.dp.toPx() } }
-    
+
         val view = LocalView.current
-    
+
         val listState = rememberLazyListState()
-    
+
         val currentFilterPathId by viewModel.currentFilterPathId.collectAsState()
-    
+
         val currentMediaEntry by playerViewModel.currentFilterPathMedia.collectAsState()
 
         /* v1.0.0: Albums hidden — scrollToAlbumsTrigger unused. Restore with onAlbumSelected. */
         //val scrollToAlbumsTrigger = remember { mutableStateOf(0) }
-    
+
         var hideSearchDropdown by remember { mutableStateOf(false) }
-    
+
         var isDropdownOpen by remember { mutableStateOf(false) }
-    
+
         val focusManager = LocalFocusManager.current
         val keyboardController = LocalSoftwareKeyboardController.current
-    
+
         val coroutineScope = rememberCoroutineScope()
 
         var showLoginScreen by remember { mutableStateOf(false) }
@@ -203,11 +209,11 @@
                 activeCardSize = null
             }
         }
-    
+
         LaunchedEffect(isPlayerVisible) {
             playerViewModel.onGlobalPlayerVisibilityChanged(isPlayerVisible)
         }
-    
+
         LaunchedEffect(isLandscape, playerStableState.isVisible) {
             viewModel.setFullscreen(isLandscape && playerStableState.isVisible)
         }
@@ -215,7 +221,7 @@
         LaunchedEffect(showBars, isFullscreen) {
             viewModel.startAutoHideTimer()
         }
-    
+
         // Apply system UI visibility and colors based on fullscreen state
         // Then replace the system UI control LaunchedEffect with this:
         LaunchedEffect(isFullscreen, showBars) {
@@ -251,17 +257,21 @@
                 }
             }
         }
-    
+
         if (loadingState == LoadingState.LOADING && uiState.videos.isEmpty()) {
             LoadingScreen()
         } else {
-            Box(modifier = Modifier.fillMaxSize().padding(horizontal = 4.dp)) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .then(if (isFullscreen) Modifier else Modifier.padding(horizontal = 4.dp))
+            ) {
                 // --- Chips row measurement ---
                 val chipsHeightPx = remember { mutableIntStateOf(0) }
                 val toolbarHeightPx = remember { mutableIntStateOf(0) }
                 val toolbarOffset = remember { mutableFloatStateOf(0f) }
                 val expandToolbar = { toolbarOffset.floatValue = 0f }
-    
+
                 val nestedScrollConnection = remember(scrollLockState, isDropdownOpen) {
                     object : NestedScrollConnection {
                         override fun onPreScroll(
@@ -285,7 +295,7 @@
                         }
                     }
                 }
-    
+
                 val videosToShow = if (filterState.currentFilterPath.isEmpty()) {
                     uiState.videos
                 } else {
@@ -360,12 +370,12 @@
                     } else {
                         with(LocalDensity.current) { chipsHeightPx.intValue.toDp() }
                     }
-    
+
                     PullToRefreshBox(
                         isRefreshing = isRefreshing,
                         onRefresh = {
                             viewModel.triggerShuffle()
-    
+
                             viewModel.refreshHistory()
                         },
                         modifier = Modifier
@@ -536,6 +546,8 @@
 
                                 val isMiniPlayer = playerStableState.isInMiniMode && !isFullscreen
                                 var miniPlayerDragOffset by remember { mutableStateOf(Offset.Zero) }
+                                var miniSnapJob by remember { mutableStateOf<Job?>(null) }
+                                val dismissThresholdPx = with(density) { 210.dp.toPx() } //that sets the distanse to close for the 'dragg to close gesture'
 
                                 LaunchedEffect(isMiniPlayer) {
                                     if (isMiniPlayer) {
@@ -543,11 +555,112 @@
                                     }
                                 }
 
+                                // FIX 2 + 3: the drag detector must sit BEFORE graphicsLayer in the
+                                // modifier chain. Otherwise it measures finger positions inside the layer
+                                // that is itself being moved, which shrinks the deltas and makes
+                                // drag-to-close almost impossible to reach.
+                                val miniCardDragModifier = if (isMiniPlayer) {
+                                    Modifier.pointerInput(
+                                        playerStableState.playerInstanceId,
+                                        currentFilterPathId
+                                    ) {
+                                        val horizontalPaddingPx = with(density) { 8.dp.toPx() }
+                                        val verticalPaddingPx = with(density) { 3.dp.toPx() }
+                                        val controlsWidthPx = with(density) { 40.dp.toPx() }
+                                        val controlsGapPx = with(density) { 4.dp.toPx() }
+
+                                        awaitEachGesture {
+                                            val down = awaitFirstDown(requireUnconsumed = false)
+                                            // Grabbing the card mid-animation stops the spring.
+                                            miniSnapJob?.cancel()
+
+                                            // The video area is deliberately excluded from dragging. The card
+                                            // padding and the control strip remain available as drag surfaces.
+                                            val videoLeft = horizontalPaddingPx
+                                            val videoRight =
+                                                size.width - horizontalPaddingPx - controlsWidthPx - controlsGapPx
+                                            val videoTop = verticalPaddingPx
+                                            val videoBottom = size.height - verticalPaddingPx
+
+                                            val startedOnVideo =
+                                                down.position.x >= videoLeft &&
+                                                        down.position.x <= videoRight &&
+                                                        down.position.y >= videoTop &&
+                                                        down.position.y <= videoBottom
+
+                                            if (startedOnVideo) {
+                                                // Observe without consuming so the YouTube player keeps its gestures.
+                                                var pointerStillDown = true
+                                                while (pointerStillDown) {
+                                                    val event = awaitPointerEvent()
+                                                    val change =
+                                                        event.changes.firstOrNull { it.id == down.id }
+                                                    pointerStillDown = change?.pressed == true
+                                                }
+                                            } else {
+                                                var totalDrag = Offset.Zero
+                                                var dragging = false
+                                                var pointerStillDown = true
+
+                                                while (pointerStillDown) {
+                                                    val event = awaitPointerEvent()
+                                                    val change = event.changes.firstOrNull { it.id == down.id }
+
+                                                    if (change == null || !change.pressed) {
+                                                        pointerStillDown = false
+                                                    } else {
+                                                        val delta = change.position - change.previousPosition
+
+                                                        if (!dragging) {
+                                                            totalDrag += delta
+                                                            if (totalDrag.getDistance() > viewConfiguration.touchSlop) {
+                                                                dragging = true
+                                                                // catch up so the card sits exactly under the finger
+                                                                miniPlayerDragOffset += totalDrag
+                                                                change.consume()
+                                                            }
+                                                        } else {
+                                                            miniPlayerDragOffset += delta
+                                                            change.consume()
+                                                        }
+                                                    }
+                                                }
+
+                                                if (dragging) {
+                                                    if (miniPlayerDragOffset.getDistance() >= dismissThresholdPx) {
+                                                        // Close from where it was released. Do NOT reset the
+                                                        // offset first, or the card jumps back before vanishing.
+                                                        playerViewModel.closePlayer(currentFilterPathId)
+                                                    } else {
+                                                        // Gentle spring back to the corner.
+                                                        miniSnapJob = coroutineScope.launch {
+                                                            animate(
+                                                                typeConverter = Offset.VectorConverter,
+                                                                initialValue = miniPlayerDragOffset,
+                                                                targetValue = Offset.Zero,
+                                                                animationSpec = spring(
+                                                                    dampingRatio = Spring.DampingRatioLowBouncy,
+                                                                    stiffness = Spring.StiffnessLow
+                                                                )
+                                                            ) { value, _ ->
+                                                                miniPlayerDragOffset = value
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    Modifier
+                                }
+
                                 val playerModifier = when {
+                                    // FIX 1: fullscreen looks like a rounded card with a thin margin.
+                                    // Add top = 6.dp if you also want a margin above it.
                                     isFullscreen -> Modifier
                                         .fillMaxSize()
                                         .zIndex(10f)
-                                        .graphicsLayer { clip = true }
                                         .pointerInput(Unit) {
                                             detectTapGestures { offset ->
                                                 if (offset.y < topTapThresholdPx) {
@@ -560,9 +673,13 @@
                                         .padding(end = 6.dp, bottom = 6.dp)
                                         .size(width = 300.dp, height = 200.dp)
                                         .align(Alignment.BottomEnd)
+                                        .then(miniCardDragModifier)   // before graphicsLayer on purpose
                                         .graphicsLayer {
                                             translationX = miniPlayerDragOffset.x
                                             translationY = miniPlayerDragOffset.y
+                                            // Fades as you approach the close point, so the user sees
+                                            // when releasing will close it.
+                                            alpha = 1f - 0.5f * (miniPlayerDragOffset.getDistance() / dismissThresholdPx).coerceIn(0f, 1f)
                                         }
                                         .zIndex(5f)
 
@@ -585,98 +702,10 @@
                                     }
                                 }
 
-                                val miniCardDragModifier = if (isMiniPlayer) {
-                                    Modifier.pointerInput(
-                                        playerStableState.playerInstanceId,
-                                        currentFilterPathId
-                                    ) {
-                                        val horizontalPaddingPx = with(density) { 8.dp.toPx() }
-                                        val verticalPaddingPx = with(density) { 3.dp.toPx() }
-                                        val controlsWidthPx = with(density) { 40.dp.toPx() }
-                                        val controlsGapPx = with(density) { 4.dp.toPx() }
-                                        val dismissThresholdPx = with(density) { 110.dp.toPx() }
-
-                                        awaitEachGesture {
-                                            val down = awaitFirstDown(requireUnconsumed = false)
-
-                                            // The video area is deliberately excluded from dragging. The card
-                                            // padding and the control strip remain available as drag surfaces.
-                                            val videoLeft = horizontalPaddingPx
-                                            val videoRight =
-                                                size.width - horizontalPaddingPx - controlsWidthPx - controlsGapPx
-                                            val videoTop = verticalPaddingPx
-                                            val videoBottom = size.height - verticalPaddingPx
-
-                                            val startedOnVideo =
-                                                down.position.x >= videoLeft &&
-                                                        down.position.x <= videoRight &&
-                                                        down.position.y >= videoTop &&
-                                                        down.position.y <= videoBottom
-
-                                            if (startedOnVideo) {
-                                                // Observe the gesture without consuming it, so the YouTube
-                                                // player continues to receive taps and its own gestures.
-                                                var pointerStillDown = true
-                                                while (pointerStillDown) {
-                                                    val event = awaitPointerEvent()
-                                                    val change =
-                                                        event.changes.firstOrNull { it.id == down.id }
-                                                    pointerStillDown = change?.pressed == true
-                                                }
-                                            } else {
-                                                var totalDrag = Offset.Zero
-                                                var dragging = false
-                                                var pointerStillDown = true
-
-                                                while (pointerStillDown) {
-                                                    val event = awaitPointerEvent()
-                                                    val change =
-                                                        event.changes.firstOrNull { it.id == down.id }
-
-                                                    if (change == null || !change.pressed) {
-                                                        pointerStillDown = false
-                                                    } else {
-                                                        val delta = change.position - change.previousPosition
-                                                        totalDrag += delta
-
-                                                        if (!dragging && totalDrag.getDistance() > viewConfiguration.touchSlop) {
-                                                            dragging = true
-                                                        }
-
-                                                        if (dragging) {
-                                                            miniPlayerDragOffset += delta
-                                                            change.consume()
-                                                        }
-                                                    }
-                                                }
-
-                                                if (dragging) {
-                                                    if (totalDrag.y >= dismissThresholdPx) {
-                                                        miniPlayerDragOffset = Offset.Zero
-                                                        playerViewModel.closePlayer(
-                                                            currentFilterPathId
-                                                        )
-                                                        // Closing the player makes controlsAccessible false;
-                                                        // the existing pager effect returns the pager to page 2.
-                                                    } else {
-                                                        // A short drag returns the card to its corner.
-                                                        miniPlayerDragOffset = Offset.Zero
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                } else {
-                                    Modifier
-                                }
-
                                 Card(
-                                    modifier = playerModifier
-                                        .then(miniCardDragModifier)
+                                    modifier = playerModifier   // <-- no .then(miniCardDragModifier) here
                                         .onGloballyPositioned { coordinates ->
-                                            miniPlayerHeight = with(density) {
-                                                coordinates.size.height.toDp()
-                                            }
+                                            miniPlayerHeight = with(density) { coordinates.size.height.toDp() }
                                         },
                                     shape = if (isMiniPlayer) {
                                         RoundedCornerShape(12.dp)
@@ -685,7 +714,7 @@
                                     },
                                     colors = CardDefaults.cardColors(
                                         containerColor = if (isMiniPlayer) {
-                                            MaterialTheme.colorScheme.surface
+                                            Color(0xFF262230) // Set your desired mini player card color here
                                         } else {
                                             Color.Transparent
                                         }
@@ -785,24 +814,23 @@
 
                                                 MiniPlayerControl(
                                                     icon = Icons.Default.Language,
-                                                    description = "Internet",
+                                                    description = "Browser",
                                                     onClick = {}
                                                 )
                                             }
                                         } else if (isFullscreen) {
                                             FullscreenControlsColumn(
-                                                onShare = { Toast.makeText(context, "Share - to be implemented", Toast.LENGTH_SHORT).show() },
-                                                onCast = { Toast.makeText(context, "Cast - to be implemented", Toast.LENGTH_SHORT).show() },
+                                                onClose = { playerViewModel.closePlayer(currentFilterPathId) },
                                                 onBack = { Toast.makeText(context, "ReturnToThePlayerCard - to be implemented", Toast.LENGTH_SHORT).show() },
+                                                onCast = { Toast.makeText(context, "Cast - to be implemented", Toast.LENGTH_SHORT).show() },
+                                                onShare = { Toast.makeText(context, "Share - to be implemented", Toast.LENGTH_SHORT).show() },
+                                                toBrowser = { Toast.makeText(context, "LoadToBrowser - to be implemented", Toast.LENGTH_SHORT).show() },
                                                 onPrevious = { playerViewModel.previousVideo() },
                                                 onNext = { playerViewModel.nextVideo() },
-                                                onClose = {
-                                                    playerViewModel.closePlayer(currentFilterPathId)
-                                                },
                                                 modifier = Modifier
                                                     .fillMaxHeight()
-                                                    .background(MaterialTheme.colorScheme.background)
                                                     .zIndex(10f)
+                                                    .width(50.dp)
                                             )
                                         }
                                     }

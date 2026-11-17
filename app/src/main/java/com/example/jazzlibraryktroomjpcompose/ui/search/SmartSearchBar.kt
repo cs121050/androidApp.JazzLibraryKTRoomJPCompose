@@ -78,18 +78,18 @@ fun SmartSearchBar(
     val keyboardController = LocalSoftwareKeyboardController.current
 
     val allArtists = uiState.availableArtists
-    val allAlbums = uiState.filteredAlbums
+    //val allAlbums = uiState.filteredAlbums
     val allVideos = if (filterState.currentFilterPath.isEmpty())
         uiState.videos else uiState.filteredVideos
 
     // Compute autocomplete items – NO LIMIT, shows all matching video titles
-    val autocompleteItems = remember(text, mode, allVideos, allArtists, allAlbums) {
+    val autocompleteItems = remember(text, mode, allVideos, allArtists){//}, allAlbums) {
         if (text.isBlank()) return@remember emptyList()
         val lowerText = text.lowercase()
         when (mode) {
             0 -> allVideos.filter { it.name.contains(lowerText, ignoreCase = true) }.map { it.name }
             1 -> allArtists.filter { it.fullName.contains(lowerText, ignoreCase = true) }.map { it.fullName }
-            2 -> allAlbums.filter { it.title.contains(lowerText, ignoreCase = true) }.map { it.title }
+            //2 -> allAlbums.filter { it.title.contains(lowerText, ignoreCase = true) }.map { it.title }
             else -> emptyList()
         }
     }
@@ -132,7 +132,7 @@ fun SmartSearchBar(
             imageVector = when (mode) {
                 0 -> Icons.Default.PlayArrow
                 1 -> Icons.Default.Person
-                2 -> Icons.Default.Album
+                //2 -> Icons.Default.Album
                 else -> Icons.Default.Search
             },
             contentDescription = "Search mode",
@@ -234,7 +234,7 @@ fun SmartSearchBar(
                 placeholder = { Text("Search videos, artists, albums...") },
                 leadingIcon = {
                     if (isFocused) {
-                        IconButton(onClick = { mode = (mode + 1) % 3 }) {
+                        IconButton(onClick = { mode = (mode + 1) % 2 }) {
                             modeIcon()
                         }
                     } else {
@@ -402,7 +402,7 @@ private fun AutocompleteItem(
                 imageVector = when (mode) {
                     0 -> Icons.Default.PlayArrow
                     1 -> Icons.Default.Person
-                    2 -> Icons.Default.Album
+                    //2 -> Icons.Default.Album
                     else -> Icons.Default.Search
                 },
                 contentDescription = "Search",
@@ -432,7 +432,7 @@ private fun SuggestionItem(
         1 -> when (entry.mode) {   // isMedia == 1 → mode-specific icon
             0 -> Icons.Default.PlayArrow
             1 -> Icons.Default.Person
-            2 -> Icons.Default.Album
+            //2 -> Icons.Default.Album
             else -> Icons.Default.Search
         }   // isMedia == 0 → search icon
         else -> Icons.Default.Search // fallback for null or other values
