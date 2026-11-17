@@ -1,5 +1,6 @@
 package com.example.jazzlibraryktroomjpcompose.ui.common.components
 
+import android.R.attr.maxWidth
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -9,6 +10,7 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -193,6 +195,44 @@ fun FastScrollingDotsRow(
             if (i != pageCount - 1) {
                 Spacer(modifier = Modifier.width(4.dp))
             }
+        }
+    }
+}
+
+@Composable
+fun AdaptivePageIndicator(
+    pageCount: Int,
+    currentPage: Int,
+    onPageSelected: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+    maxDots: Int = 12
+) {
+    if (pageCount <= 1) return
+
+    BoxWithConstraints(
+        modifier = modifier,
+        contentAlignment = Alignment.Center
+    ) {
+        // Old DotsRow budget: 4dp dot + 4dp gap per item, minus the last gap.
+        val dotsCostDp = 8.dp * pageCount - 4.dp
+        val fitsAsDots =
+            pageCount <= maxDots && dotsCostDp <= maxWidth
+
+        if (fitsAsDots) {
+            DotsRow(
+                pageCount = pageCount,
+                currentPage = currentPage,
+                onPageSelected = onPageSelected
+                // DotsRow already does fillMaxWidth() internally; the
+                // BoxWithConstraints just told us that full width is fine.
+            )
+        } else {
+            LineIndicator(
+                pageCount = pageCount,
+                currentPage = currentPage,
+                onPageSelected = onPageSelected
+                // LineIndicator also does fillMaxWidth() internally.
+            )
         }
     }
 }
