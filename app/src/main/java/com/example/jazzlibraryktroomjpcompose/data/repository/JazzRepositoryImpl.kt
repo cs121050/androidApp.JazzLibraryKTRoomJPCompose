@@ -40,13 +40,15 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.firstOrNull
-import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.withContext
 import javax.inject.Singleton
 import com.example.jazzlibraryktroomjpcompose.data.remote.models.SyncPage
 import com.google.gson.JsonObject
 import com.google.gson.Gson
 import java.io.IOException
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOf
+
 
 
 @Singleton
@@ -298,21 +300,22 @@ class JazzRepositoryImpl(
             )
 
             // 2. ALBUMS: apply search only if mode == 2
-            val albumSearchQuery = if (searchMode == 2) searchQuery else ""
-            Log.d("JazzRepositoryImpl", "💿 Album search query='$albumSearchQuery'")
-            val albumsFlow = if (artistFilter != null) {
-                database.albumDao().getAlbumsByArtistAndInstrumentWithMainFlag(
-                    artistId = artistFilter.entityId,
-                    instrumentId = instrumentFilter?.entityId ?: 0,
-                    searchQuery = albumSearchQuery
-                )
-            } else {
-                database.albumDao().getAlbumByMultipleFilters(
-                    instrumentId = instrumentFilter?.entityId ?: 0,
-                    artistId = 0,
-                    searchQuery = albumSearchQuery
-                )
-            }
+//            val albumSearchQuery = if (searchMode == 2) searchQuery else ""
+//            Log.d("JazzRepositoryImpl", "💿 Album search query='$albumSearchQuery'")
+//            val albumsFlow = if (artistFilter != null) {
+//                database.albumDao().getAlbumsByArtistAndInstrumentWithMainFlag(
+//                    artistId = artistFilter.entityId,
+//                    instrumentId = instrumentFilter?.entityId ?: 0,
+//                    searchQuery = albumSearchQuery
+//                )
+//            } else {
+//                database.albumDao().getAlbumByMultipleFilters(
+//                    instrumentId = instrumentFilter?.entityId ?: 0,
+//                    artistId = 0,
+//                    searchQuery = albumSearchQuery
+//                )
+//            }
+            val albumsFlow: Flow<List<AlbumWithIsMainFlag>> = flowOf(emptyList())
 
             // 3. ARTISTS: apply search only if mode == 1
             val artistSearchQuery = if (searchMode == 1) searchQuery else ""
@@ -353,6 +356,7 @@ class JazzRepositoryImpl(
                 typesFlowWithCount
             ) { values ->
                 val videos = values[0] as List<VideoRoomEntity>
+                // v1.0.0: Always empty — albums query is disabled above.
                 val albums = values[1] as List<AlbumWithIsMainFlag>
                 val artists = values[2] as List<ArtistWithVideoCount>
                 val instruments = values[3] as List<InstrumentWithVideoCount>

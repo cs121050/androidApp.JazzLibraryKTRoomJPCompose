@@ -255,17 +255,23 @@ fun VideoStatsRow(
                 },
                 count = videoCount
             )
-            TabText(
-                text = "Albums",
-                selected = currentTab == MainTab.ALBUMS,
-                onClick = {
-                    onTabSelected(MainTab.ALBUMS)
-                    if (currentTab == MainTab.ALBUMS) {
-                        onAlbumTabClick()
-                    }
-                },
-                count = albumCount   // placeholder count, you can replace later
-            )
+//            * ALBUMS TAB BUTTON HIDDEN FOR v1.0.0 GOOGLE PLAY RELEASE
+//            * ============================================================
+//            * The button is removed from the tab row entirely.
+//            * Album screen, models, sync, and navigation are preserved.
+//            * Restore by uncommenting the block below.
+//            * ============================================================
+//            TabText(
+//                text = "Albums",
+//                selected = currentTab == MainTab.ALBUMS,
+//                onClick = {
+//                    onTabSelected(MainTab.ALBUMS)
+//                    if (currentTab == MainTab.ALBUMS) {
+//                        onAlbumTabClick()
+//                    }
+//                },
+//                count = albumCount   // placeholder count, you can replace later
+//            )
             TabText(
                 text = "Artists",
                 selected = currentTab == MainTab.ARTISTS,

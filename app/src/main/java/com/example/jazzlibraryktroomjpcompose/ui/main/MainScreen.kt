@@ -146,7 +146,8 @@
     
         val currentMediaEntry by playerViewModel.currentFilterPathMedia.collectAsState()
 
-        val scrollToAlbumsTrigger = remember { mutableStateOf(0) }
+        /* v1.0.0: Albums hidden — scrollToAlbumsTrigger unused. Restore with onAlbumSelected. */
+        //val scrollToAlbumsTrigger = remember { mutableStateOf(0) }
     
         var hideSearchDropdown by remember { mutableStateOf(false) }
     
@@ -270,9 +271,10 @@
                 } else {
                     uiState.filteredVideos
                 }
-                val albumsToShow = uiState.filteredAlbums
-
-                val albumsListState = rememberLazyListState()
+                /* v1.0.0: Albums hidden — albumsToShow unused. Restore with AlbumsListContent. */
+                //val albumsToShow = uiState.filteredAlbums
+                /* v1.0.0: Albums hidden — albumsListState unused. Restore with AlbumsListContent. */
+                //val albumsListState = rememberLazyListState()
 
                 // Scroll to the currently playing video (if any)
                 fun scrollToPlayingVideo() {
@@ -291,23 +293,24 @@
                     }
                 }
 
+                /* v1.0.0: Albums hidden — scrollToPlayingAlbum unused. Restore when Albums tab returns. */
                 // Scroll to the currently playing album (if any)
-                fun scrollToPlayingAlbum() {
-                    if (playerStableState.currentTypeOfMedia == 1) {
-                        val activeCardId = playerStableState.activeCardId
-                        if (activeCardId != null && activeCardId.startsWith("album_")) {
-                            val albumId = activeCardId.removePrefix("album_").toIntOrNull()
-                            if (albumId != null) {
-                                val index = uiState.filteredAlbums.indexOfFirst { it.albumId == albumId }
-                                if (index != -1) {
-                                    coroutineScope.launch {
-                                        albumsListState.animateScrollToItem(index)
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
+//                fun scrollToPlayingAlbum() {
+//                    if (playerStableState.currentTypeOfMedia == 1) {
+//                        val activeCardId = playerStableState.activeCardId
+//                        if (activeCardId != null && activeCardId.startsWith("album_")) {
+//                            val albumId = activeCardId.removePrefix("album_").toIntOrNull()
+//                            if (albumId != null) {
+//                                val index = uiState.filteredAlbums.indexOfFirst { it.albumId == albumId }
+//                                if (index != -1) {
+//                                    coroutineScope.launch {
+//                                        albumsListState.animateScrollToItem(index)
+//                                    }
+//                                }
+//                            }
+//                        }
+//                    }
+//                }
 
                 // ----- CHIPS ROW (fixed) -----
                 if (!isFullscreen) {
@@ -393,7 +396,8 @@
                             ) {
                                 toolbarBox(
                                     onVideoTabClick = { scrollToPlayingVideo() },
-                                    onAlbumTabClick = { scrollToPlayingAlbum() },
+                                    //v1.0.0: Albums tab hidden — onAlbumTabClick is now a no-op.
+                                    onAlbumTabClick = { /* no-op */ },  //onAlbumTabClick = { scrollToPlayingAlbum() },
                                     onExpandToolbar = expandToolbar,
                                     onTabSelected = { tab ->
                                         viewModel.setCurrentTab(tab)          // MainViewModel
@@ -404,7 +408,7 @@
                                     onSearchBarClicked = { hideSearchDropdown = false }
                                 )
                             }
-    
+
                             // ----- VIDEO LIST (unchanged) -----
                             Box(
                                 modifier = Modifier
@@ -436,24 +440,30 @@
                                                 )
                                             }
                                         )
-    
-                                        MainTab.ALBUMS -> {
-                                            // ✅ No LaunchedEffect – no auto‑selection of first album
-                                            AlbumsListContent(
-                                                playerViewModel = playerViewModel,
-                                                listState = albumsListState,
-                                                viewModel = viewModel,
-                                                onActiveCardBoundsChanged = { cardId, position, size ->
-                                                    if (cardId == playerStableState.activeCardId) {
-                                                        val relativePos = position - contentBoxRootPosition
-                                                        activeCardRelativePosition = relativePos
-                                                        activeCardSize = size
-                                                    }
-                                                },
-                                                onRefresh = { viewModel.safeRefreshDataFromAPI() }
-                                            )
-                                        }
-    
+//                                            * ALBUMS SCREEN HIDDEN FOR v1.0.0 GOOGLE PLAY RELEASE
+//                                            * ============================================================
+//                                            * AlbumsListContent is never rendered in this release.
+//                                            * The full original block is preserved below for future restore.
+//                                            *
+//                                        MainTab.ALBUMS -> {
+//                                            // ✅ No LaunchedEffect – no auto‑selection of first album
+//                                            AlbumsListContent(
+//                                                playerViewModel = playerViewModel,
+//                                                listState = albumsListState,
+//                                                viewModel = viewModel,
+//                                                onActiveCardBoundsChanged = { cardId, position, size ->
+//                                                    if (cardId == playerStableState.activeCardId) {
+//                                                        val relativePos = position - contentBoxRootPosition
+//                                                        activeCardRelativePosition = relativePos
+//                                                        activeCardSize = size
+//                                                    }
+//                                                },
+//                                                onRefresh = { viewModel.safeRefreshDataFromAPI() }
+//                                            )
+//                                        }
+                                        MainTab.ALBUMS -> { /* hidden for v1.0.0 — nothing renders */ }
+
+
                                         MainTab.ARTISTS -> ArtistContent(
                                             modifier = Modifier.fillMaxSize(),
                                             onRefresh = { viewModel.shuffleArtists() },
@@ -466,25 +476,28 @@
                                                 )
                                             },
                                             onAlbumSelected = { album ->
-                                                val alreadyFiltered =
-                                                    filterState.currentFilterPath.any {
-                                                        it.categoryId == FilterPath.CATEGORY_ARTIST && it.entityId == album.artistId
-                                                    }
-                                                if (!alreadyFiltered && album.artistId != null) {
-                                                    viewModel.handleChipSelection(
-                                                        FilterPath.CATEGORY_ARTIST,
-                                                        album.artistId,
-                                                        album.artistFullName ?: "Unknown Artist",
-                                                        true
-                                                    )
-                                                }
-                                                // Always scroll to albums section after clicking an album card
-                                                scrollToAlbumsTrigger.value++
+//                                                * v1.0.0: Albums hidden everywhere.
+//                                                * Album-card tap inside Artists screen is now a no-op.
+//                                                * Full original behavior preserved below for future restore.
+//                                                val alreadyFiltered =
+//                                                    filterState.currentFilterPath.any {
+//                                                        it.categoryId == FilterPath.CATEGORY_ARTIST && it.entityId == album.artistId
+//                                                    }
+//                                                if (!alreadyFiltered && album.artistId != null) {
+//                                                    viewModel.handleChipSelection(
+//                                                        FilterPath.CATEGORY_ARTIST,
+//                                                        album.artistId,
+//                                                        album.artistFullName ?: "Unknown Artist",
+//                                                        true
+//                                                    )
+//                                                }
+//                                                // Always scroll to albums section after clicking an album card
+//                                                scrollToAlbumsTrigger.value++
                                             },
                                             playerViewModel = playerViewModel,
                                             viewModel = viewModel
                                         )
-    
+
                                         MainTab.HISTORY -> HistoryContent(
                                             modifier = Modifier.fillMaxSize(),
                                             viewModel = viewModel,
@@ -494,16 +507,16 @@
                                     }
                                 }
                             }
-    
+
                             // ----- PLAYER (draggable mini player) -----
                             if (playerStableState.isVisible) {
                                 val density = LocalDensity.current
                                 val configuration = LocalConfiguration.current
                                 val context = LocalContext.current
-    
+
                                 // Dragging state (only used in mini mode)
                                 val dragOffsetY = remember { Animatable(0f) }
-    
+
                                 // Player size for boundary calculations
                                 var playerSize by remember { mutableStateOf(IntSize.Zero) }
                                 val screenWidthPx =
@@ -511,14 +524,14 @@
                                 val screenHeightPx =
                                     with(density) { configuration.screenHeightDp.dp.toPx() }
                                 val marginPx = with(density) { 6.dp.toPx() }
-    
+
                                 // Reset offset when entering mini mode
                                 LaunchedEffect(playerStableState.isInMiniMode) {
                                     if (playerStableState.isInMiniMode) {
                                         dragOffsetY.snapTo(0f)
                                     }
                                 }
-    
+
                                 // --- Compute modifier based on fullscreen, mini, or attached ---
                                 val playerModifier = when {
                                     isFullscreen -> Modifier
@@ -532,7 +545,7 @@
                                                 }
                                             }
                                         }
-    
+
                                     playerStableState.isInMiniMode -> Modifier
                                         .size(
                                             width = 235.dp,
@@ -541,7 +554,7 @@
                                         .padding(bottom = 6.dp, end = 6.dp)
                                         .align(Alignment.BottomEnd)
                                         .zIndex(5f)
-    
+
                                     else -> {
                                         // Attached to active card
                                         activeCardRelativePosition?.let { pos ->
@@ -560,7 +573,7 @@
                                         } ?: Modifier.size(0.dp)
                                     }
                                 }
-    
+
                                 //miniplayer's box
                                 Row(
                                     modifier = playerModifier
@@ -606,7 +619,7 @@
                                             .weight(1f)          // Takes all available space after controls
                                             .fillMaxHeight()
                                     )
-    
+
                                     if (isFullscreen) {
                                         FullscreenControlsColumn(
                                             onShare = { /* TODO */ },
@@ -672,7 +685,7 @@
                             .zIndex(8f)
                     )
                 }
-    
+
                 YouTubeLikeBottomSheet(
                     viewModel = viewModel,
                     uiState = uiState,
@@ -682,7 +695,7 @@
                         .align(Alignment.BottomCenter)
                         .zIndex(8f)
                 )
-    
+
                 if (showError && errorMessage != null) {
                     Box(
                         modifier = Modifier
@@ -717,7 +730,7 @@
         onAlbumTabClick: () -> Unit,
         onExpandToolbar: () -> Unit,
     ) {
-    
+
         SmartSearchBar(
             hideSearchDropdown = hideSearchDropdown,
             onExpandToolbar = onExpandToolbar,
@@ -735,7 +748,7 @@
             modifier = Modifier.fillMaxWidth()
         )
     }
-    
+
     @Composable
     private fun SongListItem(
         song: Song,
