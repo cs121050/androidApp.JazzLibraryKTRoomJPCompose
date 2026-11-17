@@ -293,7 +293,7 @@ fun VideoStatsRow(
         // Width = widest page's content. Widest page has 3 IconButtons (48dp each).
         // Page 0 (Share/Cast/Back) and Page 1 (Prev/Next/Close) both use 3 buttons.
         // Page 2 (toggle) uses 1 button — it will sit at the right edge of the same slot.
-        val pagerControlsWidth = 144.dp   // the fixed width of the page 0 and 1
+        val pagerControlsWidth = 180.dp   // the fixed width of the page 0 and 1
         HorizontalPager(
             state = pagerState,
             userScrollEnabled = true,

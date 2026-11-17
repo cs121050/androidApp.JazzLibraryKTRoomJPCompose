@@ -58,6 +58,7 @@
     import android.util.Log
     import android.view.View
     import android.view.ViewGroup
+    import android.widget.Toast
     import com.google.accompanist.systemuicontroller.rememberSystemUiController
     import androidx.compose.ui.platform.LocalView
     import androidx.compose.ui.platform.LocalFocusManager
@@ -78,6 +79,25 @@
     import com.example.jazzlibraryktroomjpcompose.domain.models.Artist
     import com.example.jazzlibraryktroomjpcompose.ui.auth.LoginScreen
     import com.example.jazzlibraryktroomjpcompose.ui.about.AboutScreen
+    import androidx.compose.foundation.gestures.awaitEachGesture
+    import androidx.compose.foundation.gestures.awaitFirstDown
+    import androidx.compose.foundation.shape.RoundedCornerShape
+    import androidx.compose.material3.Card
+    import androidx.compose.material3.CardDefaults
+    import androidx.compose.ui.graphics.Color
+    import androidx.compose.material.icons.filled.ArrowBack
+    import androidx.compose.material.icons.filled.Cast
+    import androidx.compose.material.icons.filled.Close
+    import androidx.compose.material.icons.filled.Language
+    import androidx.compose.material.icons.filled.Share
+    import androidx.compose.ui.graphics.RectangleShape
+    import androidx.compose.animation.core.animateOffsetAsState
+    import androidx.compose.animation.core.spring
+    import androidx.compose.foundation.gestures.detectDragGestures
+    import androidx.compose.material3.Card
+    import androidx.compose.ui.geometry.Rect
+    import androidx.compose.ui.layout.positionInRoot
+    import kotlinx.coroutines.delay
 
     enum class AlbumGridTab { MAIN, FEATURED }
     enum class SortDirection { ASC, DESC }
@@ -461,7 +481,8 @@
 //                                                onRefresh = { viewModel.safeRefreshDataFromAPI() }
 //                                            )
 //                                        }
-                                        MainTab.ALBUMS -> { /* hidden for v1.0.0 — nothing renders */ }
+                                        MainTab.ALBUMS -> { /* hidden for v1.0.0 — nothing renders */
+                                        }
 
 
                                         MainTab.ARTISTS -> ArtistContent(
@@ -509,30 +530,19 @@
                             }
 
                             // ----- PLAYER (draggable mini player) -----
+                            // ----- PLAYER -----
                             if (playerStableState.isVisible) {
                                 val density = LocalDensity.current
-                                val configuration = LocalConfiguration.current
-                                val context = LocalContext.current
 
-                                // Dragging state (only used in mini mode)
-                                val dragOffsetY = remember { Animatable(0f) }
+                                val isMiniPlayer = playerStableState.isInMiniMode && !isFullscreen
+                                var miniPlayerDragOffset by remember { mutableStateOf(Offset.Zero) }
 
-                                // Player size for boundary calculations
-                                var playerSize by remember { mutableStateOf(IntSize.Zero) }
-                                val screenWidthPx =
-                                    with(density) { configuration.screenWidthDp.dp.toPx() }
-                                val screenHeightPx =
-                                    with(density) { configuration.screenHeightDp.dp.toPx() }
-                                val marginPx = with(density) { 6.dp.toPx() }
-
-                                // Reset offset when entering mini mode
-                                LaunchedEffect(playerStableState.isInMiniMode) {
-                                    if (playerStableState.isInMiniMode) {
-                                        dragOffsetY.snapTo(0f)
+                                LaunchedEffect(isMiniPlayer) {
+                                    if (isMiniPlayer) {
+                                        miniPlayerDragOffset = Offset.Zero
                                     }
                                 }
 
-                                // --- Compute modifier based on fullscreen, mini, or attached ---
                                 val playerModifier = when {
                                     isFullscreen -> Modifier
                                         .fillMaxSize()
@@ -546,13 +556,14 @@
                                             }
                                         }
 
-                                    playerStableState.isInMiniMode -> Modifier
-                                        .size(
-                                            width = 235.dp,
-                                            height = 200.dp
-                                        )  // IMPORTANT : change this to 205 to 205 to comply with youtube rules!
-                                        .padding(bottom = 6.dp, end = 6.dp)
+                                    isMiniPlayer -> Modifier
+                                        .padding(end = 6.dp, bottom = 6.dp)
+                                        .size(width = 300.dp, height = 200.dp)
                                         .align(Alignment.BottomEnd)
+                                        .graphicsLayer {
+                                            translationX = miniPlayerDragOffset.x
+                                            translationY = miniPlayerDragOffset.y
+                                        }
                                         .zIndex(5f)
 
                                     else -> {
@@ -574,68 +585,227 @@
                                     }
                                 }
 
-                                //miniplayer's box
-                                Row(
-                                    modifier = playerModifier
-                                        .onGloballyPositioned { coordinates ->
-                                            miniPlayerHeight =
-                                                with(density) { coordinates.size.height.toDp() }
-                                        }
-                                ) {
-                                    SmartYoutubePlayerHost(
-                                        key = playerStableState.playerInstanceId,
-                                        videoId = playerStableState.currentVideoId,
-                                        isFullscreen = isFullscreen,
-                                        isMiniMode = playerStableState.isInMiniMode && !isFullscreen,
-                                        onPlayerReady = { player ->
-                                            playerViewModel.setPlayer(
-                                                player
-                                            )
-                                        },
-                                        onWebViewReady = { webView ->
-                                            webView.post {
-                                                // Remove any extra space
-                                                webView.setPadding(0, 0, 0, 0)
-                                                // Disable scrolling inside the WebView
-                                                webView.isScrollContainer = false
-                                                webView.isVerticalScrollBarEnabled = false
-                                                webView.isHorizontalScrollBarEnabled = false
-                                                webView.setInitialScale(100)
-                                                // Force match parent
-                                                webView.layoutParams =
-                                                    webView.layoutParams.apply { // FIX: eliminates the scroling of the youtube content inside the youtubelpayer after fullscreen
-                                                        width =
-                                                            ViewGroup.LayoutParams.MATCH_PARENT
-                                                        height =
-                                                            ViewGroup.LayoutParams.MATCH_PARENT
+                                val miniCardDragModifier = if (isMiniPlayer) {
+                                    Modifier.pointerInput(
+                                        playerStableState.playerInstanceId,
+                                        currentFilterPathId
+                                    ) {
+                                        val horizontalPaddingPx = with(density) { 8.dp.toPx() }
+                                        val verticalPaddingPx = with(density) { 3.dp.toPx() }
+                                        val controlsWidthPx = with(density) { 40.dp.toPx() }
+                                        val controlsGapPx = with(density) { 4.dp.toPx() }
+                                        val dismissThresholdPx = with(density) { 110.dp.toPx() }
+
+                                        awaitEachGesture {
+                                            val down = awaitFirstDown(requireUnconsumed = false)
+
+                                            // The video area is deliberately excluded from dragging. The card
+                                            // padding and the control strip remain available as drag surfaces.
+                                            val videoLeft = horizontalPaddingPx
+                                            val videoRight =
+                                                size.width - horizontalPaddingPx - controlsWidthPx - controlsGapPx
+                                            val videoTop = verticalPaddingPx
+                                            val videoBottom = size.height - verticalPaddingPx
+
+                                            val startedOnVideo =
+                                                down.position.x >= videoLeft &&
+                                                        down.position.x <= videoRight &&
+                                                        down.position.y >= videoTop &&
+                                                        down.position.y <= videoBottom
+
+                                            if (startedOnVideo) {
+                                                // Observe the gesture without consuming it, so the YouTube
+                                                // player continues to receive taps and its own gestures.
+                                                var pointerStillDown = true
+                                                while (pointerStillDown) {
+                                                    val event = awaitPointerEvent()
+                                                    val change =
+                                                        event.changes.firstOrNull { it.id == down.id }
+                                                    pointerStillDown = change?.pressed == true
+                                                }
+                                            } else {
+                                                var totalDrag = Offset.Zero
+                                                var dragging = false
+                                                var pointerStillDown = true
+
+                                                while (pointerStillDown) {
+                                                    val event = awaitPointerEvent()
+                                                    val change =
+                                                        event.changes.firstOrNull { it.id == down.id }
+
+                                                    if (change == null || !change.pressed) {
+                                                        pointerStillDown = false
+                                                    } else {
+                                                        val delta = change.position - change.previousPosition
+                                                        totalDrag += delta
+
+                                                        if (!dragging && totalDrag.getDistance() > viewConfiguration.touchSlop) {
+                                                            dragging = true
+                                                        }
+
+                                                        if (dragging) {
+                                                            miniPlayerDragOffset += delta
+                                                            change.consume()
+                                                        }
                                                     }
-                                                webView.requestLayout()
+                                                }
+
+                                                if (dragging) {
+                                                    if (totalDrag.y >= dismissThresholdPx) {
+                                                        miniPlayerDragOffset = Offset.Zero
+                                                        playerViewModel.closePlayer(
+                                                            currentFilterPathId
+                                                        )
+                                                        // Closing the player makes controlsAccessible false;
+                                                        // the existing pager effect returns the pager to page 2.
+                                                    } else {
+                                                        // A short drag returns the card to its corner.
+                                                        miniPlayerDragOffset = Offset.Zero
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    Modifier
+                                }
+
+                                Card(
+                                    modifier = playerModifier
+                                        .then(miniCardDragModifier)
+                                        .onGloballyPositioned { coordinates ->
+                                            miniPlayerHeight = with(density) {
+                                                coordinates.size.height.toDp()
                                             }
                                         },
-                                        onVideoEnded = {
-                                            playerViewModel.nextVideo(startInMiniMode = currentTab != MainTab.VIDEOS)
-                                        },
-                                        modifier = Modifier
-                                            .weight(1f)          // Takes all available space after controls
-                                            .fillMaxHeight()
+                                    shape = if (isMiniPlayer) {
+                                        RoundedCornerShape(12.dp)
+                                    } else {
+                                        RectangleShape
+                                    },
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = if (isMiniPlayer) {
+                                            MaterialTheme.colorScheme.surface
+                                        } else {
+                                            Color.Transparent
+                                        }
+                                    ),
+                                    elevation = CardDefaults.cardElevation(
+                                        defaultElevation = if (isMiniPlayer) 4.dp else 0.dp
                                     )
-
-                                    if (isFullscreen) {
-                                        FullscreenControlsColumn(
-                                            onShare = { /* TODO */ },
-                                            onCast = { /* TODO */ },
-                                            onBack = { /* TODO */ },
-                                            onPrevious = { playerViewModel.previousVideo() },
-                                            onNext = { playerViewModel.nextVideo() },
-                                            onClose = { playerViewModel.closePlayer(currentFilterPathId) },
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .then(
+                                                if (isMiniPlayer) {
+                                                    Modifier.padding(
+                                                        horizontal = 8.dp,
+                                                        vertical = 3.dp
+                                                    )
+                                                } else {
+                                                    Modifier
+                                                }
+                                            ),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        // Keep exactly one player host and keep its key independent of mini mode.
+                                        SmartYoutubePlayerHost(
+                                            key = playerStableState.playerInstanceId,
+                                            videoId = playerStableState.currentVideoId,
+                                            isFullscreen = isFullscreen,
+                                            isMiniMode = isMiniPlayer,
+                                            onPlayerReady = { player ->
+                                                playerViewModel.setPlayer(player)
+                                            },
+                                            onWebViewReady = { webView ->
+                                                webView.post {
+                                                    webView.setPadding(0, 0, 0, 0)
+                                                    webView.isScrollContainer = false
+                                                    webView.isVerticalScrollBarEnabled = false
+                                                    webView.isHorizontalScrollBarEnabled = false
+                                                    webView.setInitialScale(100)
+                                                    webView.layoutParams =
+                                                        webView.layoutParams.apply {
+                                                            width =
+                                                                ViewGroup.LayoutParams.MATCH_PARENT
+                                                            height =
+                                                                ViewGroup.LayoutParams.MATCH_PARENT
+                                                        }
+                                                    webView.requestLayout()
+                                                }
+                                            },
+                                            onVideoEnded = {
+                                                playerViewModel.nextVideo(
+                                                    startInMiniMode = currentTab != MainTab.VIDEOS
+                                                )
+                                            },
                                             modifier = Modifier
+                                                .weight(1f)
                                                 .fillMaxHeight()
-                                                .background(MaterialTheme.colorScheme.background)
-                                                .zIndex(10f)
                                         )
+
+                                        if (isMiniPlayer) {
+                                            Spacer(modifier = Modifier.width(4.dp))
+
+                                            Column(
+                                                modifier = Modifier
+                                                    .width(35.dp)
+                                                    .fillMaxHeight(),
+                                                verticalArrangement = Arrangement.SpaceEvenly,
+                                                horizontalAlignment = Alignment.CenterHorizontally
+                                            ) {
+                                                MiniPlayerControl(
+                                                    icon = Icons.Default.Close,
+                                                    description = "Close mini player",
+                                                    onClick = {
+                                                        playerViewModel.closePlayer(
+                                                            currentFilterPathId
+                                                        )
+                                                    }
+                                                )
+
+                                                MiniPlayerControl(
+                                                    icon = Icons.Default.ArrowBack,
+                                                    description = "Back",
+                                                    onClick = {}
+                                                )
+
+                                                MiniPlayerControl(
+                                                    icon = Icons.Default.Cast,
+                                                    description = "Cast",
+                                                    onClick = {}
+                                                )
+
+                                                MiniPlayerControl(
+                                                    icon = Icons.Default.Share,
+                                                    description = "Share",
+                                                    onClick = {}
+                                                )
+
+                                                MiniPlayerControl(
+                                                    icon = Icons.Default.Language,
+                                                    description = "Internet",
+                                                    onClick = {}
+                                                )
+                                            }
+                                        } else if (isFullscreen) {
+                                            FullscreenControlsColumn(
+                                                onShare = { Toast.makeText(context, "Share - to be implemented", Toast.LENGTH_SHORT).show() },
+                                                onCast = { Toast.makeText(context, "Cast - to be implemented", Toast.LENGTH_SHORT).show() },
+                                                onBack = { Toast.makeText(context, "ReturnToThePlayerCard - to be implemented", Toast.LENGTH_SHORT).show() },
+                                                onPrevious = { playerViewModel.previousVideo() },
+                                                onNext = { playerViewModel.nextVideo() },
+                                                onClose = {
+                                                    playerViewModel.closePlayer(currentFilterPathId)
+                                                },
+                                                modifier = Modifier
+                                                    .fillMaxHeight()
+                                                    .background(MaterialTheme.colorScheme.background)
+                                                    .zIndex(10f)
+                                            )
+                                        }
                                     }
-
-
                                 }
                             }
                         }
@@ -785,6 +955,27 @@
                 contentDescription = "Play song",
                 tint = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.size(24.dp)
+            )
+        }
+    }
+
+    @Composable
+    private fun MiniPlayerControl(
+        icon: androidx.compose.ui.graphics.vector.ImageVector,
+        description: String,
+        onClick: () -> Unit
+    ) {
+        Box(
+            modifier = Modifier
+                .size(25.dp)
+                .clickable(onClick = onClick),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = description,
+                modifier = Modifier.size(22.dp),
+                tint = MaterialTheme.colorScheme.onSurface
             )
         }
     }
