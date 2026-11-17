@@ -1,20 +1,27 @@
 package com.example.jazzlibraryktroomjpcompose.ui.common.player
 
 import android.util.Log
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Cast
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.snapshotFlow
@@ -26,42 +33,40 @@ import com.example.jazzlibraryktroomjpcompose.presentation.player.PlayerViewMode
 
 @Composable
 fun FullscreenControlsColumn(
-    onShare: () -> Unit,
-    onCast: () -> Unit,
+    onClose: () -> Unit,
     onBack: () -> Unit,
+    onCast: () -> Unit,
+    onShare: () -> Unit,
+    toBrowser: () -> Unit,
     onPrevious: () -> Unit,
     onNext: () -> Unit,
-    onClose: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    @Composable
+    fun Control(icon: androidx.compose.ui.graphics.vector.ImageVector, desc: String, onClick: () -> Unit) {
+        Box(
+            modifier = Modifier.size(32.dp).clickable(onClick = onClick),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(icon, desc, Modifier.size(25.dp), tint = MaterialTheme.colorScheme.onSurface)
+        }
+    }
+
     Column(
-        modifier = modifier,
-        verticalArrangement = Arrangement.Center,
+        modifier = modifier
+            .width(36.dp)
+            .background(Color(0xFF262230)),
+        verticalArrangement = Arrangement.SpaceEvenly,
+
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        IconButton(onClick = onShare) {
-            Icon(Icons.Default.Share, contentDescription = "Share", tint = Color.White)
-        }
-        Spacer(modifier = Modifier.height(16.dp))
-        IconButton(onClick = onCast) {
-            Icon(Icons.Default.Cast, contentDescription = "Cast", tint = Color.White)
-        }
-        Spacer(modifier = Modifier.height(16.dp))
-        IconButton(onClick = onBack) {
-            Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = Color.White)
-        }
-        Spacer(modifier = Modifier.height(32.dp))
-        IconButton(onClick = onPrevious) {
-            Icon(Icons.Default.SkipPrevious, contentDescription = "Previous", tint = Color.White)
-        }
-        Spacer(modifier = Modifier.height(16.dp))
-        IconButton(onClick = onNext) {
-            Icon(Icons.Default.SkipNext, contentDescription = "Next", tint = Color.White)
-        }
-        Spacer(modifier = Modifier.height(16.dp))
-        IconButton(onClick = onClose) {
-            Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White)
-        }
+        Control(Icons.Default.Close, "Close", onClose)
+        Control(Icons.Default.ArrowBack, "Back", onBack)
+        Control(Icons.Default.Cast, "Cast", onCast)
+        Control(Icons.Default.Share, "Share", onShare)
+        Control(Icons.Default.Language, "Internet", toBrowser)
+        Control(Icons.Default.SkipPrevious, "Previous video", onPrevious)
+        Control(Icons.Default.SkipNext, "Next video", onNext)
     }
 }
 

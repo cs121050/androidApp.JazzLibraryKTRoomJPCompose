@@ -389,7 +389,7 @@ fun ArtistContent(
 
                         // Aw  (right, alphabetical toggle, default ON)
                         SortButton(
-                            label = "Aw",
+                            label = "abc",
                             selected = sortAlphabetically,
                             onClick = { sortAlphabetically = !sortAlphabetically }
                         )
