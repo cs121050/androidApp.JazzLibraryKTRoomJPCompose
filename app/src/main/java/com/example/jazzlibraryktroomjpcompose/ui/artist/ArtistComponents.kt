@@ -426,14 +426,18 @@ fun SingleArtistView(
 
     val listState = rememberLazyListState()
 
-    // Scroll to albums section (index 4) when triggered
-    LaunchedEffect(scrollToAlbumsTrigger.value) {
-        if (scrollToAlbumsTrigger.value > 0) {
-            delay(100)
-            listState.animateScrollToItem(4)   // albums section index
-            scrollToAlbumsTrigger.value = 0
-        }
-    }
+//    * ALBUMS SCROLL HIDDEN FOR v1.0.0 GOOGLE PLAY RELEASE
+//    * (Albums section removed from this screen; keep for future)
+//    * ============================================================
+//    *
+//    // Scroll to albums section (index 4) when triggered
+//    LaunchedEffect(scrollToAlbumsTrigger.value) {
+//        if (scrollToAlbumsTrigger.value > 0) {
+//            delay(100)
+//            listState.animateScrollToItem(4)   // albums section index
+//            scrollToAlbumsTrigger.value = 0
+//        }
+//    }
 
     LazyColumn(
         state = listState,
@@ -514,64 +518,72 @@ fun SingleArtistView(
             )
         }
 
-        // 4. Albums section (grid)
-        item {
-            Log.d("SingleArtistView", "AlbumsSection with size=${albumsDisplay.size}")
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(460.dp)
-            ) {
-                AlbumsSection(
-                    onAlbumSelected = { album ->
-                        val cardId = "album_${album.albumId}"
-                        if (playerUiState.activeCardId == cardId) {
-                            // Close the player
-                            playerViewModel.closePlayer(currentFilterPathId)
-                        } else {
-                            coroutineScope.launch {
-                                val songs = viewModel.loadAlbumSongsCached(album.albumId)
-                                if (songs.isNotEmpty()) {
-                                    val firstSong = songs.first()
-                                    val playlist =
-                                        songs.map { PlaylistItem.SongItem(it, album.albumId) }
-                                    firstSong.ytVideoId?.let { videoId ->
-                                        playerViewModel.loadVideo(
-                                            videoId = videoId,
-                                            cardId = "album_${album.albumId}",
-                                            currentFilterPath = currentFilterPath,
-                                            startInMiniMode = true,
-                                            mediaDbId = firstSong.songId,
-                                            filterPathId = currentFilterPathId,
-                                            typeOfMedia = 1,
-                                            playlist = playlist,
-                                            startIndex = 0
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    },
-                    currentMediaEntryTypeOfMedia = currentMediaEntryTypeOfMedia,
-                    albumsDisplay = albumsDisplay,
-                    currentFilterPathId = currentFilterPathId,
-                    minimiseMaximiseToggle = minimiseMaximiseToggle,
-                    showMainAndFeaturedChips = true,
-                    albumArtistsMap = albumArtistsMap,
-                    activeCardId = playerUiState.activeCardId,
-                    modifier = Modifier.fillMaxSize()
-                )
-            }
-        }
 
-        // Add spacer at bottom
-        item {
-            if(albumsDisplay.isNotEmpty())
-                Spacer(modifier = Modifier.height(220.dp))
-        }
-
-        // 5. No player card – removed
-        // (All playback logic has been moved to AlbumsListContent)
+//
+//        * ALBUMS SECTION HIDDEN FOR v1.0.0 GOOGLE PLAY RELEASE
+//        * ============================================================
+//        * Album grid inside the artist detail screen is disabled.
+//        * All album code is preserved. Restore by uncommenting.
+//        * ============================================================
+//        *
+//         4. Albums section (grid)
+//        item {
+//            Log.d("SingleArtistView", "AlbumsSection with size=${albumsDisplay.size}")
+//            Box(
+//                modifier = Modifier
+//                    .fillMaxWidth()
+//                    .height(460.dp)
+//            ) {
+//                AlbumsSection(
+//                    onAlbumSelected = { album ->
+//                        val cardId = "album_${album.albumId}"
+//                        if (playerUiState.activeCardId == cardId) {
+//                            // Close the player
+//                            playerViewModel.closePlayer(currentFilterPathId)
+//                        } else {
+//                            coroutineScope.launch {
+//                                val songs = viewModel.loadAlbumSongsCached(album.albumId)
+//                                if (songs.isNotEmpty()) {
+//                                    val firstSong = songs.first()
+//                                    val playlist =
+//                                        songs.map { PlaylistItem.SongItem(it, album.albumId) }
+//                                    firstSong.ytVideoId?.let { videoId ->
+//                                        playerViewModel.loadVideo(
+//                                            videoId = videoId,
+//                                            cardId = "album_${album.albumId}",
+//                                            currentFilterPath = currentFilterPath,
+//                                            startInMiniMode = true,
+//                                            mediaDbId = firstSong.songId,
+//                                            filterPathId = currentFilterPathId,
+//                                            typeOfMedia = 1,
+//                                            playlist = playlist,
+//                                            startIndex = 0
+//                                        )
+//                                    }
+//                                }
+//                            }
+//                        }
+//                    },
+//                    currentMediaEntryTypeOfMedia = currentMediaEntryTypeOfMedia,
+//                    albumsDisplay = albumsDisplay,
+//                    currentFilterPathId = currentFilterPathId,
+//                    minimiseMaximiseToggle = minimiseMaximiseToggle,
+//                    showMainAndFeaturedChips = true,
+//                    albumArtistsMap = albumArtistsMap,
+//                    activeCardId = playerUiState.activeCardId,
+//                    modifier = Modifier.fillMaxSize()
+//                )
+//            }
+//        }
+//
+//        // Add spacer at bottom if the album section is presented
+//        item {
+//            if(albumsDisplay.isNotEmpty())
+//                Spacer(modifier = Modifier.height(220.dp))
+//        }
+//
+//         5. No player card – removed - usedto have a player like the one dedicated in al;bum tab.
+//         (All playback logic has been moved to AlbumsListContent)
     }
 
     // Fullscreen image dialog
