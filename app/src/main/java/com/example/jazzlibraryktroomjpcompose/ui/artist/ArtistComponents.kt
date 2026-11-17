@@ -99,7 +99,10 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.coroutines.cancellation.CancellationException
-
+import android.widget.Toast
+import androidx.compose.foundation.border
+import com.example.jazzlibraryktroomjpcompose.ui.common.components.AdaptivePageIndicator
+import com.example.jazzlibraryktroomjpcompose.ui.common.components.LineIndicator
 
 @Composable
 fun ArtistContent(
@@ -239,14 +242,25 @@ fun ArtistContent(
         return
     }
 
-    // More than one artist: show grid pager (unchanged logic, but pass onArtistSelected to cards)
+    // More than one artist: show grid pager inside a card
     val configuration = LocalConfiguration.current
     val screenWidthDp = configuration.screenWidthDp.dp
-    val cardWidth = (screenWidthDp - 32.dp - 8.dp) / 2
+    // Card fills full width, has 12.dp internal padding each side
+    // 2 cards per row with 8.dp gap: (W - 24 - 8) / 2  ==  (W - 32) / 2
+    val cardWidth = (screenWidthDp - 32.dp) / 2
     val cardHeight = 80.dp
 
-    var useAlphabetical by remember { mutableStateOf(false) }
-    val artists = if (useAlphabetical) artistsBase else artistsShuffled
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
+
+    // ---- NEW sort state ----
+    // Aw = alphabetical toggle (default ON, since we want alphabetical by default)
+    var sortAlphabetically by remember { mutableStateOf(true) }
+    // y = year sort cycle: 0 = off, 1 = asc, 2 = desc  (only visual for now)
+    var yearSortState by remember { mutableIntStateOf(0) }
+
+    // Always pick the appropriate source list
+    val artists = if (sortAlphabetically) artistsBase else artistsShuffled
     val pages = remember(artists) { artists.chunked(8) }
 
     val pagerState = rememberPagerState(
@@ -254,20 +268,11 @@ fun ArtistContent(
         pageCount = { pages.size }
     )
 
-    LaunchedEffect(artistsShuffled) {
-        useAlphabetical = false
+    // Reset to first page whenever the displayed list changes
+    // (refresh, or toggling sort)
+    LaunchedEffect(artists) {
         pagerState.scrollToPage(0)
     }
-
-    var targetPage by remember { mutableIntStateOf(-1) }
-    LaunchedEffect(useAlphabetical, targetPage) {
-        if (useAlphabetical && targetPage >= 0 && targetPage < pages.size) {
-            pagerState.scrollToPage(targetPage)
-            targetPage = -1
-        }
-    }
-
-    val coroutineScope = rememberCoroutineScope()
 
     LazyColumn(
         state = listState,
@@ -275,31 +280,35 @@ fun ArtistContent(
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         item {
-            Column(
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+                shape = RoundedCornerShape(12.dp)
             ) {
-                HorizontalPager(
-                    state = pagerState,
-                    modifier = Modifier.fillMaxWidth(),
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-                    pageSpacing = 16.dp
-                ) { page ->
-                    val pageArtists = pages[page]
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.TopStart
-                    ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    // ---- Paged artist grid ----
+                    HorizontalPager(
+                        state = pagerState,
+                        modifier = Modifier.fillMaxWidth(),
+                        contentPadding = PaddingValues(horizontal = 0.dp, vertical = 0.dp),
+                        pageSpacing = 16.dp
+                    ) { page ->
+                        val pageArtists = pages[page]
                         Column(
-                            modifier = Modifier.height(cardHeight * 4 + 8.dp * 3),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(cardHeight * 4 + 8.dp * 3),
                             verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             for (row in 0 until 4) {
                                 val start = row * 2
                                 val rowArtists = pageArtists.slice(
-                                    start until minOf(
-                                        start + 2,
-                                        pageArtists.size
-                                    )
+                                    start until minOf(start + 2, pageArtists.size)
                                 )
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
@@ -312,7 +321,7 @@ fun ArtistContent(
                                                 modifier = Modifier
                                                     .width(cardWidth)
                                                     .height(cardHeight),
-                                                onClick = { onArtistSelected(artist) } // pass click handler
+                                                onClick = { onArtistSelected(artist) }
                                             )
                                         }
                                     }
@@ -323,31 +332,75 @@ fun ArtistContent(
                             }
                         }
                     }
-                }
 
-                if (pages.size > 1) {
-                    FastScrollingDotsRow(
-                        pageCount = pages.size,
-                        currentPage = pagerState.currentPage,
-                        onSwitchToAlphabeticalAndScrollTo = { pageIndex ->
-                            coroutineScope.launch {
-                                if (!useAlphabetical) {
-                                    useAlphabetical = true
-                                    targetPage = pageIndex
-                                } else {
-                                    pagerState.scrollToPage(pageIndex)
+                    // ---- Dots + sort buttons (swap order: y then Aw) ----
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier.weight(1f),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            AdaptivePageIndicator(
+                                pageCount = pages.size,
+                                currentPage = pagerState.currentPage,
+                                onPageSelected = { pageIndex ->
+                                    coroutineScope.launch {
+                                        pagerState.animateScrollToPage(pageIndex)
+                                    }
+                                }
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.width(8.dp))
+
+                        // y  (left, 3-state cycle, unchanged)
+                        SortButton(
+                            label = when (yearSortState) {
+                                0 -> "y"
+                                1 -> "y\u2191"
+                                2 -> "y\u2193"
+                                else -> "y"
+                            },
+                            selected = yearSortState != 0,
+                            onClick = {
+                                val newState = (yearSortState + 1) % 3
+                                yearSortState = newState
+                                when (newState) {
+                                    1 -> Toast.makeText(
+                                        context,
+                                        "asc year short - to be implemented",
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                    2 -> Toast.makeText(
+                                        context,
+                                        "desc year short - to be implemented",
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                    // 0 → back to off, no toast
                                 }
                             }
-                        },
-                        modifier = Modifier.padding(horizontal = 8.dp)
-                    )
+                        )
+
+                        Spacer(modifier = Modifier.width(4.dp))
+
+                        // Aw  (right, alphabetical toggle, default ON)
+                        SortButton(
+                            label = "Aw",
+                            selected = sortAlphabetically,
+                            onClick = { sortAlphabetically = !sortAlphabetically }
+                        )
+                    }
                 }
             }
         }
     }
 
     PlayerCardVisibilityMonitor(
-        listState = listState,   // you need to get the listState from the LazyColumn
+        listState = listState,
         activeCardId = playerUiState.activeCardId,
         playerViewModel = playerViewModel
     )
@@ -927,5 +980,45 @@ private fun ScrollableTextPage(
                 }
             )
         }
+    }
+}
+
+@Composable
+private fun SortButton(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val shape = RoundedCornerShape(6.dp)
+    val bgColor = if (selected)
+        MaterialTheme.colorScheme.primary
+    else
+        MaterialTheme.colorScheme.surface
+    val borderColor = if (selected)
+        MaterialTheme.colorScheme.primary
+    else
+        MaterialTheme.colorScheme.outline
+    val textColor = if (selected)
+        MaterialTheme.colorScheme.onPrimary
+    else
+        MaterialTheme.colorScheme.onSurface
+
+    Box(
+        modifier = modifier
+            .height(28.dp)
+            .clip(shape)
+            .background(bgColor)
+            .border(width = 1.dp, color = borderColor, shape = shape)
+            .clickable { onClick() }
+            .padding(horizontal = 10.dp, vertical = 4.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.Bold,
+            color = textColor
+        )
     }
 }
