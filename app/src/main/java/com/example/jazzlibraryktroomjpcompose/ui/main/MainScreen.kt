@@ -109,11 +109,43 @@
     import androidx.compose.runtime.snapshotFlow
     import kotlinx.coroutines.flow.first
     import kotlinx.coroutines.withTimeoutOrNull
+    import android.content.ActivityNotFoundException
+    import android.content.Intent
+    import android.net.Uri
+
+
+
 
     enum class AlbumGridTab { MAIN, FEATURED }
     enum class SortDirection { ASC, DESC }
 
     private const val TAG = "AlbumGridView"
+
+
+    private fun openYoutubeInBrowser(context: android.content.Context, videoId: String?) {
+        if (videoId.isNullOrBlank()) {
+            Toast.makeText(context, "No video is playing", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val intent = Intent(
+            Intent.ACTION_VIEW,
+            Uri.parse("https://www.youtube.com/watch?v=$videoId")
+        ).apply {
+            // Restrict to browsers / link-handling apps, so the OS dialog shows
+            // relevant suggestions rather than unrelated VIEW handlers.
+            addCategory(Intent.CATEGORY_BROWSABLE)
+            if (context !is Activity) {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+        }
+
+        try {
+            context.startActivity(intent)
+        } catch (e: ActivityNotFoundException) {
+            Toast.makeText(context, "No app available to open the link", Toast.LENGTH_SHORT).show()
+        }
+    }
 
     @OptIn(ExperimentalMaterial3Api::class)
     @Composable
@@ -891,7 +923,7 @@
                                                 MiniPlayerControl(
                                                     icon = Icons.Default.Language,
                                                     description = "Browser",
-                                                    onClick = {Toast.makeText(context, "LoadToBrowser - to be implemented", Toast.LENGTH_SHORT).show() }
+                                                    onClick = { openYoutubeInBrowser(context, playerStableState.currentVideoId) }
                                                 )
                                             }
                                         } else if (isFullscreen) {
@@ -900,7 +932,7 @@
                                                 onBack = { Toast.makeText(context, "To Be Disabled in fullscreen", Toast.LENGTH_SHORT).show()  },
                                                 onCast = { Toast.makeText(context, "Cast - to be implemented", Toast.LENGTH_SHORT).show() },
                                                 onShare = { Toast.makeText(context, "Share - to be implemented", Toast.LENGTH_SHORT).show() },
-                                                toBrowser = { Toast.makeText(context, "LoadToBrowser - to be implemented", Toast.LENGTH_SHORT).show() },
+                                                toBrowser = { openYoutubeInBrowser(context, playerStableState.currentVideoId) },
                                                 onPrevious = { playerViewModel.previousVideo() },
                                                 onNext = { playerViewModel.nextVideo() },
                                                 modifier = Modifier
