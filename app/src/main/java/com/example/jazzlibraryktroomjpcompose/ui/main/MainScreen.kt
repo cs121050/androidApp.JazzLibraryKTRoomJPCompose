@@ -102,6 +102,7 @@
     import kotlinx.coroutines.delay
     import androidx.compose.animation.core.VectorConverter
     import androidx.compose.animation.core.animate
+    import androidx.compose.foundation.shape.AbsoluteRoundedCornerShape
     import androidx.compose.ui.draw.clip
     import kotlinx.coroutines.Job
 
@@ -708,7 +709,12 @@
                                             miniPlayerHeight = with(density) { coordinates.size.height.toDp() }
                                         },
                                     shape = if (isMiniPlayer) {
-                                        RoundedCornerShape(12.dp)
+                                        AbsoluteRoundedCornerShape(
+                                            topLeft = 0.dp,
+                                            topRight = 12.dp,
+                                            bottomRight = 12.dp,
+                                            bottomLeft = 0.dp
+                                        )
                                     } else {
                                         RectangleShape
                                     },
@@ -730,7 +736,7 @@
                                                 if (isMiniPlayer) {
                                                     Modifier.padding(
                                                         horizontal = 8.dp,
-                                                        vertical = 8.dp
+                                                        vertical = 4.dp
                                                     )
                                                 } else {
                                                     Modifier
@@ -797,25 +803,25 @@
                                                 MiniPlayerControl(
                                                     icon = Icons.Default.ArrowBack,
                                                     description = "Back",
-                                                    onClick = {}
+                                                    onClick = {Toast.makeText(context, "ReturnToThePlayerCard - to be implemented", Toast.LENGTH_SHORT).show() }
                                                 )
 
                                                 MiniPlayerControl(
                                                     icon = Icons.Default.Cast,
                                                     description = "Cast",
-                                                    onClick = {}
+                                                    onClick = {  Toast.makeText(context, "Cast - to be implemented", Toast.LENGTH_SHORT).show() }
                                                 )
 
                                                 MiniPlayerControl(
                                                     icon = Icons.Default.Share,
                                                     description = "Share",
-                                                    onClick = {}
+                                                    onClick = { Toast.makeText(context, "Share - to be implemented", Toast.LENGTH_SHORT).show() }
                                                 )
 
                                                 MiniPlayerControl(
                                                     icon = Icons.Default.Language,
                                                     description = "Browser",
-                                                    onClick = {}
+                                                    onClick = {Toast.makeText(context, "LoadToBrowser - to be implemented", Toast.LENGTH_SHORT).show() }
                                                 )
                                             }
                                         } else if (isFullscreen) {
