@@ -96,6 +96,7 @@ fun VideoStatsRow(
     onTabSelected: (MainTab) -> Unit,
     onVideoTabClick: () -> Unit,
     onAlbumTabClick: () -> Unit,
+    onReturnToPlayingCard: () -> Unit = {},
     viewModel: MainViewModel = hiltViewModel(),
     playerViewModel: PlayerViewModel = hiltViewModel()
 ) {
@@ -318,10 +319,7 @@ fun VideoStatsRow(
                         }) {
                             Icon(Icons.Default.Cast, contentDescription = "Cast")
                         }
-                        IconButton(onClick = {
-                            Toast.makeText(context, "Back - to be implemented", Toast.LENGTH_SHORT)
-                                .show()
-                        }) {
+                        IconButton(onClick = { onReturnToPlayingCard() }) {
                             Icon(Icons.Default.ArrowBack, contentDescription = "Back")
                         }
                     }

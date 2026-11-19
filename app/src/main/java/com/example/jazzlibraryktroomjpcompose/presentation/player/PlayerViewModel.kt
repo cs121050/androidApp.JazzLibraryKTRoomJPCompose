@@ -192,7 +192,8 @@
             filterPathId: Int?,
             typeOfMedia: Int?,
             playlist: List<PlaylistItem>? = null,
-            startIndex: Int = 0
+            startIndex: Int = 0,
+            filterPathAtLoad: List<FilterPath>? = null
         ) {
 
             playerInstanceCounter++
@@ -214,6 +215,9 @@
                     playlist = playlist,
                     currentIndex = startIndex,
                     originalFilterPathId = filterPathId,
+                    originalFilterPath = filterPathAtLoad
+                        ?: currentFilterPath
+                        ?: emptyList(),
                     typeOfMedia = typeOfMedia ?: 0,
                     activeCardId = cardId
                 )
@@ -353,7 +357,8 @@
                         filterPathId = session.originalFilterPathId,
                         typeOfMedia = 0,
                         playlist = session.playlist,
-                        startIndex = newIndex
+                        startIndex = newIndex,
+                        filterPathAtLoad = session.originalFilterPath
                     )
                 }
                 is PlaylistItem.SongItem -> {
@@ -368,7 +373,8 @@
                         filterPathId = session.originalFilterPathId,
                         typeOfMedia = 1,
                         playlist = session.playlist,
-                        startIndex = newIndex
+                        startIndex = newIndex,
+                        filterPathAtLoad = session.originalFilterPath
                     )
                 }
             }
@@ -401,7 +407,8 @@
                         filterPathId = session.originalFilterPathId,
                         typeOfMedia = 0,
                         playlist = session.playlist,
-                        startIndex = newIndex
+                        startIndex = newIndex,
+                        filterPathAtLoad = session.originalFilterPath
                     )
                 }
                 is PlaylistItem.SongItem -> {
@@ -416,7 +423,8 @@
                         filterPathId = session.originalFilterPathId,
                         typeOfMedia = 1,
                         playlist = session.playlist,
-                        startIndex = newIndex
+                        startIndex = newIndex,
+                        filterPathAtLoad = session.originalFilterPath
                     )
                 }
             }
