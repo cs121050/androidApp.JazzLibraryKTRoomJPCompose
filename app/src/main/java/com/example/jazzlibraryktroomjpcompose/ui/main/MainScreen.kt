@@ -135,8 +135,9 @@
         val isRefreshing by viewModel.isRefreshing.collectAsState()
 
         val playerStableState by playerViewModel.stableState.collectAsState()
-        var activeCardRelativePosition by remember { mutableStateOf<IntOffset?>(null) }
+        var activeCardRelativePosition by remember { mutableStateOf(IntOffset.Zero) }
         var activeCardSize by remember { mutableStateOf<IntSize?>(null) }
+
         var contentBoxRootPosition by remember { mutableStateOf(IntOffset.Zero) }
 
 
@@ -205,7 +206,7 @@
 
         LaunchedEffect(Unit) {
             playerViewModel.clearBoundsEvent.collect {
-                activeCardRelativePosition = null
+                activeCardRelativePosition = IntOffset.Zero
                 activeCardSize = null
             }
         }
@@ -458,9 +459,7 @@
                                             onRefresh = { viewModel.safeRefreshDataFromAPI() },
                                             onActiveCardBoundsChanged = { cardId, rootPosition, size ->
                                                 if (cardId == playerStableState.activeCardId) {
-                                                    val relativePos =
-                                                        rootPosition - contentBoxRootPosition
-                                                    activeCardRelativePosition = relativePos
+                                                    activeCardRelativePosition = rootPosition - contentBoxRootPosition
                                                     activeCardSize = size
                                                 }
                                             },
@@ -565,7 +564,7 @@
                                         currentFilterPathId
                                     ) {
                                         val horizontalPaddingPx = with(density) { 8.dp.toPx() }
-                                        val verticalPaddingPx = with(density) { 3.dp.toPx() }
+                                        val verticalPaddingPx = with(density) { 8.dp.toPx() }
                                         val controlsWidthPx = with(density) { 40.dp.toPx() }
                                         val controlsGapPx = with(density) { 4.dp.toPx() }
 
@@ -684,20 +683,21 @@
                                         .zIndex(5f)
 
                                     else -> {
-                                        // Attached to active card
-                                        activeCardRelativePosition?.let { pos ->
-                                            activeCardSize?.let { size ->
-                                                Modifier
-                                                    .size(
-                                                        width = with(density) { size.width.toDp() },
-                                                        height = with(density) { size.height.toDp() }
-                                                    )
-                                                    .graphicsLayer {
-                                                        translationX = pos.x.toFloat()
-                                                        translationY = pos.y.toFloat()
-                                                    }
-                                                    .zIndex(5f)
-                                            }
+                                        // Attach the persistent player overlay to the active card.
+                                        activeCardSize?.let { size ->
+                                            Modifier
+                                                .size(
+                                                    width = with(density) { size.width.toDp() },
+                                                    height = with(density) { size.height.toDp() }
+                                                )
+                                                .graphicsLayer {
+                                                    // Read position here so position changes update the layer,
+                                                    // rather than recomposing SmartYoutubePlayerHost.
+                                                    val position = activeCardRelativePosition
+                                                    translationX = position.x.toFloat()
+                                                    translationY = position.y.toFloat()
+                                                }
+                                                .zIndex(5f)
                                         } ?: Modifier.size(0.dp)
                                     }
                                 }
@@ -714,7 +714,7 @@
                                     },
                                     colors = CardDefaults.cardColors(
                                         containerColor = if (isMiniPlayer) {
-                                            Color(0xFF262230) // Set your desired mini player card color here
+                                            MaterialTheme.colorScheme.surfaceVariant //Color(0xFF262230) // Set your desired mini player card color here
                                         } else {
                                             Color.Transparent
                                         }
@@ -730,7 +730,7 @@
                                                 if (isMiniPlayer) {
                                                     Modifier.padding(
                                                         horizontal = 8.dp,
-                                                        vertical = 3.dp
+                                                        vertical = 8.dp
                                                     )
                                                 } else {
                                                     Modifier
