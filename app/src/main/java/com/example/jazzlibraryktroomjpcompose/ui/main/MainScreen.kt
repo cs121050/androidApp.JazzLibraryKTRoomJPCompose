@@ -105,6 +105,10 @@
     import androidx.compose.foundation.shape.AbsoluteRoundedCornerShape
     import androidx.compose.ui.draw.clip
     import kotlinx.coroutines.Job
+    import android.content.pm.ActivityInfo
+    import androidx.compose.runtime.snapshotFlow
+    import kotlinx.coroutines.flow.first
+    import kotlinx.coroutines.withTimeoutOrNull
 
     enum class AlbumGridTab { MAIN, FEATURED }
     enum class SortDirection { ASC, DESC }
@@ -325,6 +329,70 @@
                     }
                 }
 
+
+                fun returnToPlayingCard() {
+
+                    // 2) Videos tab (both VMs so nothing races on the pager)
+                    viewModel.setCurrentTab(MainTab.VIDEOS)
+                    playerViewModel.setCurrentTab(MainTab.VIDEOS)
+
+                    val activeYoutubeId = playerStableState.currentVideoId ?: return
+                    val session = playerViewModel.playerSession.value
+
+                    // 3) If the current filter path differs from the one that summoned the card, reset it
+                    if (session != null) {
+                        val currentKey  = filterState.currentFilterPath.map { it.categoryId to it.entityId }
+                        val originalKey = session.originalFilterPath.map    { it.categoryId to it.entityId }
+
+                        if (currentKey != originalKey) {
+                            // Remove chips not present in the original path  → isSelected = false
+                            filterState.currentFilterPath.toList().forEach { seg ->
+                                val keep = session.originalFilterPath.any {
+                                    it.categoryId == seg.categoryId && it.entityId == seg.entityId
+                                }
+                                if (!keep) {
+                                    viewModel.handleChipSelection(
+                                        seg.categoryId,
+                                        seg.entityId,
+                                        seg.entityName,
+                                        isSelected = false        // ← was: addFilter = false
+                                    )
+                                }
+                            }
+                            // Add chips from the original path that are missing now  → isSelected = true
+                            session.originalFilterPath.forEach { seg ->
+                                val already = filterState.currentFilterPath.any {
+                                    it.categoryId == seg.categoryId && it.entityId == seg.entityId
+                                }
+                                if (!already) {
+                                    viewModel.handleChipSelection(
+                                        seg.categoryId,
+                                        seg.entityId,
+                                        seg.entityName,
+                                        isSelected = true         // ← was: addFilter = true
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    // 4) Scroll once the (restored) list actually contains the card
+                    coroutineScope.launch {
+                        val index = withTimeoutOrNull(5_000L) {
+                            snapshotFlow {
+                                val list = if (filterState.currentFilterPath.isEmpty())
+                                    uiState.videos else uiState.filteredVideos
+                                list.indexOfFirst { extractYouTubeVideoId(it.path) == activeYoutubeId }
+                            }.first { it >= 0 }
+                        }
+                        if (index != null && index >= 0) {
+                            listState.animateScrollToItem(index)
+                        }
+                    }
+                }
+
+
+
                 /* v1.0.0: Albums hidden — scrollToPlayingAlbum unused. Restore when Albums tab returns. */
                 // Scroll to the currently playing album (if any)
 //                fun scrollToPlayingAlbum() {
@@ -437,7 +505,8 @@
                                     },
                                     hideSearchDropdown = hideSearchDropdown,
                                     onDropdownVisibilityChanged = { isDropdownOpen = it },
-                                    onSearchBarClicked = { hideSearchDropdown = false }
+                                    onSearchBarClicked = { hideSearchDropdown = false },
+                                    onReturnToPlayingCard = { returnToPlayingCard() }
                                 )
                             }
 
@@ -457,6 +526,7 @@
                                     //depending of witch tab of the toolbarbox is selected give me the relevant screen
                                     when (currentTab) {
                                         MainTab.VIDEOS -> VideoListContent(
+                                            listState = listState,
                                             onRefresh = { viewModel.safeRefreshDataFromAPI() },
                                             onActiveCardBoundsChanged = { cardId, rootPosition, size ->
                                                 if (cardId == playerStableState.activeCardId) {
@@ -803,7 +873,7 @@
                                                 MiniPlayerControl(
                                                     icon = Icons.Default.ArrowBack,
                                                     description = "Back",
-                                                    onClick = {Toast.makeText(context, "ReturnToThePlayerCard - to be implemented", Toast.LENGTH_SHORT).show() }
+                                                    onClick = { returnToPlayingCard() }
                                                 )
 
                                                 MiniPlayerControl(
@@ -827,7 +897,7 @@
                                         } else if (isFullscreen) {
                                             FullscreenControlsColumn(
                                                 onClose = { playerViewModel.closePlayer(currentFilterPathId) },
-                                                onBack = { Toast.makeText(context, "ReturnToThePlayerCard - to be implemented", Toast.LENGTH_SHORT).show() },
+                                                onBack = { Toast.makeText(context, "To Be Disabled in fullscreen", Toast.LENGTH_SHORT).show()  },
                                                 onCast = { Toast.makeText(context, "Cast - to be implemented", Toast.LENGTH_SHORT).show() },
                                                 onShare = { Toast.makeText(context, "Share - to be implemented", Toast.LENGTH_SHORT).show() },
                                                 toBrowser = { Toast.makeText(context, "LoadToBrowser - to be implemented", Toast.LENGTH_SHORT).show() },
@@ -933,6 +1003,7 @@
         onVideoTabClick: () -> Unit,
         onAlbumTabClick: () -> Unit,
         onExpandToolbar: () -> Unit,
+        onReturnToPlayingCard: () -> Unit
     ) {
 
         SmartSearchBar(
@@ -949,6 +1020,7 @@
             onVideoTabClick = onVideoTabClick,
             onAlbumTabClick = onAlbumTabClick,
             onTabSelected = onTabSelected,
+            onReturnToPlayingCard = onReturnToPlayingCard,
             modifier = Modifier.fillMaxWidth()
         )
     }
