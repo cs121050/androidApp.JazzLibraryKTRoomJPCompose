@@ -846,10 +846,7 @@ fun WikiInfoCard(
             .heightIn(min = minHeight, max = maxHeight)
             .padding(horizontal = 16.dp)
             .nestedScroll(nestedScrollConnection),
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant
-        )
+        shape = RoundedCornerShape(12.dp)
     ) {
         CompositionLocalProvider(LocalScrollLock provides scrollLockState) {
             Column(
