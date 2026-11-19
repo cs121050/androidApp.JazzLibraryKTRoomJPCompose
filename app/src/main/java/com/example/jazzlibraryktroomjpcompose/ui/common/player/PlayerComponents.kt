@@ -55,7 +55,7 @@ fun FullscreenControlsColumn(
     Column(
         modifier = modifier
             .width(36.dp)
-            .background(MaterialTheme.colorScheme.onSurface),
+            .background(MaterialTheme.colorScheme.surfaceVariant),
         verticalArrangement = Arrangement.SpaceEvenly,
 
         horizontalAlignment = Alignment.CenterHorizontally
