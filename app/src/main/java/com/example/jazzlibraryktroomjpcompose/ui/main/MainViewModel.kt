@@ -35,6 +35,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+import kotlinx.coroutines.withTimeoutOrNull
 
 @HiltViewModel
 class MainViewModel @Inject constructor(
@@ -949,6 +950,110 @@ class MainViewModel @Inject constructor(
             delay(300)
             _isRefreshing.value = false
         }
+    }
+
+
+
+    /**
+     * Searches older filter paths until it finds one whose video list contains
+     * the video currently playing. Restores that path and returns the video's
+     * index in the list shown by the Videos tab.
+     *
+     * Does not change the player's playlist or restart playback.
+     */
+    suspend fun findPreviousFilterPathContainingVideo(videoId: String): Int? {
+        val historyRows = filterPathRepository.getAllHistoryEntries()
+        val rowsByPath = historyRows.groupBy { it.filterPathId }
+
+        // Sort from newest to oldest, then start with the entry immediately
+        // older than the currently selected filter path.
+        val orderedPaths = rowsByPath.mapNotNull { (pathId, rows) ->
+            val firstRow = rows.firstOrNull() ?: return@mapNotNull null
+            Triple(pathId, firstRow.timestamp, firstRow.serialNumber)
+        }.sortedByDescending { it.second }
+
+        val currentPathId = _currentFilterPathId.value
+        val currentIndex = orderedPaths.indexOfFirst { it.first == currentPathId }
+
+        val olderPaths = if (currentIndex >= 0) {
+            orderedPaths.drop(currentIndex + 1)
+        } else {
+            // Fallback if the selected filter path isn't in the history rows.
+            orderedPaths.filter { it.second < currentStateTimestamp }
+        }
+
+        for ((pathId, timestamp, serialNumber) in olderPaths) {
+            val path = enrichFilterPathNames(
+                FilterPathMapper.deserialize(serialNumber)
+            )
+
+            // Check the candidate before changing the displayed filter path.
+            val candidateData = withTimeoutOrNull(5_000L) {
+                filterOrchestrator.getFilteredDataFlow(path).first()
+            } ?: continue
+
+            val containsPlayingVideo = candidateData.videos.any { video ->
+                extractYouTubeVideoId(video.path) == videoId
+            }
+
+            if (!containsPlayingVideo) continue
+
+            // This is the first older path that contains the currently playing video.
+            _currentFilterPath.value = path
+            _currentFilterPathId.value = pathId
+            currentStateTimestamp = timestamp
+
+            _filterState.update {
+                it.copy(
+                    currentFilterPath = path,
+                    isFiltering = true
+                )
+            }
+
+            applyFiltersFromPath(path)
+
+            // Wait until the UI has applied this path and its list contains the video.
+            val matchingIndex = withTimeoutOrNull(5_000L) {
+                combine(_filterState, _uiState) { filterState, uiState ->
+                    val expectedKey = path.map { it.categoryId to it.entityId }
+                    val displayedKey = filterState.currentFilterPath.map {
+                        it.categoryId to it.entityId
+                    }
+
+                    val videos = if (path.isEmpty()) {
+                        uiState.videos
+                    } else {
+                        uiState.filteredVideos
+                    }
+
+                    if (filterState.isFiltering || displayedKey != expectedKey) {
+                        -1
+                    } else {
+                        videos.indexOfFirst { video ->
+                            extractYouTubeVideoId(video.path) == videoId
+                        }
+                    }
+                }.first { index -> index >= 0 }
+            }
+
+            if (matchingIndex != null) {
+                return matchingIndex
+            }
+
+            // If the list did not finish loading as expected, continue searching
+            // older paths instead of requiring another tap on Back.
+        }
+
+        return null
+    }
+
+    /**
+     * Extracts the YouTube ID from a video URL for matching against the player.
+     */
+    private fun extractYouTubeVideoId(url: String): String? {
+        val pattern =
+            "(?:youtube\\.com/watch\\?v=|youtu\\.be/|youtube\\.com/embed/)([a-zA-Z0-9_-]{11})"
+        return Regex(pattern).find(url)?.groupValues?.getOrNull(1)
     }
 
 }

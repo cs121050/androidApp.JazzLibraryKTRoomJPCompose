@@ -101,6 +101,14 @@ class FilterPathRepositoryImpl @Inject constructor(
         return database.filterPathDao().getLatestFilterPath()?.timestamp
     }
 
+    override suspend fun getFilterPathWithMeta(id: Int): FilterPathWithMeta? {
+        val entity = database.filterPathDao().getFilterPathById(id) ?: return null
 
+        return FilterPathWithMeta(
+            id = entity.id,
+            filters = FilterPathMapper.toDomain(entity),
+            timestamp = entity.timestamp
+        )
+    }
 
 }

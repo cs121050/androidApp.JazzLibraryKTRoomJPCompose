@@ -123,28 +123,7 @@
 
 
     private fun openYoutubeInBrowser(context: android.content.Context, videoId: String?) {
-        if (videoId.isNullOrBlank()) {
-            Toast.makeText(context, "No video is playing", Toast.LENGTH_SHORT).show()
-            return
-        }
-
-        val intent = Intent(
-            Intent.ACTION_VIEW,
-            Uri.parse("https://www.youtube.com/watch?v=$videoId")
-        ).apply {
-            // Restrict to browsers / link-handling apps, so the OS dialog shows
-            // relevant suggestions rather than unrelated VIEW handlers.
-            addCategory(Intent.CATEGORY_BROWSABLE)
-            if (context !is Activity) {
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            }
-        }
-
-        try {
-            context.startActivity(intent)
-        } catch (e: ActivityNotFoundException) {
-            Toast.makeText(context, "No app available to open the link", Toast.LENGTH_SHORT).show()
-        }
+        openYouTubeInBrowser(context, videoId)
     }
 
     @OptIn(ExperimentalMaterial3Api::class)
@@ -363,62 +342,29 @@
 
 
                 fun returnToPlayingCard() {
+                    val playingVideoId = playerStableState.currentVideoId
 
-                    // 2) Videos tab (both VMs so nothing races on the pager)
+                    if (playingVideoId.isNullOrBlank()) {
+                        Toast.makeText(context, "No video is playing", Toast.LENGTH_SHORT).show()
+                        return
+                    }
+
+                    // Return to the Videos tab before searching and scrolling its list.
                     viewModel.setCurrentTab(MainTab.VIDEOS)
                     playerViewModel.setCurrentTab(MainTab.VIDEOS)
 
-                    val activeYoutubeId = playerStableState.currentVideoId ?: return
-                    val session = playerViewModel.playerSession.value
-
-                    // 3) If the current filter path differs from the one that summoned the card, reset it
-                    if (session != null) {
-                        val currentKey  = filterState.currentFilterPath.map { it.categoryId to it.entityId }
-                        val originalKey = session.originalFilterPath.map    { it.categoryId to it.entityId }
-
-                        if (currentKey != originalKey) {
-                            // Remove chips not present in the original path  → isSelected = false
-                            filterState.currentFilterPath.toList().forEach { seg ->
-                                val keep = session.originalFilterPath.any {
-                                    it.categoryId == seg.categoryId && it.entityId == seg.entityId
-                                }
-                                if (!keep) {
-                                    viewModel.handleChipSelection(
-                                        seg.categoryId,
-                                        seg.entityId,
-                                        seg.entityName,
-                                        isSelected = false        // ← was: addFilter = false
-                                    )
-                                }
-                            }
-                            // Add chips from the original path that are missing now  → isSelected = true
-                            session.originalFilterPath.forEach { seg ->
-                                val already = filterState.currentFilterPath.any {
-                                    it.categoryId == seg.categoryId && it.entityId == seg.entityId
-                                }
-                                if (!already) {
-                                    viewModel.handleChipSelection(
-                                        seg.categoryId,
-                                        seg.entityId,
-                                        seg.entityName,
-                                        isSelected = true         // ← was: addFilter = true
-                                    )
-                                }
-                            }
-                        }
-                    }
-
-                    // 4) Scroll once the (restored) list actually contains the card
                     coroutineScope.launch {
-                        val index = withTimeoutOrNull(5_000L) {
-                            snapshotFlow {
-                                val list = if (filterState.currentFilterPath.isEmpty())
-                                    uiState.videos else uiState.filteredVideos
-                                list.indexOfFirst { extractYouTubeVideoId(it.path) == activeYoutubeId }
-                            }.first { it >= 0 }
-                        }
-                        if (index != null && index >= 0) {
-                            listState.animateScrollToItem(index)
+                        val videoIndex =
+                            viewModel.findPreviousFilterPathContainingVideo(playingVideoId)
+
+                        if (videoIndex != null) {
+                            listState.animateScrollToItem(videoIndex)
+                        } else {
+                            Toast.makeText(
+                                context,
+                                "No previous filter path contains the playing video",
+                                Toast.LENGTH_SHORT
+                            ).show()
                         }
                     }
                 }
@@ -911,13 +857,17 @@
                                                 MiniPlayerControl(
                                                     icon = Icons.Default.Cast,
                                                     description = "Cast",
-                                                    onClick = {  Toast.makeText(context, "Cast - to be implemented", Toast.LENGTH_SHORT).show() }
+                                                    onClick = {
+                                                        openSystemCastSettings(context)
+                                                    }
                                                 )
 
                                                 MiniPlayerControl(
                                                     icon = Icons.Default.Share,
                                                     description = "Share",
-                                                    onClick = { Toast.makeText(context, "Share - to be implemented", Toast.LENGTH_SHORT).show() }
+                                                    onClick = {
+                                                        shareYouTubeVideo(context, playerStableState.currentVideoId)
+                                                    }
                                                 )
 
                                                 MiniPlayerControl(
@@ -930,8 +880,8 @@
                                             FullscreenControlsColumn(
                                                 onClose = { playerViewModel.closePlayer(currentFilterPathId) },
                                                 onBack = { Toast.makeText(context, "To Be Disabled in fullscreen", Toast.LENGTH_SHORT).show()  },
-                                                onCast = { Toast.makeText(context, "Cast - to be implemented", Toast.LENGTH_SHORT).show() },
-                                                onShare = { Toast.makeText(context, "Share - to be implemented", Toast.LENGTH_SHORT).show() },
+                                                onCast = { openSystemCastSettings(context) },
+                                                onShare = { shareYouTubeVideo(context, playerStableState.currentVideoId) },
                                                 toBrowser = { openYoutubeInBrowser(context, playerStableState.currentVideoId) },
                                                 onPrevious = { playerViewModel.previousVideo() },
                                                 onNext = { playerViewModel.nextVideo() },

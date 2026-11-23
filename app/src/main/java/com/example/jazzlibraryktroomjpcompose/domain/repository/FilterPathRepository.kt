@@ -44,4 +44,6 @@ interface FilterPathRepository {
 
     suspend fun getLatestFilterPathWithMeta(): FilterPathWithMeta?
 
+    suspend fun getFilterPathWithMeta(id: Int): FilterPathWithMeta?
+
 }

@@ -148,7 +148,7 @@ fun VideoStatsRow(
     // Keep pager on minimise page when controls become inaccessible
     LaunchedEffect(controlsAccessible) {
         if (!controlsAccessible && pagerState.currentPage != 2) {
-            pagerState.animateScrollToPage(2)
+            pagerState.scrollToPage(2)
         }
     }
 
@@ -186,7 +186,7 @@ fun VideoStatsRow(
     }
 
     LaunchedEffect(pagerState.currentPage) {
-        when (pagerState.currentPage) {
+        when (pagerState.settledPage) {
             1 -> {
                 // Only auto‑start if nothing is currently playing
                 val nothingPlaying = !playerUiState.isVisible
@@ -367,9 +367,14 @@ fun VideoStatsRow(
                         // Close button (unchanged)
                         IconButton(onClick = {
                             coroutineScope.launch {
+                                // Close first so the pager's settled-page auto-start effect
+                                // sees that playback has ended.
                                 playerViewModel.closePlayer(viewModel.currentFilterPathId.value)
-                                pagerState.animateScrollToPage(2)
                                 currentTypeOfMedia = null
+
+                                // Snap directly to the inactive-player page; don't animate through
+                                // the page that can auto-start the first video.
+                                pagerState.scrollToPage(2)
                             }
                         }) {
                             Icon(Icons.Default.Close, contentDescription = "Close")
