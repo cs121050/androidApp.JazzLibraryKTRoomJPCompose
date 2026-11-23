@@ -134,6 +134,10 @@ dependencies {
 
     // Firebase Crashlytics (version managed by BoM)
     implementation(libs.firebase.crashlytics.ktx)
+
+    implementation(libs.play.services.cast.framework)
+    implementation(libs.androidx.mediarouter)
+
 }
 
 // Allow references to generated code for Hilt

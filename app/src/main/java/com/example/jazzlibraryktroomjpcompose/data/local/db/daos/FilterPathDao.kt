@@ -63,7 +63,8 @@ interface FilterPathDao {
     @Query("SELECT COUNT(*) FROM filter_path")
     suspend fun getCount(): Int
 
-
+    @Query("SELECT * FROM filter_path WHERE id = :id LIMIT 1")
+    suspend fun getFilterPathById(id: Int): FilterPathRoomEntity?
 
     @Query("DELETE FROM filter_path")
     suspend fun deleteAll()
